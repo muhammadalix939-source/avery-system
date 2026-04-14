@@ -26,6 +26,12 @@ export const Route = createRootRoute({
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "AV Travel CRM" },
       { name: "description", content: "Enterprise Travel Agency CRM System" },
+      { property: "og:title", content: "AV Travel CRM" },
+      { name: "twitter:title", content: "AV Travel CRM" },
+      { property: "og:description", content: "Enterprise Travel Agency CRM System" },
+      { name: "twitter:description", content: "Enterprise Travel Agency CRM System" },
+      { name: "twitter:card", content: "summary" },
+      { property: "og:type", content: "website" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
