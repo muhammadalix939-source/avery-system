@@ -1,20 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import {
-  DollarSign,
-  Users,
-  BookOpen,
-  TrendingUp,
-  Clock,
-  UserCog,
-} from "lucide-react";
+import { DollarSign, Users, BookOpen, TrendingUp, Clock, UserCog } from "lucide-react";
 import StatsCard from "@/components/StatsCard";
 import StatusBadge from "@/components/StatusBadge";
 import PageHeader from "@/components/PageHeader";
-import { mockBookings, mockClients, mockAgents, mockSuppliers, mockMonthlyData, formatCurrency } from "@/lib/data";
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
-} from "recharts";
+import { formatCurrency } from "@/lib/data";
+import { useStore } from "@/lib/store";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 export const Route = createFileRoute("/")({
   component: Dashboard,
@@ -32,19 +24,33 @@ const pieData = [
   { name: "Tour", value: 20, color: "oklch(0.6 0.15 280)" },
 ];
 
+// Month order: current month first, then previous
+const monthOrder = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 function Dashboard() {
-  const totalRevenue = mockBookings.reduce((s, b) => s + b.amountReceived, 0);
-  const totalPending = mockBookings.reduce((s, b) => s + (b.totalAmount - b.amountReceived), 0);
-  const totalClients = mockClients.length;
-  const totalBookings = mockBookings.length;
-  const supplierPayable = mockSuppliers.reduce((s, sp) => s + (sp.totalPayable - sp.totalPaid), 0);
-  const profit = totalRevenue - mockSuppliers.reduce((s, sp) => s + sp.totalPaid, 0);
+  const store = useStore();
+  const totalRevenue = store.bookings.reduce((s, b) => s + b.amountReceived, 0);
+  const totalPending = store.bookings.reduce((s, b) => s + (b.totalAmount - b.amountReceived), 0);
+  const totalClients = store.clients.length;
+  const totalBookings = store.bookings.length;
+  const supplierPayable = store.suppliers.reduce((s, sp) => s + (sp.totalPayable - sp.totalPaid), 0);
+  const profit = totalRevenue - store.suppliers.reduce((s, sp) => s + sp.totalPaid, 0);
+
+  // Sort monthly data: current month first
+  const currentMonthIdx = new Date().getMonth(); // 0-based (April = 3)
+  const sortedMonthly = [...store.monthlyData].sort((a, b) => {
+    const aIdx = monthOrder.indexOf(a.month);
+    const bIdx = monthOrder.indexOf(b.month);
+    // Distance from current month (closer = higher priority, current month first)
+    const aDist = (currentMonthIdx - aIdx + 12) % 12;
+    const bDist = (currentMonthIdx - bIdx + 12) % 12;
+    return aDist - bDist;
+  });
 
   return (
     <div className="space-y-6">
       <PageHeader title="Dashboard" subtitle="Overview of your travel business" />
 
-      {/* Stats Grid */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <StatsCard title="Total Revenue" value={formatCurrency(totalRevenue)} icon={DollarSign} trend={{ value: "12%", positive: true }} delay={0} />
         <StatsCard title="Pending" value={formatCurrency(totalPending)} icon={Clock} delay={0.05} />
@@ -54,13 +60,11 @@ function Dashboard() {
         <StatsCard title="Profit" value={formatCurrency(profit)} icon={DollarSign} trend={{ value: "8%", positive: true }} delay={0.25} />
       </div>
 
-      {/* Charts Row */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {/* Revenue Chart */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="glass-card col-span-2 rounded-xl p-5">
           <h3 className="mb-4 text-sm font-semibold text-foreground">Monthly Revenue</h3>
           <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={mockMonthlyData}>
+            <BarChart data={store.monthlyData}>
               <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.28 0.01 260)" />
               <XAxis dataKey="month" stroke="oklch(0.6 0.02 260)" fontSize={12} />
               <YAxis stroke="oklch(0.6 0.02 260)" fontSize={12} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
@@ -71,46 +75,37 @@ function Dashboard() {
           </ResponsiveContainer>
         </motion.div>
 
-        {/* Package Distribution */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="glass-card rounded-xl p-5">
           <h3 className="mb-4 text-sm font-semibold text-foreground">Package Distribution</h3>
           <ResponsiveContainer width="100%" height={200}>
-            <PieChart>
-              <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" stroke="none">
-                {pieData.map((entry, index) => (
-                  <Cell key={index} fill={entry.color} />
-                ))}
-              </Pie>
-            </PieChart>
+            <PieChart><Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" stroke="none">
+              {pieData.map((entry, index) => (<Cell key={index} fill={entry.color} />))}
+            </Pie></PieChart>
           </ResponsiveContainer>
           <div className="mt-2 flex justify-center gap-4">
             {pieData.map((entry) => (
               <div key={entry.name} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <div className="h-2 w-2 rounded-full" style={{ background: entry.color }} />
-                {entry.name} ({entry.value}%)
+                <div className="h-2 w-2 rounded-full" style={{ background: entry.color }} />{entry.name} ({entry.value}%)
               </div>
             ))}
           </div>
         </motion.div>
       </div>
 
-      {/* Monthly Records Table */}
+      {/* Monthly Records — current month first */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="glass-card rounded-xl p-5">
         <h3 className="mb-4 text-sm font-semibold text-foreground">Monthly Records</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
-                <th className="px-4 py-3">Month</th>
-                <th className="px-4 py-3">Clients</th>
-                <th className="px-4 py-3">Revenue</th>
-                <th className="px-4 py-3">Profit</th>
+                <th className="px-4 py-3">Month</th><th className="px-4 py-3">Clients</th><th className="px-4 py-3">Revenue</th><th className="px-4 py-3">Profit</th>
               </tr>
             </thead>
             <tbody>
-              {mockMonthlyData.map((m) => (
-                <tr key={m.month} className="border-b border-border/50 transition-colors hover:bg-accent/30">
-                  <td className="px-4 py-3 font-medium">{m.month} 2026</td>
+              {sortedMonthly.map((m, i) => (
+                <tr key={m.month} className={`border-b border-border/50 transition-colors hover:bg-accent/30 ${i === 0 ? "bg-primary/5" : ""}`}>
+                  <td className="px-4 py-3 font-medium">{m.month} 2026 {i === 0 && <span className="ml-2 text-[10px] text-primary font-bold">CURRENT</span>}</td>
                   <td className="px-4 py-3">{m.clients}</td>
                   <td className="px-4 py-3 text-primary">{formatCurrency(m.revenue)}</td>
                   <td className="px-4 py-3 text-success">{formatCurrency(m.profit)}</td>
@@ -126,16 +121,10 @@ function Dashboard() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="glass-card rounded-xl p-5">
           <h3 className="mb-4 text-sm font-semibold text-foreground">Recent Bookings</h3>
           <div className="space-y-3">
-            {mockBookings.map((b) => (
+            {store.bookings.map((b) => (
               <div key={b.id} className="flex items-center justify-between rounded-lg bg-accent/20 px-4 py-3">
-                <div>
-                  <p className="text-sm font-medium">{b.headId}</p>
-                  <p className="text-xs text-muted-foreground">{b.packageType} · {b.clientIds.length} clients</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium text-primary">{formatCurrency(b.amountReceived)}</p>
-                  <StatusBadge status={b.status} />
-                </div>
+                <div><p className="text-sm font-medium">{b.headId}</p><p className="text-xs text-muted-foreground">{b.packageType} · {b.clientIds.length} clients</p></div>
+                <div className="text-right"><p className="text-sm font-medium text-primary">{formatCurrency(b.amountReceived)}</p><StatusBadge status={b.status} /></div>
               </div>
             ))}
           </div>
@@ -144,16 +133,10 @@ function Dashboard() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="glass-card rounded-xl p-5">
           <h3 className="mb-4 text-sm font-semibold text-foreground">Agent Performance</h3>
           <div className="space-y-3">
-            {mockAgents.map((a) => (
+            {store.agents.map((a) => (
               <div key={a.id} className="flex items-center justify-between rounded-lg bg-accent/20 px-4 py-3">
-                <div>
-                  <p className="text-sm font-medium">{a.name}</p>
-                  <p className="text-xs text-muted-foreground">{a.id} · {a.totalClients} clients</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium text-primary">{formatCurrency(a.totalSales)}</p>
-                  <p className="text-xs text-muted-foreground">Commission: {formatCurrency(a.commission)}</p>
-                </div>
+                <div><p className="text-sm font-medium">{a.name}</p><p className="text-xs text-muted-foreground">{a.id} · {a.totalClients} clients</p></div>
+                <div className="text-right"><p className="text-sm font-medium text-primary">{formatCurrency(a.totalSales)}</p><p className="text-xs text-muted-foreground">Commission: {formatCurrency(a.commission)}</p></div>
               </div>
             ))}
           </div>

@@ -5,7 +5,9 @@ import { Search as SearchIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
-import { mockBookings, mockClients, mockAgents, mockSuppliers, formatCurrency } from "@/lib/data";
+import DetailDialog from "@/components/DetailDialog";
+import { formatCurrency, type Client, type Agent, type Supplier, type Booking } from "@/lib/data";
+import { useStore } from "@/lib/store";
 
 export const Route = createFileRoute("/search")({
   component: SearchPage,
@@ -21,40 +23,7 @@ interface SearchResult {
   subtitle: string;
   status: string;
   extra?: string;
-}
-
-function searchAll(query: string): SearchResult[] {
-  const q = query.toLowerCase().trim();
-  if (!q) return [];
-
-  const results: SearchResult[] = [];
-
-  mockBookings.forEach((b) => {
-    if (b.headId.toLowerCase().includes(q) || b.agentId.toLowerCase().includes(q) || b.supplierId.toLowerCase().includes(q)) {
-      results.push({ type: "booking", id: b.headId, title: b.headId, subtitle: `${b.packageType} · ${b.clientIds.length} clients`, status: b.status, extra: formatCurrency(b.totalAmount) });
-    }
-  });
-
-  mockClients.forEach((c) => {
-    if (c.id.toLowerCase().includes(q) || c.name.toLowerCase().includes(q) || c.phone.includes(q) || c.passport.toLowerCase().includes(q)) {
-      results.push({ type: "client", id: c.id, title: c.name, subtitle: `${c.id} · ${c.headId}`, status: c.paymentStatus, extra: formatCurrency(c.amountPaid) });
-    }
-  });
-
-  mockAgents.forEach((a) => {
-    if (a.id.toLowerCase().includes(q) || a.name.toLowerCase().includes(q) || a.phone.includes(q)) {
-      results.push({ type: "agent", id: a.id, title: a.name, subtitle: `${a.id} · ${a.totalClients} clients`, status: a.status, extra: formatCurrency(a.totalSales) });
-    }
-  });
-
-  mockSuppliers.forEach((s) => {
-    if (s.id.toLowerCase().includes(q) || s.companyName.toLowerCase().includes(q) || s.phone.includes(q)) {
-      const remaining = s.totalPayable - s.totalPaid;
-      results.push({ type: "supplier", id: s.id, title: s.companyName, subtitle: `${s.id} · ${s.serviceType}`, status: remaining === 0 ? "Paid" : "Partial", extra: formatCurrency(remaining) });
-    }
-  });
-
-  return results;
+  raw: Client | Agent | Supplier | Booking;
 }
 
 const typeColors: Record<ResultType, string> = {
@@ -65,59 +34,51 @@ const typeColors: Record<ResultType, string> = {
 };
 
 function SearchPage() {
+  const store = useStore();
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<ResultType | "all">("all");
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedType, setSelectedType] = useState<ResultType>("client");
+  const [selectedData, setSelectedData] = useState<Client | Agent | Supplier | Booking | null>(null);
 
-  const results = searchAll(query);
+  const results = searchAll(query, store);
   const filtered = typeFilter === "all" ? results : results.filter((r) => r.type === typeFilter);
+
+  function handleClick(r: SearchResult) {
+    setSelectedType(r.type);
+    setSelectedData(r.raw);
+    setDetailOpen(true);
+  }
+
+  const relatedEntries = selectedData && "id" in selectedData ? store.entries.filter((e) => e.referenceId === (selectedData as any).id || e.headId === (selectedData as any).headId) : [];
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Search" subtitle="Find any record instantly" />
+      <PageHeader title="Search" subtitle="Find any record — click for full details" />
 
       <div className="relative">
         <SearchIcon className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search by Head ID, Client ID, Name, Phone, Agent, Supplier..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="h-12 bg-accent/20 pl-12 text-base border-border"
-        />
+        <Input placeholder="Search by Head ID, Client ID, Name, Phone, Agent, Supplier..." value={query} onChange={(e) => setQuery(e.target.value)} className="h-12 bg-accent/20 pl-12 text-base border-border" />
       </div>
 
-      {/* Type Filters */}
       <div className="flex flex-wrap gap-2">
         {(["all", "booking", "client", "agent", "supplier"] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTypeFilter(t)}
-            className={`rounded-lg px-4 py-2 text-xs font-medium capitalize transition-all ${
-              typeFilter === t ? "bg-primary text-primary-foreground" : "bg-accent/30 text-muted-foreground hover:bg-accent/50"
-            }`}
-          >
+          <button key={t} onClick={() => setTypeFilter(t)} className={`rounded-lg px-4 py-2 text-xs font-medium capitalize transition-all ${typeFilter === t ? "bg-primary text-primary-foreground" : "bg-accent/30 text-muted-foreground hover:bg-accent/50"}`}>
             {t === "all" ? "All" : `${t}s`}
           </button>
         ))}
       </div>
 
-      {/* Results */}
-      {query && (
-        <p className="text-xs text-muted-foreground">{filtered.length} results found</p>
-      )}
+      {query && <p className="text-xs text-muted-foreground">{filtered.length} results found</p>}
 
       <div className="space-y-2">
         {filtered.map((r, i) => (
-          <motion.div
-            key={`${r.type}-${r.id}`}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.03 }}
-            className="glass-card glass-card-hover flex items-center justify-between rounded-xl px-5 py-4 transition-all duration-200"
+          <motion.div key={`${r.type}-${r.id}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
+            onClick={() => handleClick(r)}
+            className="glass-card glass-card-hover flex items-center justify-between rounded-xl px-5 py-4 transition-all duration-200 cursor-pointer"
           >
             <div className="flex items-center gap-4">
-              <span className={`rounded-md px-2 py-1 text-[10px] font-semibold uppercase ${typeColors[r.type]}`}>
-                {r.type}
-              </span>
+              <span className={`rounded-md px-2 py-1 text-[10px] font-semibold uppercase ${typeColors[r.type]}`}>{r.type}</span>
               <div>
                 <p className="text-sm font-medium">{r.title}</p>
                 <p className="text-xs text-muted-foreground">{r.subtitle}</p>
@@ -137,6 +98,41 @@ function SearchPage() {
           <p className="text-sm text-muted-foreground">No results found for "{query}"</p>
         </div>
       )}
+
+      <DetailDialog open={detailOpen} onOpenChange={setDetailOpen} type={selectedType} data={selectedData} entries={relatedEntries} />
     </div>
   );
+}
+
+function searchAll(query: string, store: ReturnType<typeof useStore>): SearchResult[] {
+  const q = query.toLowerCase().trim();
+  if (!q) return [];
+  const results: SearchResult[] = [];
+
+  store.bookings.forEach((b) => {
+    if (b.headId.toLowerCase().includes(q) || b.agentId.toLowerCase().includes(q) || b.supplierId.toLowerCase().includes(q)) {
+      results.push({ type: "booking", id: b.headId, title: b.headId, subtitle: `${b.packageType} · ${b.clientIds.length} clients · ${b.travelDate}`, status: b.status, extra: formatCurrency(b.totalAmount), raw: b });
+    }
+  });
+
+  store.clients.forEach((c) => {
+    if (c.id.toLowerCase().includes(q) || c.name.toLowerCase().includes(q) || c.phone.includes(q) || c.passport.toLowerCase().includes(q)) {
+      results.push({ type: "client", id: c.id, title: c.name, subtitle: `${c.id} · ${c.headId} · ${c.passport}`, status: c.paymentStatus, extra: formatCurrency(c.amountPaid), raw: c });
+    }
+  });
+
+  store.agents.forEach((a) => {
+    if (a.id.toLowerCase().includes(q) || a.name.toLowerCase().includes(q) || a.phone.includes(q)) {
+      results.push({ type: "agent", id: a.id, title: a.name, subtitle: `${a.id} · ${a.totalClients} clients`, status: a.status, extra: formatCurrency(a.totalSales), raw: a });
+    }
+  });
+
+  store.suppliers.forEach((s) => {
+    if (s.id.toLowerCase().includes(q) || s.companyName.toLowerCase().includes(q) || s.phone.includes(q)) {
+      const remaining = s.totalPayable - s.totalPaid;
+      results.push({ type: "supplier", id: s.id, title: s.companyName, subtitle: `${s.id} · ${s.serviceType}`, status: remaining === 0 ? "Paid" : "Partial", extra: formatCurrency(remaining), raw: s });
+    }
+  });
+
+  return results;
 }
