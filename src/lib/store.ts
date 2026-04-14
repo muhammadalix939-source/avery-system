@@ -44,11 +44,10 @@ export function useStore() {
   const [, setTick] = useState(0);
   const rerender = useCallback(() => setTick((t) => t + 1), []);
 
-  // Subscribe on mount
-  useState(() => {
+  useEffect(() => {
     listeners.add(rerender);
     return () => { listeners.delete(rerender); };
-  });
+  }, [rerender]);
 
   return {
     clients,
