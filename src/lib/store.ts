@@ -1,5 +1,5 @@
 // Centralized state management for the CRM
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { Client, Booking, Agent, Supplier } from "./data";
 import { mockClients, mockBookings, mockAgents, mockSuppliers, mockMonthlyData as defaultMonthlyData, generateId } from "./data";
 
