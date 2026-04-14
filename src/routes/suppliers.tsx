@@ -1,10 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { Plus } from "lucide-react";
+import { Plus, Trash2, Pencil, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
-import { mockSuppliers, formatCurrency } from "@/lib/data";
+import DetailDialog from "@/components/DetailDialog";
+import { formatCurrency, type Supplier } from "@/lib/data";
+import { useStore } from "@/lib/store";
+import { useState } from "react";
 
 export const Route = createFileRoute("/suppliers")({
   component: SuppliersPage,
@@ -12,12 +19,69 @@ export const Route = createFileRoute("/suppliers")({
 });
 
 function SuppliersPage() {
+  const store = useStore();
+  const [addOpen, setAddOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selected, setSelected] = useState<Supplier | null>(null);
+  const [form, setForm] = useState({ companyName: "", contactPerson: "", phone: "", email: "", serviceType: "Hotel" as Supplier["serviceType"], totalPayable: "", totalPaid: "" });
+
+  function handleAdd() {
+    store.addSupplier({ companyName: form.companyName, contactPerson: form.contactPerson, phone: form.phone, email: form.email, serviceType: form.serviceType, totalPayable: Number(form.totalPayable) || 0, totalPaid: Number(form.totalPaid) || 0 });
+    setForm({ companyName: "", contactPerson: "", phone: "", email: "", serviceType: "Hotel", totalPayable: "", totalPaid: "" });
+    setAddOpen(false);
+  }
+
+  function handleEdit() {
+    if (!selected) return;
+    store.updateSupplier(selected.id, { companyName: form.companyName, contactPerson: form.contactPerson, phone: form.phone, email: form.email, serviceType: form.serviceType, totalPayable: Number(form.totalPayable) || 0, totalPaid: Number(form.totalPaid) || 0 });
+    setEditOpen(false);
+  }
+
+  function openEdit(s: Supplier) {
+    setSelected(s);
+    setForm({ companyName: s.companyName, contactPerson: s.contactPerson, phone: s.phone, email: s.email, serviceType: s.serviceType, totalPayable: String(s.totalPayable), totalPaid: String(s.totalPaid) });
+    setEditOpen(true);
+  }
+
+  const relatedEntries = selected ? store.entries.filter((e) => e.referenceId === selected.id) : [];
+
+  const formFields = (
+    <div className="space-y-4">
+      <div><Label>Company Name</Label><Input value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} placeholder="Company Name" className="bg-accent/20 border-border mt-1" /></div>
+      <div><Label>Contact Person</Label><Input value={form.contactPerson} onChange={(e) => setForm({ ...form, contactPerson: e.target.value })} placeholder="Contact Person" className="bg-accent/20 border-border mt-1" /></div>
+      <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="03001234567" className="bg-accent/20 border-border mt-1" /></div>
+      <div><Label>Email</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@company.com" className="bg-accent/20 border-border mt-1" /></div>
+      <div><Label>Service Type</Label>
+        <Select value={form.serviceType} onValueChange={(v) => setForm({ ...form, serviceType: v as Supplier["serviceType"] })}>
+          <SelectTrigger className="bg-accent/20 border-border mt-1"><SelectValue /></SelectTrigger>
+          <SelectContent><SelectItem value="Hotel">Hotel</SelectItem><SelectItem value="Airline">Airline</SelectItem><SelectItem value="Transport">Transport</SelectItem><SelectItem value="Visa">Visa</SelectItem></SelectContent>
+        </Select>
+      </div>
+      <div><Label>Total Payable (PKR)</Label><Input type="number" value={form.totalPayable} onChange={(e) => setForm({ ...form, totalPayable: e.target.value })} className="bg-accent/20 border-border mt-1" /></div>
+      <div><Label>Total Paid (PKR)</Label><Input type="number" value={form.totalPaid} onChange={(e) => setForm({ ...form, totalPaid: e.target.value })} className="bg-accent/20 border-border mt-1" /></div>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Supplier Management"
-        subtitle={`${mockSuppliers.length} suppliers`}
-        actions={<Button className="gap-2"><Plus className="h-4 w-4" /> Add Supplier</Button>}
+        subtitle={`${store.suppliers.length} suppliers`}
+        actions={
+          <Dialog open={addOpen} onOpenChange={setAddOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2" onClick={() => setForm({ companyName: "", contactPerson: "", phone: "", email: "", serviceType: "Hotel", totalPayable: "", totalPaid: "" })}>
+                <Plus className="h-4 w-4" /> Add Supplier
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="bg-card border-border">
+              <DialogHeader><DialogTitle>Add New Supplier</DialogTitle></DialogHeader>
+              {formFields}
+              <Button onClick={handleAdd} className="w-full">Add Supplier</Button>
+            </DialogContent>
+          </Dialog>
+        }
       />
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-xl">
@@ -25,33 +89,32 @@ function SuppliersPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
-                <th className="px-4 py-3">Supplier ID</th>
-                <th className="px-4 py-3">Company</th>
-                <th className="px-4 py-3">Contact</th>
-                <th className="px-4 py-3">Service</th>
-                <th className="px-4 py-3">Total Payable</th>
-                <th className="px-4 py-3">Total Paid</th>
-                <th className="px-4 py-3">Remaining</th>
-                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">ID</th><th className="px-4 py-3">Company</th><th className="px-4 py-3">Contact</th>
+                <th className="px-4 py-3">Service</th><th className="px-4 py-3">Payable</th><th className="px-4 py-3">Paid</th>
+                <th className="px-4 py-3">Remaining</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {mockSuppliers.map((s) => {
+              {store.suppliers.map((s) => {
                 const remaining = s.totalPayable - s.totalPaid;
                 const status = remaining === 0 ? "Paid" : remaining < s.totalPayable ? "Partial" : "Unpaid";
                 return (
                   <tr key={s.id} className="border-b border-border/50 transition-colors hover:bg-accent/30">
                     <td className="px-4 py-3 font-semibold text-primary">{s.id}</td>
                     <td className="px-4 py-3 font-medium">{s.companyName}</td>
-                    <td className="px-4 py-3">
-                      <p className="text-sm">{s.contactPerson}</p>
-                      <p className="text-xs text-muted-foreground">{s.phone}</p>
-                    </td>
+                    <td className="px-4 py-3"><p className="text-sm">{s.contactPerson}</p><p className="text-xs text-muted-foreground">{s.phone}</p></td>
                     <td className="px-4 py-3">{s.serviceType}</td>
                     <td className="px-4 py-3">{formatCurrency(s.totalPayable)}</td>
                     <td className="px-4 py-3 text-success">{formatCurrency(s.totalPaid)}</td>
                     <td className="px-4 py-3 text-destructive">{formatCurrency(remaining)}</td>
                     <td className="px-4 py-3"><StatusBadge status={status} /></td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-1">
+                        <button onClick={() => { setSelected(s); setDetailOpen(true); }} className="rounded p-1 hover:bg-accent"><Eye className="h-3.5 w-3.5 text-primary" /></button>
+                        <button onClick={() => openEdit(s)} className="rounded p-1 hover:bg-accent"><Pencil className="h-3.5 w-3.5 text-warning" /></button>
+                        <button onClick={() => store.deleteSupplier(s.id)} className="rounded p-1 hover:bg-accent"><Trash2 className="h-3.5 w-3.5 text-destructive" /></button>
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
@@ -60,28 +123,30 @@ function SuppliersPage() {
         </div>
       </motion.div>
 
-      {/* Supplier Ledger Cards */}
+      {/* Ledger Cards */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {mockSuppliers.map((s, i) => {
+        {store.suppliers.map((s, i) => {
           const remaining = s.totalPayable - s.totalPaid;
-          const paidPercent = Math.round((s.totalPaid / s.totalPayable) * 100);
+          const paidPercent = s.totalPayable > 0 ? Math.round((s.totalPaid / s.totalPayable) * 100) : 0;
           return (
             <motion.div key={s.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="glass-card rounded-xl p-5">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-semibold">{s.companyName}</h3>
-                <span className="text-xs text-muted-foreground">{s.id}</span>
-              </div>
-              <div className="mb-2 h-2 overflow-hidden rounded-full bg-accent/30">
-                <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${paidPercent}%` }} />
-              </div>
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Paid: {formatCurrency(s.totalPaid)}</span>
-                <span>Remaining: {formatCurrency(remaining)}</span>
-              </div>
+              <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-semibold">{s.companyName}</h3><span className="text-xs text-muted-foreground">{s.id}</span></div>
+              <div className="mb-2 h-2 overflow-hidden rounded-full bg-accent/30"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${paidPercent}%` }} /></div>
+              <div className="flex justify-between text-xs text-muted-foreground"><span>Paid: {formatCurrency(s.totalPaid)}</span><span>Remaining: {formatCurrency(remaining)}</span></div>
             </motion.div>
           );
         })}
       </div>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="bg-card border-border">
+          <DialogHeader><DialogTitle>Edit Supplier — {selected?.id}</DialogTitle></DialogHeader>
+          {formFields}
+          <Button onClick={handleEdit} className="w-full">Save Changes</Button>
+        </DialogContent>
+      </Dialog>
+
+      <DetailDialog open={detailOpen} onOpenChange={setDetailOpen} type="supplier" data={selected} entries={relatedEntries} />
     </div>
   );
 }
