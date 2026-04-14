@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SuppliersRouteImport } from './routes/suppliers'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as PaymentsRouteImport } from './routes/payments'
+import { Route as EntriesRouteImport } from './routes/entries'
 import { Route as ClientsRouteImport } from './routes/clients'
 import { Route as BookingsRouteImport } from './routes/bookings'
 import { Route as AgentsRouteImport } from './routes/agents'
@@ -30,6 +31,11 @@ const SearchRoute = SearchRouteImport.update({
 const PaymentsRoute = PaymentsRouteImport.update({
   id: '/payments',
   path: '/payments',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EntriesRoute = EntriesRouteImport.update({
+  id: '/entries',
+  path: '/entries',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ClientsRoute = ClientsRouteImport.update({
@@ -58,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/agents': typeof AgentsRoute
   '/bookings': typeof BookingsRoute
   '/clients': typeof ClientsRoute
+  '/entries': typeof EntriesRoute
   '/payments': typeof PaymentsRoute
   '/search': typeof SearchRoute
   '/suppliers': typeof SuppliersRoute
@@ -67,6 +74,7 @@ export interface FileRoutesByTo {
   '/agents': typeof AgentsRoute
   '/bookings': typeof BookingsRoute
   '/clients': typeof ClientsRoute
+  '/entries': typeof EntriesRoute
   '/payments': typeof PaymentsRoute
   '/search': typeof SearchRoute
   '/suppliers': typeof SuppliersRoute
@@ -77,6 +85,7 @@ export interface FileRoutesById {
   '/agents': typeof AgentsRoute
   '/bookings': typeof BookingsRoute
   '/clients': typeof ClientsRoute
+  '/entries': typeof EntriesRoute
   '/payments': typeof PaymentsRoute
   '/search': typeof SearchRoute
   '/suppliers': typeof SuppliersRoute
@@ -88,6 +97,7 @@ export interface FileRouteTypes {
     | '/agents'
     | '/bookings'
     | '/clients'
+    | '/entries'
     | '/payments'
     | '/search'
     | '/suppliers'
@@ -97,6 +107,7 @@ export interface FileRouteTypes {
     | '/agents'
     | '/bookings'
     | '/clients'
+    | '/entries'
     | '/payments'
     | '/search'
     | '/suppliers'
@@ -106,6 +117,7 @@ export interface FileRouteTypes {
     | '/agents'
     | '/bookings'
     | '/clients'
+    | '/entries'
     | '/payments'
     | '/search'
     | '/suppliers'
@@ -116,6 +128,7 @@ export interface RootRouteChildren {
   AgentsRoute: typeof AgentsRoute
   BookingsRoute: typeof BookingsRoute
   ClientsRoute: typeof ClientsRoute
+  EntriesRoute: typeof EntriesRoute
   PaymentsRoute: typeof PaymentsRoute
   SearchRoute: typeof SearchRoute
   SuppliersRoute: typeof SuppliersRoute
@@ -142,6 +155,13 @@ declare module '@tanstack/react-router' {
       path: '/payments'
       fullPath: '/payments'
       preLoaderRoute: typeof PaymentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/entries': {
+      id: '/entries'
+      path: '/entries'
+      fullPath: '/entries'
+      preLoaderRoute: typeof EntriesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/clients': {
@@ -180,6 +200,7 @@ const rootRouteChildren: RootRouteChildren = {
   AgentsRoute: AgentsRoute,
   BookingsRoute: BookingsRoute,
   ClientsRoute: ClientsRoute,
+  EntriesRoute: EntriesRoute,
   PaymentsRoute: PaymentsRoute,
   SearchRoute: SearchRoute,
   SuppliersRoute: SuppliersRoute,
