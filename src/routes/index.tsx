@@ -1,19 +1,164 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { motion } from "framer-motion";
+import {
+  DollarSign,
+  Users,
+  BookOpen,
+  TrendingUp,
+  Clock,
+  UserCog,
+} from "lucide-react";
+import StatsCard from "@/components/StatsCard";
+import StatusBadge from "@/components/StatusBadge";
+import PageHeader from "@/components/PageHeader";
+import { mockBookings, mockClients, mockAgents, mockSuppliers, mockMonthlyData, formatCurrency } from "@/lib/data";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
+} from "recharts";
 
 export const Route = createFileRoute("/")({
-  component: Index,
+  component: Dashboard,
+  head: () => ({
+    meta: [
+      { title: "Dashboard — AV Travel CRM" },
+      { name: "description", content: "Enterprise Travel Agency CRM Dashboard" },
+    ],
+  }),
 });
 
-// IMPORTANT: Replace this placeholder. For sites with multiple pages (About, Services, Contact, etc.),
-// create separate route files (about.tsx, services.tsx, contact.tsx) — don't put all pages in this file.
-function PlaceholderIndex() {
+const pieData = [
+  { name: "Umrah", value: 45, color: "oklch(0.8 0.12 80)" },
+  { name: "Hajj", value: 35, color: "oklch(0.7 0.15 155)" },
+  { name: "Tour", value: 20, color: "oklch(0.6 0.15 280)" },
+];
+
+function Dashboard() {
+  const totalRevenue = mockBookings.reduce((s, b) => s + b.amountReceived, 0);
+  const totalPending = mockBookings.reduce((s, b) => s + (b.totalAmount - b.amountReceived), 0);
+  const totalClients = mockClients.length;
+  const totalBookings = mockBookings.length;
+  const supplierPayable = mockSuppliers.reduce((s, sp) => s + (sp.totalPayable - sp.totalPaid), 0);
+  const profit = totalRevenue - mockSuppliers.reduce((s, sp) => s + sp.totalPaid, 0);
+
   return (
-    <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: '#fcfbf8' }}>
-      <img data-lovable-blank-page-placeholder="REMOVE_THIS" src="/placeholder.svg" alt="Your app will live here!" />
+    <div className="space-y-6">
+      <PageHeader title="Dashboard" subtitle="Overview of your travel business" />
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <StatsCard title="Total Revenue" value={formatCurrency(totalRevenue)} icon={DollarSign} trend={{ value: "12%", positive: true }} delay={0} />
+        <StatsCard title="Pending" value={formatCurrency(totalPending)} icon={Clock} delay={0.05} />
+        <StatsCard title="Active Bookings" value={String(totalBookings)} subtitle="Head IDs" icon={BookOpen} delay={0.1} />
+        <StatsCard title="Total Clients" value={String(totalClients)} icon={Users} delay={0.15} />
+        <StatsCard title="Supplier Due" value={formatCurrency(supplierPayable)} icon={TrendingUp} delay={0.2} />
+        <StatsCard title="Profit" value={formatCurrency(profit)} icon={DollarSign} trend={{ value: "8%", positive: true }} delay={0.25} />
+      </div>
+
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {/* Revenue Chart */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="glass-card col-span-2 rounded-xl p-5">
+          <h3 className="mb-4 text-sm font-semibold text-foreground">Monthly Revenue</h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={mockMonthlyData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.28 0.01 260)" />
+              <XAxis dataKey="month" stroke="oklch(0.6 0.02 260)" fontSize={12} />
+              <YAxis stroke="oklch(0.6 0.02 260)" fontSize={12} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
+              <Tooltip contentStyle={{ background: "oklch(0.17 0.01 260)", border: "1px solid oklch(0.28 0.01 260)", borderRadius: "8px", color: "oklch(0.95 0.01 80)" }} />
+              <Bar dataKey="revenue" fill="oklch(0.8 0.12 80)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="profit" fill="oklch(0.7 0.15 155)" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </motion.div>
+
+        {/* Package Distribution */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="glass-card rounded-xl p-5">
+          <h3 className="mb-4 text-sm font-semibold text-foreground">Package Distribution</h3>
+          <ResponsiveContainer width="100%" height={200}>
+            <PieChart>
+              <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" stroke="none">
+                {pieData.map((entry, index) => (
+                  <Cell key={index} fill={entry.color} />
+                ))}
+              </Pie>
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="mt-2 flex justify-center gap-4">
+            {pieData.map((entry) => (
+              <div key={entry.name} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <div className="h-2 w-2 rounded-full" style={{ background: entry.color }} />
+                {entry.name} ({entry.value}%)
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Monthly Records Table */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="glass-card rounded-xl p-5">
+        <h3 className="mb-4 text-sm font-semibold text-foreground">Monthly Records</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
+                <th className="px-4 py-3">Month</th>
+                <th className="px-4 py-3">Clients</th>
+                <th className="px-4 py-3">Revenue</th>
+                <th className="px-4 py-3">Profit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {mockMonthlyData.map((m) => (
+                <tr key={m.month} className="border-b border-border/50 transition-colors hover:bg-accent/30">
+                  <td className="px-4 py-3 font-medium">{m.month} 2026</td>
+                  <td className="px-4 py-3">{m.clients}</td>
+                  <td className="px-4 py-3 text-primary">{formatCurrency(m.revenue)}</td>
+                  <td className="px-4 py-3 text-success">{formatCurrency(m.profit)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </motion.div>
+
+      {/* Recent Bookings & Agent Performance */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="glass-card rounded-xl p-5">
+          <h3 className="mb-4 text-sm font-semibold text-foreground">Recent Bookings</h3>
+          <div className="space-y-3">
+            {mockBookings.map((b) => (
+              <div key={b.id} className="flex items-center justify-between rounded-lg bg-accent/20 px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium">{b.headId}</p>
+                  <p className="text-xs text-muted-foreground">{b.packageType} · {b.clientIds.length} clients</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-medium text-primary">{formatCurrency(b.amountReceived)}</p>
+                  <StatusBadge status={b.status} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="glass-card rounded-xl p-5">
+          <h3 className="mb-4 text-sm font-semibold text-foreground">Agent Performance</h3>
+          <div className="space-y-3">
+            {mockAgents.map((a) => (
+              <div key={a.id} className="flex items-center justify-between rounded-lg bg-accent/20 px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium">{a.name}</p>
+                  <p className="text-xs text-muted-foreground">{a.id} · {a.totalClients} clients</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-medium text-primary">{formatCurrency(a.totalSales)}</p>
+                  <p className="text-xs text-muted-foreground">Commission: {formatCurrency(a.commission)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      </div>
     </div>
   );
-}
-
-function Index() {
-  return <PlaceholderIndex />;
 }
