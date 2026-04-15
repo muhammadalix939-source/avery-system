@@ -1,8 +1,11 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Download } from "lucide-react";
 import StatusBadge from "@/components/StatusBadge";
 import { formatCurrency } from "@/lib/data";
 import type { Client, Booking, Agent, Supplier } from "@/lib/data";
 import type { LedgerEntry } from "@/lib/store";
+import { generateClientStatement, generateSupplierLedger, generateAgentReport } from "@/lib/pdf";
 
 interface DetailDialogProps {
   open: boolean;
@@ -15,16 +18,30 @@ interface DetailDialogProps {
 export default function DetailDialog({ open, onOpenChange, type, data, entries = [] }: DetailDialogProps) {
   if (!data) return null;
 
+  function handleDownload() {
+    if (!data) return;
+    if (type === "client") generateClientStatement(data as Client, entries);
+    if (type === "supplier") generateSupplierLedger(data as Supplier, entries);
+    if (type === "agent") generateAgentReport(data as Agent, entries);
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[80vh] overflow-y-auto bg-card border-border max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-primary">
-            {type === "client" && `Client: ${(data as Client).name}`}
-            {type === "agent" && `Agent: ${(data as Agent).name}`}
-            {type === "supplier" && `Supplier: ${(data as Supplier).companyName}`}
-            {type === "booking" && `Booking: ${(data as Booking).headId}`}
-          </DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="text-primary">
+              {type === "client" && `Client: ${(data as Client).name}`}
+              {type === "agent" && `Agent: ${(data as Agent).name}`}
+              {type === "supplier" && `Supplier: ${(data as Supplier).companyName}`}
+              {type === "booking" && `Booking: ${(data as Booking).headId}`}
+            </DialogTitle>
+            {type !== "booking" && (
+              <Button size="sm" variant="outline" onClick={handleDownload} className="gap-1.5 text-xs">
+                <Download className="h-3.5 w-3.5" /> Download Statement
+              </Button>
+            )}
+          </div>
         </DialogHeader>
 
         <div className="space-y-4 text-sm">
@@ -73,8 +90,11 @@ function renderClient(c: Client) {
       <Row label="Head ID" value={c.headId} />
       <Row label="Name" value={c.name} />
       <Row label="Passport" value={c.passport} />
+      {c.cnic && <Row label="CNIC" value={c.cnic} />}
       <Row label="Phone" value={c.phone} />
+      {c.email && <Row label="Email" value={c.email} />}
       <Row label="Package" value={c.packageType} />
+      {c.destination && <Row label="Destination" value={c.destination} />}
       <Row label="Amount Due" value={formatCurrency(c.amountDue)} />
       <Row label="Amount Paid" value={formatCurrency(c.amountPaid)} color="text-success" />
       <Row label="Remaining" value={formatCurrency(c.amountDue - c.amountPaid)} color="text-destructive" />
@@ -83,6 +103,7 @@ function renderClient(c: Client) {
         <StatusBadge status={c.paymentStatus} />
       </div>
       <Row label="VIP" value={c.isVip ? "⭐ Yes" : "No"} />
+      {c.driveLink && <Row label="Drive Link" value={c.driveLink} />}
     </>
   );
 }
@@ -128,18 +149,25 @@ function renderBooking(b: Booking) {
       <Row label="Booking ID" value={b.id} />
       <Row label="Head ID" value={b.headId} />
       <Row label="Package" value={b.packageType} />
-      <Row label="Agent" value={b.agentId} />
+      <Row label="Agent" value={b.agentId || "Direct"} />
       <Row label="Supplier" value={b.supplierId} />
+      {b.destination && <Row label="Destination" value={b.destination} />}
+      <Row label="Members" value={String(b.members || b.clientIds.length)} />
       <Row label="Total Amount" value={formatCurrency(b.totalAmount)} />
       <Row label="Received" value={formatCurrency(b.amountReceived)} color="text-success" />
       <Row label="Pending" value={formatCurrency(b.totalAmount - b.amountReceived)} color="text-destructive" />
+      <Row label="Total Cost" value={formatCurrency(b.totalCost || 0)} />
+      <Row label="Commission" value={formatCurrency(b.commission || 0)} />
       <div className="flex justify-between border-b border-border/30 py-2">
         <span className="text-muted-foreground">Status</span>
         <StatusBadge status={b.status} />
       </div>
       <Row label="Travel Date" value={b.travelDate} />
       <Row label="Created" value={b.createdAt} />
-      <Row label="Clients" value={`${b.clientIds.length} members`} />
+      {b.headPassport && <Row label="Head Passport" value={b.headPassport} />}
+      {b.headCnic && <Row label="Head CNIC" value={b.headCnic} />}
+      {b.headPhone && <Row label="Head Phone" value={b.headPhone} />}
+      {b.driveLink && <Row label="Drive Link" value={b.driveLink} />}
     </>
   );
 }
