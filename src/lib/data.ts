@@ -5,12 +5,16 @@ export interface Client {
   headId: string;
   name: string;
   passport: string;
+  cnic?: string;
   phone: string;
+  email?: string;
   packageType: "Umrah" | "Hajj" | "Tour";
   paymentStatus: "Paid" | "Partial" | "Unpaid";
   amountDue: number;
   amountPaid: number;
   isVip: boolean;
+  destination?: string;
+  driveLink?: string;
 }
 
 export interface Booking {
@@ -20,11 +24,20 @@ export interface Booking {
   supplierId: string;
   totalAmount: number;
   amountReceived: number;
+  totalCost: number;
+  commission: number;
   clientIds: string[];
   status: "Confirmed" | "Pending" | "Cancelled";
   packageType: "Umrah" | "Hajj" | "Tour";
   travelDate: string;
   createdAt: string;
+  members: number;
+  headPassport?: string;
+  headCnic?: string;
+  headPhone?: string;
+  headEmail?: string;
+  destination?: string;
+  driveLink?: string;
 }
 
 export interface Agent {
