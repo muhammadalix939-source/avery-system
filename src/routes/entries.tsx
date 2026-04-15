@@ -11,7 +11,6 @@ import { formatCurrency } from "@/lib/data";
 import { useStore, type LedgerEntry } from "@/lib/store";
 import { getPKTDate } from "@/lib/date-utils";
 import { useState } from "react";
-import { useState } from "react";
 
 export const Route = createFileRoute("/entries")({
   component: EntriesPage,
