@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { Plus, Trash2, Pencil, Eye } from "lucide-react";
+import { Plus, Trash2, Pencil, Eye, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,7 @@ import StatusBadge from "@/components/StatusBadge";
 import DetailDialog from "@/components/DetailDialog";
 import { formatCurrency, type Supplier } from "@/lib/data";
 import { useStore } from "@/lib/store";
+import { generateSupplierLedger } from "@/lib/pdf";
 import { useState } from "react";
 
 export const Route = createFileRoute("/suppliers")({
@@ -44,22 +45,31 @@ function SuppliersPage() {
     setEditOpen(true);
   }
 
+  function downloadLedger(s: Supplier) {
+    const entries = store.entries.filter((e) => e.referenceId === s.id);
+    generateSupplierLedger(s, entries);
+  }
+
   const relatedEntries = selected ? store.entries.filter((e) => e.referenceId === selected.id) : [];
 
   const formFields = (
-    <div className="space-y-4">
-      <div><Label>Company Name</Label><Input value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} placeholder="Company Name" className="bg-accent/20 border-border mt-1" /></div>
-      <div><Label>Contact Person</Label><Input value={form.contactPerson} onChange={(e) => setForm({ ...form, contactPerson: e.target.value })} placeholder="Contact Person" className="bg-accent/20 border-border mt-1" /></div>
-      <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="03001234567" className="bg-accent/20 border-border mt-1" /></div>
-      <div><Label>Email</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@company.com" className="bg-accent/20 border-border mt-1" /></div>
-      <div><Label>Service Type</Label>
+    <div className="space-y-3">
+      <div><Label className="text-xs">Company Name</Label><Input value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+      <div><Label className="text-xs">Contact Person</Label><Input value={form.contactPerson} onChange={(e) => setForm({ ...form, contactPerson: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label className="text-xs">Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+        <div><Label className="text-xs">Email</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+      </div>
+      <div><Label className="text-xs">Service Type</Label>
         <Select value={form.serviceType} onValueChange={(v) => setForm({ ...form, serviceType: v as Supplier["serviceType"] })}>
-          <SelectTrigger className="bg-accent/20 border-border mt-1"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="bg-accent/20 border-border mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
           <SelectContent><SelectItem value="Hotel">Hotel</SelectItem><SelectItem value="Airline">Airline</SelectItem><SelectItem value="Transport">Transport</SelectItem><SelectItem value="Visa">Visa</SelectItem></SelectContent>
         </Select>
       </div>
-      <div><Label>Total Payable (PKR)</Label><Input type="number" value={form.totalPayable} onChange={(e) => setForm({ ...form, totalPayable: e.target.value })} className="bg-accent/20 border-border mt-1" /></div>
-      <div><Label>Total Paid (PKR)</Label><Input type="number" value={form.totalPaid} onChange={(e) => setForm({ ...form, totalPaid: e.target.value })} className="bg-accent/20 border-border mt-1" /></div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label className="text-xs">Total Payable (PKR)</Label><Input type="number" value={form.totalPayable} onChange={(e) => setForm({ ...form, totalPayable: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+        <div><Label className="text-xs">Total Paid (PKR)</Label><Input type="number" value={form.totalPaid} onChange={(e) => setForm({ ...form, totalPaid: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+      </div>
     </div>
   );
 
@@ -111,6 +121,7 @@ function SuppliersPage() {
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
                         <button onClick={() => { setSelected(s); setDetailOpen(true); }} className="rounded p-1 hover:bg-accent"><Eye className="h-3.5 w-3.5 text-primary" /></button>
+                        <button onClick={() => downloadLedger(s)} className="rounded p-1 hover:bg-accent" title="Download Ledger"><Download className="h-3.5 w-3.5 text-success" /></button>
                         <button onClick={() => openEdit(s)} className="rounded p-1 hover:bg-accent"><Pencil className="h-3.5 w-3.5 text-warning" /></button>
                         <button onClick={() => store.deleteSupplier(s.id)} className="rounded p-1 hover:bg-accent"><Trash2 className="h-3.5 w-3.5 text-destructive" /></button>
                       </div>
@@ -123,7 +134,6 @@ function SuppliersPage() {
         </div>
       </motion.div>
 
-      {/* Ledger Cards */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {store.suppliers.map((s, i) => {
           const remaining = s.totalPayable - s.totalPaid;

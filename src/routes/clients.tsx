@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { Plus, Phone, Trash2, Pencil, Eye } from "lucide-react";
+import { Plus, Phone, Trash2, Pencil, Eye, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,7 @@ import StatusBadge from "@/components/StatusBadge";
 import DetailDialog from "@/components/DetailDialog";
 import { formatCurrency, type Client } from "@/lib/data";
 import { useStore } from "@/lib/store";
+import { generateClientStatement } from "@/lib/pdf";
 import { useState } from "react";
 
 export const Route = createFileRoute("/clients")({
@@ -25,64 +26,73 @@ function ClientsPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selected, setSelected] = useState<Client | null>(null);
-  const [form, setForm] = useState({ headId: "", name: "", passport: "", phone: "", packageType: "Umrah" as Client["packageType"], amountDue: "", isVip: false });
+  const [form, setForm] = useState({ headId: "", name: "", passport: "", cnic: "", phone: "", email: "", packageType: "Umrah" as Client["packageType"], amountDue: "", isVip: false, destination: "", driveLink: "" });
 
   const filtered = filter === "All" ? store.clients : store.clients.filter((c) => c.paymentStatus === filter);
 
   function handleAdd() {
     store.addClient({
-      headId: form.headId,
-      name: form.name,
-      passport: form.passport,
-      phone: form.phone,
-      packageType: form.packageType,
-      paymentStatus: "Unpaid",
-      amountDue: Number(form.amountDue) || 0,
-      amountPaid: 0,
-      isVip: form.isVip,
+      headId: form.headId, name: form.name, passport: form.passport, cnic: form.cnic,
+      phone: form.phone, email: form.email, packageType: form.packageType,
+      paymentStatus: "Unpaid", amountDue: Number(form.amountDue) || 0, amountPaid: 0,
+      isVip: form.isVip, destination: form.destination, driveLink: form.driveLink,
     });
-    setForm({ headId: "", name: "", passport: "", phone: "", packageType: "Umrah", amountDue: "", isVip: false });
+    setForm({ headId: "", name: "", passport: "", cnic: "", phone: "", email: "", packageType: "Umrah", amountDue: "", isVip: false, destination: "", driveLink: "" });
     setAddOpen(false);
   }
 
   function handleEdit() {
     if (!selected) return;
     store.updateClient(selected.id, {
-      headId: form.headId,
-      name: form.name,
-      passport: form.passport,
-      phone: form.phone,
-      packageType: form.packageType,
-      amountDue: Number(form.amountDue) || 0,
-      isVip: form.isVip,
+      headId: form.headId, name: form.name, passport: form.passport, cnic: form.cnic,
+      phone: form.phone, email: form.email, packageType: form.packageType,
+      amountDue: Number(form.amountDue) || 0, isVip: form.isVip,
+      destination: form.destination, driveLink: form.driveLink,
     });
     setEditOpen(false);
   }
 
   function openEdit(c: Client) {
     setSelected(c);
-    setForm({ headId: c.headId, name: c.name, passport: c.passport, phone: c.phone, packageType: c.packageType, amountDue: String(c.amountDue), isVip: c.isVip });
+    setForm({ headId: c.headId, name: c.name, passport: c.passport, cnic: c.cnic || "", phone: c.phone, email: c.email || "", packageType: c.packageType, amountDue: String(c.amountDue), isVip: c.isVip, destination: c.destination || "", driveLink: c.driveLink || "" });
     setEditOpen(true);
   }
 
-  const relatedEntries = selected ? store.entries.filter((e) => e.referenceId === selected.id) : [];
+  function downloadStatement(c: Client) {
+    const entries = store.entries.filter((e) => e.referenceId === c.id || e.headId === c.headId);
+    generateClientStatement(c, entries);
+  }
+
+  const relatedEntries = selected ? store.entries.filter((e) => e.referenceId === selected.id || e.headId === selected.headId) : [];
 
   const formFields = (
-    <div className="space-y-4">
-      <div><Label>Head ID</Label><Input value={form.headId} onChange={(e) => setForm({ ...form, headId: e.target.value })} placeholder="AV-HD-001" className="bg-accent/20 border-border mt-1" /></div>
-      <div><Label>Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Full Name" className="bg-accent/20 border-border mt-1" /></div>
-      <div><Label>Passport</Label><Input value={form.passport} onChange={(e) => setForm({ ...form, passport: e.target.value })} placeholder="AB1234567" className="bg-accent/20 border-border mt-1" /></div>
-      <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="03001234567" className="bg-accent/20 border-border mt-1" /></div>
-      <div><Label>Package Type</Label>
-        <Select value={form.packageType} onValueChange={(v) => setForm({ ...form, packageType: v as Client["packageType"] })}>
-          <SelectTrigger className="bg-accent/20 border-border mt-1"><SelectValue /></SelectTrigger>
-          <SelectContent><SelectItem value="Umrah">Umrah</SelectItem><SelectItem value="Hajj">Hajj</SelectItem><SelectItem value="Tour">Tour</SelectItem></SelectContent>
-        </Select>
+    <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label className="text-xs">Head ID</Label><Input value={form.headId} onChange={(e) => setForm({ ...form, headId: e.target.value })} placeholder="AV-HD-001" className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+        <div><Label className="text-xs">Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Full Name" className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
       </div>
-      <div><Label>Amount Due (PKR)</Label><Input type="number" value={form.amountDue} onChange={(e) => setForm({ ...form, amountDue: e.target.value })} placeholder="100000" className="bg-accent/20 border-border mt-1" /></div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label className="text-xs">Passport</Label><Input value={form.passport} onChange={(e) => setForm({ ...form, passport: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+        <div><Label className="text-xs">CNIC</Label><Input value={form.cnic} onChange={(e) => setForm({ ...form, cnic: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label className="text-xs">Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+        <div><Label className="text-xs">Email (optional)</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label className="text-xs">Package Type</Label>
+          <Select value={form.packageType} onValueChange={(v) => setForm({ ...form, packageType: v as Client["packageType"] })}>
+            <SelectTrigger className="bg-accent/20 border-border mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="Umrah">Umrah</SelectItem><SelectItem value="Hajj">Hajj</SelectItem><SelectItem value="Tour">Tour</SelectItem></SelectContent>
+          </Select>
+        </div>
+        <div><Label className="text-xs">Amount Due (PKR)</Label><Input type="number" value={form.amountDue} onChange={(e) => setForm({ ...form, amountDue: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+      </div>
+      <div><Label className="text-xs">Destination</Label><Input value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} placeholder="Makkah / Madinah" className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+      <div><Label className="text-xs">Drive Link (optional)</Label><Input value={form.driveLink} onChange={(e) => setForm({ ...form, driveLink: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
       <div className="flex items-center gap-2">
         <input type="checkbox" checked={form.isVip} onChange={(e) => setForm({ ...form, isVip: e.target.checked })} className="rounded" />
-        <Label>VIP Client</Label>
+        <Label className="text-xs">VIP Client</Label>
       </div>
     </div>
   );
@@ -95,7 +105,7 @@ function ClientsPage() {
         actions={
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2" onClick={() => setForm({ headId: "", name: "", passport: "", phone: "", packageType: "Umrah", amountDue: "", isVip: false })}>
+              <Button className="gap-2" onClick={() => setForm({ headId: "", name: "", passport: "", cnic: "", phone: "", email: "", packageType: "Umrah", amountDue: "", isVip: false, destination: "", driveLink: "" })}>
                 <Plus className="h-4 w-4" /> Add Client
               </Button>
             </DialogTrigger>
@@ -138,6 +148,7 @@ function ClientsPage() {
                   <td className="px-4 py-3">
                     <div className="flex gap-1">
                       <button onClick={() => { setSelected(c); setDetailOpen(true); }} className="rounded p-1 hover:bg-accent"><Eye className="h-3.5 w-3.5 text-primary" /></button>
+                      <button onClick={() => downloadStatement(c)} className="rounded p-1 hover:bg-accent" title="Download Statement"><Download className="h-3.5 w-3.5 text-success" /></button>
                       <button onClick={() => openEdit(c)} className="rounded p-1 hover:bg-accent"><Pencil className="h-3.5 w-3.5 text-warning" /></button>
                       <button onClick={() => store.deleteClient(c.id)} className="rounded p-1 hover:bg-accent"><Trash2 className="h-3.5 w-3.5 text-destructive" /></button>
                     </div>
@@ -149,7 +160,6 @@ function ClientsPage() {
         </div>
       </motion.div>
 
-      {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="bg-card border-border">
           <DialogHeader><DialogTitle>Edit Client — {selected?.id}</DialogTitle></DialogHeader>
@@ -158,7 +168,6 @@ function ClientsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Detail Dialog */}
       <DetailDialog open={detailOpen} onOpenChange={setDetailOpen} type="client" data={selected} entries={relatedEntries} />
     </div>
   );

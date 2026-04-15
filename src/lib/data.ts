@@ -5,12 +5,16 @@ export interface Client {
   headId: string;
   name: string;
   passport: string;
+  cnic?: string;
   phone: string;
+  email?: string;
   packageType: "Umrah" | "Hajj" | "Tour";
   paymentStatus: "Paid" | "Partial" | "Unpaid";
   amountDue: number;
   amountPaid: number;
   isVip: boolean;
+  destination?: string;
+  driveLink?: string;
 }
 
 export interface Booking {
@@ -20,11 +24,20 @@ export interface Booking {
   supplierId: string;
   totalAmount: number;
   amountReceived: number;
+  totalCost: number;
+  commission: number;
   clientIds: string[];
   status: "Confirmed" | "Pending" | "Cancelled";
   packageType: "Umrah" | "Hajj" | "Tour";
   travelDate: string;
   createdAt: string;
+  members: number;
+  headPassport?: string;
+  headCnic?: string;
+  headPhone?: string;
+  headEmail?: string;
+  destination?: string;
+  driveLink?: string;
 }
 
 export interface Agent {
@@ -85,9 +98,9 @@ export const mockClients: Client[] = [
 ];
 
 export const mockBookings: Booking[] = [
-  { id: "B001", headId: "AV-HD-001", agentId: "AV-A001", supplierId: "AV-S001", totalAmount: 500000, amountReceived: 250000, clientIds: ["AV-C001", "AV-C002", "AV-C003", "AV-C004", "AV-C005"], status: "Confirmed", packageType: "Umrah", travelDate: "2026-06-15", createdAt: "2026-03-01" },
-  { id: "B002", headId: "AV-HD-002", agentId: "AV-A002", supplierId: "AV-S002", totalAmount: 750000, amountReceived: 600000, clientIds: ["AV-C006", "AV-C007", "AV-C008"], status: "Confirmed", packageType: "Hajj", travelDate: "2026-07-10", createdAt: "2026-02-15" },
-  { id: "B003", headId: "AV-HD-003", agentId: "AV-A003", supplierId: "AV-S003", totalAmount: 160000, amountReceived: 80000, clientIds: ["AV-C009", "AV-C010"], status: "Pending", packageType: "Tour", travelDate: "2026-05-20", createdAt: "2026-04-01" },
+  { id: "B001", headId: "AV-HD-001", agentId: "AV-A001", supplierId: "AV-S001", totalAmount: 500000, amountReceived: 250000, totalCost: 350000, commission: 25000, clientIds: ["AV-C001", "AV-C002", "AV-C003", "AV-C004", "AV-C005"], status: "Confirmed", packageType: "Umrah", travelDate: "2026-06-15", createdAt: "2026-03-01", members: 5, headPassport: "AB1234567", headPhone: "03001111111", destination: "Makkah / Madinah" },
+  { id: "B002", headId: "AV-HD-002", agentId: "AV-A002", supplierId: "AV-S002", totalAmount: 750000, amountReceived: 600000, totalCost: 500000, commission: 30000, clientIds: ["AV-C006", "AV-C007", "AV-C008"], status: "Confirmed", packageType: "Hajj", travelDate: "2026-07-10", createdAt: "2026-02-15", members: 3, headPassport: "CD5678901", headPhone: "03002222221", destination: "Makkah / Madinah" },
+  { id: "B003", headId: "AV-HD-003", agentId: "AV-A003", supplierId: "AV-S003", totalAmount: 160000, amountReceived: 80000, totalCost: 100000, commission: 8000, clientIds: ["AV-C009", "AV-C010"], status: "Pending", packageType: "Tour", travelDate: "2026-05-20", createdAt: "2026-04-01", members: 2, headPassport: "EF9012345", headPhone: "03003333331", destination: "Istanbul, Turkey" },
 ];
 
 export const mockMonthlyData = [
