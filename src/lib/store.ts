@@ -2,6 +2,7 @@
 import { useState, useCallback, useEffect } from "react";
 import type { Client, Booking, Agent, Supplier } from "./data";
 import { mockClients, mockBookings, mockAgents, mockSuppliers, mockMonthlyData as defaultMonthlyData, generateId } from "./data";
+import { getPKTDate } from "./date-utils";
 
 export interface LedgerEntry {
   id: string;
@@ -125,7 +126,7 @@ export function useStore() {
     // Entries CRUD
     addEntry: (data: Omit<LedgerEntry, "id" | "createdAt">) => {
       const id = `E${String(nextEntryNum++).padStart(3, "0")}`;
-      entries = [...entries, { ...data, id, createdAt: new Date().toISOString() }];
+      entries = [...entries, { ...data, id, createdAt: new Date().toLocaleString("en-PK", { timeZone: "Asia/Karachi" }) }];
       notify();
       return id;
     },
