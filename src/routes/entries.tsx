@@ -9,6 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import PageHeader from "@/components/PageHeader";
 import { formatCurrency } from "@/lib/data";
 import { useStore, type LedgerEntry } from "@/lib/store";
+import { getPKTDate } from "@/lib/date-utils";
+import { useState } from "react";
 import { useState } from "react";
 
 export const Route = createFileRoute("/entries")({
@@ -42,7 +44,7 @@ function EntriesPage() {
   const filtered = typeFilter === "all" ? sorted : sorted.filter((e) => e.type === typeFilter);
 
   function handleAdd() {
-    store.addEntry({ date: form.date || new Date().toISOString().slice(0, 10), type: form.type, headId: form.headId, referenceId: form.referenceId, referenceName: form.referenceName, amount: Number(form.amount) || 0, note: form.note });
+    store.addEntry({ date: form.date || getPKTDate(), type: form.type, headId: form.headId, referenceId: form.referenceId, referenceName: form.referenceName, amount: Number(form.amount) || 0, note: form.note });
     setForm({ date: "", type: "client_receive", headId: "", referenceId: "", referenceName: "", amount: "", note: "" });
     setAddOpen(false);
   }
@@ -94,7 +96,7 @@ function EntriesPage() {
         actions={
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2" onClick={() => setForm({ date: new Date().toISOString().slice(0, 10), type: "client_receive", headId: "", referenceId: "", referenceName: "", amount: "", note: "" })}>
+              <Button className="gap-2" onClick={() => setForm({ date: getPKTDate(), type: "client_receive", headId: "", referenceId: "", referenceName: "", amount: "", note: "" })}>
                 <Plus className="h-4 w-4" /> New Entry
               </Button>
             </DialogTrigger>
