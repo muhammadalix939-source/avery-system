@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import PageHeader from "@/components/PageHeader";
-import { formatCurrency } from "@/lib/data";
+import { formatCurrency, getClientName } from "@/lib/data";
 import { useStore, type LedgerEntry } from "@/lib/store";
 import { getPKTDate } from "@/lib/date-utils";
 import { useState } from "react";
