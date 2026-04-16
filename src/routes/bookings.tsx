@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
-import { formatCurrency, type Booking } from "@/lib/data";
+import { formatCurrency, getClientName, type Booking } from "@/lib/data";
 import { useStore } from "@/lib/store";
 import { getPKTDate } from "@/lib/date-utils";
 import { generateInvoice } from "@/lib/pdf";
@@ -20,31 +20,41 @@ export const Route = createFileRoute("/bookings")({
 });
 
 interface MemberForm {
-  name: string;
+  firstName: string;
+  lastName: string;
+  gender: "Male" | "Female" | "Custom";
+  nationality: string;
   passport: string;
   cnic: string;
+  dateOfBirth: string;
+  dateOfIssue: string;
+  dateOfExpire: string;
   phone: string;
   email: string;
 }
+
+const emptyMember: MemberForm = {
+  firstName: "", lastName: "", gender: "Male", nationality: "", passport: "", cnic: "",
+  dateOfBirth: "", dateOfIssue: "", dateOfExpire: "", phone: "", email: "",
+};
 
 function BookingsPage() {
   const store = useStore();
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [selected, setSelected] = useState<Booking | null>(null);
-  const [step, setStep] = useState(1); // 1=booking info, 2=member details
+  const [step, setStep] = useState(1);
 
   const [form, setForm] = useState({
     agentId: "", supplierId: "", totalAmount: "", amountReceived: "", totalCost: "", commission: "",
     packageType: "Umrah" as Booking["packageType"], status: "Pending" as Booking["status"],
-    travelDate: "", members: "1", headPassport: "", headCnic: "", headPhone: "", headEmail: "",
-    destination: "", driveLink: "",
+    travelDate: "", members: "1", destination: "", driveLink: "",
   });
 
   const [memberForms, setMemberForms] = useState<MemberForm[]>([]);
 
   function resetForm() {
-    setForm({ agentId: "", supplierId: "", totalAmount: "", amountReceived: "", totalCost: "", commission: "", packageType: "Umrah", status: "Pending", travelDate: "", members: "1", headPassport: "", headCnic: "", headPhone: "", headEmail: "", destination: "", driveLink: "" });
+    setForm({ agentId: "", supplierId: "", totalAmount: "", amountReceived: "", totalCost: "", commission: "", packageType: "Umrah", status: "Pending", travelDate: "", members: "1", destination: "", driveLink: "" });
     setMemberForms([]);
     setStep(1);
   }
@@ -52,9 +62,28 @@ function BookingsPage() {
   function goToStep2() {
     const count = Math.max(1, Number(form.members) || 1);
     const existing = [...memberForms];
-    while (existing.length < count) existing.push({ name: "", passport: "", cnic: "", phone: "", email: "" });
+    while (existing.length < count) existing.push({ ...emptyMember });
     setMemberForms(existing.slice(0, count));
     setStep(2);
+  }
+
+  // Auto-fill: when member 1 changes shared fields, propagate to others that are still empty
+  function updateMember(index: number, field: keyof MemberForm, value: string) {
+    const arr = [...memberForms];
+    arr[index] = { ...arr[index], [field]: value };
+
+    // If editing member 1, auto-fill shared fields to other members (only if they're empty)
+    if (index === 0) {
+      const sharedFields: (keyof MemberForm)[] = ["nationality", "phone", "email"];
+      if (sharedFields.includes(field)) {
+        for (let i = 1; i < arr.length; i++) {
+          if (!arr[i][field]) {
+            arr[i] = { ...arr[i], [field]: value };
+          }
+        }
+      }
+    }
+    setMemberForms(arr);
   }
 
   function handleAdd() {
@@ -66,27 +95,38 @@ function BookingsPage() {
       totalCost: Number(form.totalCost) || 0, commission: Number(form.commission) || 0,
       clientIds: [], status: form.status, packageType: form.packageType, travelDate: form.travelDate,
       createdAt: today, members: memberForms.length,
-      headPassport: form.headPassport, headCnic: form.headCnic, headPhone: form.headPhone,
-      headEmail: form.headEmail, destination: form.destination, driveLink: form.driveLink,
+      destination: form.destination, driveLink: form.driveLink,
     });
 
-    // Add each member as a client
     const perPerson = memberForms.length > 0 ? Math.round((Number(form.totalAmount) || 0) / memberForms.length) : 0;
     const clientIds: string[] = [];
     memberForms.forEach((m, i) => {
       const cid = store.addClient({
-        headId, name: m.name || `Member ${i + 1}`, passport: m.passport || form.headPassport,
-        cnic: m.cnic, phone: m.phone || form.headPhone, email: m.email || form.headEmail,
-        packageType: form.packageType, paymentStatus: "Unpaid", amountDue: perPerson, amountPaid: 0,
-        isVip: false, destination: form.destination, driveLink: form.driveLink,
+        headId,
+        firstName: m.firstName || `Member`,
+        lastName: m.lastName || `${i + 1}`,
+        gender: m.gender,
+        nationality: m.nationality || memberForms[0]?.nationality || "",
+        passport: m.passport,
+        cnic: m.cnic,
+        dateOfBirth: m.dateOfBirth,
+        dateOfIssue: m.dateOfIssue,
+        dateOfExpire: m.dateOfExpire,
+        phone: m.phone || memberForms[0]?.phone || "",
+        email: m.email || memberForms[0]?.email || "",
+        packageType: form.packageType,
+        paymentStatus: "Unpaid",
+        amountDue: perPerson,
+        amountPaid: 0,
+        isVip: false,
+        destination: form.destination,
+        driveLink: form.driveLink,
       });
       clientIds.push(cid);
     });
 
-    // Update booking with client IDs
     store.updateBooking(bookingId, { clientIds });
 
-    // Auto-create entry if payment received
     if (Number(form.amountReceived) > 0) {
       store.addEntry({
         date: today, type: "client_receive", headId, referenceId: headId,
@@ -106,8 +146,7 @@ function BookingsPage() {
       totalAmount: Number(form.totalAmount) || 0, amountReceived: Number(form.amountReceived) || 0,
       totalCost: Number(form.totalCost) || 0, commission: Number(form.commission) || 0,
       packageType: form.packageType, status: form.status, travelDate: form.travelDate,
-      headPassport: form.headPassport, headCnic: form.headCnic, headPhone: form.headPhone,
-      headEmail: form.headEmail, destination: form.destination, driveLink: form.driveLink,
+      destination: form.destination, driveLink: form.driveLink,
     });
     setEditOpen(false);
   }
@@ -119,8 +158,7 @@ function BookingsPage() {
       amountReceived: String(b.amountReceived), totalCost: String(b.totalCost || 0),
       commission: String(b.commission || 0), packageType: b.packageType, status: b.status,
       travelDate: b.travelDate, members: String(b.members || b.clientIds.length),
-      headPassport: b.headPassport || "", headCnic: b.headCnic || "", headPhone: b.headPhone || "",
-      headEmail: b.headEmail || "", destination: b.destination || "", driveLink: b.driveLink || "",
+      destination: b.destination || "", driveLink: b.driveLink || "",
     });
     setEditOpen(true);
   }
@@ -166,33 +204,41 @@ function BookingsPage() {
         <div><Label className="text-xs">Number of Members</Label><Input type="number" min="1" value={form.members} onChange={(e) => setForm({ ...form, members: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
       </div>
       <div><Label className="text-xs">Destination</Label><Input value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} placeholder="Makkah / Madinah" className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-      <h4 className="text-xs font-semibold text-primary mt-2">Head Person Details</h4>
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label className="text-xs">Passport</Label><Input value={form.headPassport} onChange={(e) => setForm({ ...form, headPassport: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-        <div><Label className="text-xs">CNIC</Label><Input value={form.headCnic} onChange={(e) => setForm({ ...form, headCnic: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label className="text-xs">Phone</Label><Input value={form.headPhone} onChange={(e) => setForm({ ...form, headPhone: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-        <div><Label className="text-xs">Email (optional)</Label><Input value={form.headEmail} onChange={(e) => setForm({ ...form, headEmail: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-      </div>
       <div><Label className="text-xs">Google Drive Link (optional)</Label><Input value={form.driveLink} onChange={(e) => setForm({ ...form, driveLink: e.target.value })} placeholder="https://drive.google.com/..." className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
     </div>
   );
 
   const step2Fields = (
     <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1">
-      <p className="text-xs text-muted-foreground">Add details for each member. Leave blank to use head's details.</p>
+      <p className="text-xs text-muted-foreground">Member 1's nationality, phone & email auto-fill to all members. Override individually if needed.</p>
       {memberForms.map((m, i) => (
         <div key={i} className="rounded-lg border border-border/50 p-3 space-y-2">
-          <p className="text-xs font-semibold text-primary">Member {i + 1}</p>
-          <div className="grid grid-cols-2 gap-2">
-            <div><Label className="text-[10px]">Name</Label><Input value={m.name} onChange={(e) => { const arr = [...memberForms]; arr[i] = { ...m, name: e.target.value }; setMemberForms(arr); }} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
-            <div><Label className="text-[10px]">Passport</Label><Input value={m.passport} onChange={(e) => { const arr = [...memberForms]; arr[i] = { ...m, passport: e.target.value }; setMemberForms(arr); }} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
-          </div>
+          <p className="text-xs font-semibold text-primary">Member {i + 1} {i === 0 && "(Head)"}</p>
           <div className="grid grid-cols-3 gap-2">
-            <div><Label className="text-[10px]">CNIC</Label><Input value={m.cnic} onChange={(e) => { const arr = [...memberForms]; arr[i] = { ...m, cnic: e.target.value }; setMemberForms(arr); }} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
-            <div><Label className="text-[10px]">Phone</Label><Input value={m.phone} onChange={(e) => { const arr = [...memberForms]; arr[i] = { ...m, phone: e.target.value }; setMemberForms(arr); }} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
-            <div><Label className="text-[10px]">Email</Label><Input value={m.email} onChange={(e) => { const arr = [...memberForms]; arr[i] = { ...m, email: e.target.value }; setMemberForms(arr); }} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+            <div><Label className="text-[10px]">First Name</Label><Input value={m.firstName} onChange={(e) => updateMember(i, "firstName", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+            <div><Label className="text-[10px]">Last Name</Label><Input value={m.lastName} onChange={(e) => updateMember(i, "lastName", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+            <div><Label className="text-[10px]">Gender</Label>
+              <Select value={m.gender} onValueChange={(v) => updateMember(i, "gender", v)}>
+                <SelectTrigger className="bg-accent/20 border-border mt-0.5 h-7 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="Male">Male</SelectItem><SelectItem value="Female">Female</SelectItem><SelectItem value="Custom">Custom</SelectItem></SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label className="text-[10px]">Nationality</Label><Input value={m.nationality} onChange={(e) => updateMember(i, "nationality", e.target.value)} placeholder={i > 0 ? "Auto from Member 1" : "e.g. Pakistani"} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+            <div><Label className="text-[10px]">Date of Birth</Label><Input type="date" value={m.dateOfBirth} onChange={(e) => updateMember(i, "dateOfBirth", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label className="text-[10px]">Passport Number</Label><Input value={m.passport} onChange={(e) => updateMember(i, "passport", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+            <div><Label className="text-[10px]">CNIC</Label><Input value={m.cnic} onChange={(e) => updateMember(i, "cnic", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label className="text-[10px]">Date of Issue</Label><Input type="date" value={m.dateOfIssue} onChange={(e) => updateMember(i, "dateOfIssue", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+            <div><Label className="text-[10px]">Date of Expire</Label><Input type="date" value={m.dateOfExpire} onChange={(e) => updateMember(i, "dateOfExpire", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label className="text-[10px]">Contact</Label><Input value={m.phone} onChange={(e) => updateMember(i, "phone", e.target.value)} placeholder={i > 0 ? "Auto from Member 1" : ""} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+            <div><Label className="text-[10px]">Email</Label><Input value={m.email} onChange={(e) => updateMember(i, "email", e.target.value)} placeholder={i > 0 ? "Auto from Member 1" : ""} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
           </div>
         </div>
       ))}
@@ -230,14 +276,6 @@ function BookingsPage() {
       <div className="grid grid-cols-2 gap-3">
         <div><Label className="text-xs">Travel Date</Label><Input type="date" value={form.travelDate} onChange={(e) => setForm({ ...form, travelDate: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
         <div><Label className="text-xs">Destination</Label><Input value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label className="text-xs">Head Passport</Label><Input value={form.headPassport} onChange={(e) => setForm({ ...form, headPassport: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-        <div><Label className="text-xs">Head CNIC</Label><Input value={form.headCnic} onChange={(e) => setForm({ ...form, headCnic: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label className="text-xs">Head Phone</Label><Input value={form.headPhone} onChange={(e) => setForm({ ...form, headPhone: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-        <div><Label className="text-xs">Head Email</Label><Input value={form.headEmail} onChange={(e) => setForm({ ...form, headEmail: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
       </div>
       <div><Label className="text-xs">Drive Link</Label><Input value={form.driveLink} onChange={(e) => setForm({ ...form, driveLink: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
     </div>
@@ -328,7 +366,7 @@ function BookingsPage() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {clients.map((c) => (
                 <div key={c.id} className="flex items-center justify-between rounded-lg border border-border/50 bg-accent/10 px-4 py-3">
-                  <div><p className="text-sm font-medium">{c.name}</p><p className="text-xs text-muted-foreground">{c.id} · {c.passport}</p></div>
+                  <div><p className="text-sm font-medium">{getClientName(c)}</p><p className="text-xs text-muted-foreground">{c.id} · {c.passport}</p></div>
                   <div className="text-right"><p className="text-xs text-muted-foreground">{formatCurrency(c.amountPaid)} / {formatCurrency(c.amountDue)}</p><StatusBadge status={c.paymentStatus} /></div>
                 </div>
               ))}
