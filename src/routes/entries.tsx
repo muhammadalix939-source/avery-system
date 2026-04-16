@@ -63,10 +63,37 @@ function EntriesPage() {
   const totalReceived = store.entries.filter((e) => e.type === "client_receive").reduce((s, e) => s + e.amount, 0);
   const totalPaid = store.entries.filter((e) => e.type === "supplier_payment" || e.type === "agent_commission" || e.type === "expense").reduce((s, e) => s + e.amount, 0);
 
+  // Auto-populate reference name when type or referenceId changes
+  function updateFormType(type: LedgerEntry["type"]) {
+    setForm({ ...form, type, referenceId: "", referenceName: "", headId: "" });
+  }
+
+  function updateReferenceId(refId: string) {
+    let name = "";
+    if (form.type === "client_receive") {
+      const booking = store.bookings.find((b) => b.headId === refId);
+      if (booking) {
+        const headClient = store.clients.find((c) => c.headId === refId);
+        name = headClient ? getClientName(headClient) : refId;
+      }
+      setForm({ ...form, referenceId: refId, referenceName: name || form.referenceName, headId: refId });
+    } else if (form.type === "supplier_payment") {
+      const supplier = store.suppliers.find((s) => s.id === refId);
+      name = supplier?.companyName || "";
+      setForm({ ...form, referenceId: refId, referenceName: name || form.referenceName });
+    } else if (form.type === "agent_commission") {
+      const agent = store.agents.find((a) => a.id === refId);
+      name = agent?.name || "";
+      setForm({ ...form, referenceId: refId, referenceName: name || form.referenceName });
+    } else {
+      setForm({ ...form, referenceId: refId });
+    }
+  }
+
   const formFields = (
     <div className="space-y-4">
       <div><Label>Entry Type</Label>
-        <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v as LedgerEntry["type"] })}>
+        <Select value={form.type} onValueChange={(v) => updateFormType(v as LedgerEntry["type"])}>
           <SelectTrigger className="bg-accent/20 border-border mt-1"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="client_receive">Client Payment Received</SelectItem>
@@ -77,11 +104,44 @@ function EntriesPage() {
         </Select>
       </div>
       <div><Label>Date</Label><Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="bg-accent/20 border-border mt-1" /></div>
+
       {form.type === "client_receive" && (
-        <div><Label>Head ID</Label><Input value={form.headId} onChange={(e) => setForm({ ...form, headId: e.target.value })} placeholder="AV-HD-001" className="bg-accent/20 border-border mt-1" /></div>
+        <div><Label>Head ID</Label>
+          <Select value={form.headId} onValueChange={(v) => updateReferenceId(v)}>
+            <SelectTrigger className="bg-accent/20 border-border mt-1"><SelectValue placeholder="Select Head ID" /></SelectTrigger>
+            <SelectContent>
+              {store.bookings.map((b) => <SelectItem key={b.headId} value={b.headId}>{b.headId} — {b.packageType}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
       )}
-      <div><Label>Reference ID</Label><Input value={form.referenceId} onChange={(e) => setForm({ ...form, referenceId: e.target.value })} placeholder="AV-C001 / AV-S001 / AV-A001" className="bg-accent/20 border-border mt-1" /></div>
-      <div><Label>Reference Name</Label><Input value={form.referenceName} onChange={(e) => setForm({ ...form, referenceName: e.target.value })} placeholder="Name / Description" className="bg-accent/20 border-border mt-1" /></div>
+
+      {form.type === "supplier_payment" && (
+        <div><Label>Supplier</Label>
+          <Select value={form.referenceId} onValueChange={(v) => updateReferenceId(v)}>
+            <SelectTrigger className="bg-accent/20 border-border mt-1"><SelectValue placeholder="Select Supplier" /></SelectTrigger>
+            <SelectContent>
+              {store.suppliers.map((s) => <SelectItem key={s.id} value={s.id}>{s.id} — {s.companyName}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {form.type === "agent_commission" && (
+        <div><Label>Agent</Label>
+          <Select value={form.referenceId} onValueChange={(v) => updateReferenceId(v)}>
+            <SelectTrigger className="bg-accent/20 border-border mt-1"><SelectValue placeholder="Select Agent" /></SelectTrigger>
+            <SelectContent>
+              {store.agents.map((a) => <SelectItem key={a.id} value={a.id}>{a.id} — {a.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {form.type === "expense" && (
+        <div><Label>Expense Name</Label><Input value={form.referenceName} onChange={(e) => setForm({ ...form, referenceName: e.target.value })} placeholder="Office Rent, Utilities..." className="bg-accent/20 border-border mt-1" /></div>
+      )}
+
       <div><Label>Amount (PKR)</Label><Input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="100000" className="bg-accent/20 border-border mt-1" /></div>
       <div><Label>Note</Label><Input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Payment note..." className="bg-accent/20 border-border mt-1" /></div>
     </div>
