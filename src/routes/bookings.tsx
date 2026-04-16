@@ -127,12 +127,46 @@ function BookingsPage() {
 
     store.updateBooking(bookingId, { clientIds });
 
+    // Auto-create ledger entries
     if (Number(form.amountReceived) > 0) {
       store.addEntry({
         date: today, type: "client_receive", headId, referenceId: headId,
         referenceName: `Booking ${headId}`, amount: Number(form.amountReceived),
         note: `Initial payment for ${headId}`,
       });
+    }
+
+    // Auto-add supplier cost entry
+    if (Number(form.totalCost) > 0 && form.supplierId) {
+      const supplier = store.suppliers.find((s) => s.id === form.supplierId);
+      store.addEntry({
+        date: today, type: "supplier_payment", headId, referenceId: form.supplierId,
+        referenceName: supplier?.companyName || form.supplierId, amount: Number(form.totalCost),
+        note: `Supplier cost for ${headId}`,
+      });
+    }
+
+    // Auto-add agent commission entry
+    if (Number(form.commission) > 0 && form.agentId && form.agentId !== "Direct") {
+      const agent = store.agents.find((a) => a.id === form.agentId);
+      if (agent) {
+        // Update agent stats
+        store.updateAgent(agent.id, {
+          totalSales: agent.totalSales + (Number(form.totalAmount) || 0),
+          totalClients: agent.totalClients + memberForms.length,
+          commission: agent.commission + (Number(form.commission) || 0),
+        });
+      }
+    }
+
+    // Update supplier totalPayable
+    if (Number(form.totalCost) > 0 && form.supplierId) {
+      const supplier = store.suppliers.find((s) => s.id === form.supplierId);
+      if (supplier) {
+        store.updateSupplier(supplier.id, {
+          totalPayable: supplier.totalPayable + (Number(form.totalCost) || 0),
+        });
+      }
     }
 
     resetForm();
