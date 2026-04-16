@@ -156,7 +156,7 @@ function SuppliersPage() {
         </DialogContent>
       </Dialog>
 
-      <DetailDialog open={detailOpen} onOpenChange={setDetailOpen} type="supplier" data={selected} entries={relatedEntries} />
+      <DetailDialog open={detailOpen} onOpenChange={setDetailOpen} type="supplier" data={selected} entries={relatedEntries} allClients={store.clients} allBookings={store.bookings} />
     </div>
   );
 }

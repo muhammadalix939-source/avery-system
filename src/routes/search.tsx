@@ -99,7 +99,7 @@ function SearchPage() {
         </div>
       )}
 
-      <DetailDialog open={detailOpen} onOpenChange={setDetailOpen} type={selectedType} data={selectedData} entries={relatedEntries} />
+      <DetailDialog open={detailOpen} onOpenChange={setDetailOpen} type={selectedType} data={selectedData} entries={relatedEntries} allClients={store.clients} allBookings={store.bookings} />
     </div>
   );
 }

@@ -112,6 +112,10 @@ function AgentsPage() {
               <div><p className="text-[10px] uppercase text-muted-foreground">Clients</p><p className="text-sm font-semibold">{a.totalClients}</p></div>
               <div><p className="text-[10px] uppercase text-muted-foreground">Commission</p><p className="text-sm font-semibold text-success">{formatCurrency(a.commission)}</p></div>
             </div>
+            <div className="grid grid-cols-2 gap-2 border-t border-border/50 pt-2">
+              <div><p className="text-[10px] uppercase text-muted-foreground">Paid</p><p className="text-sm font-semibold text-success">{formatCurrency(a.paidCommission)}</p></div>
+              <div><p className="text-[10px] uppercase text-muted-foreground">Payable</p><p className="text-sm font-semibold text-destructive">{formatCurrency(a.commission - a.paidCommission)}</p></div>
+            </div>
           </motion.div>
         ))}
       </div>
@@ -124,7 +128,7 @@ function AgentsPage() {
         </DialogContent>
       </Dialog>
 
-      <DetailDialog open={detailOpen} onOpenChange={setDetailOpen} type="agent" data={selected} entries={relatedEntries} />
+      <DetailDialog open={detailOpen} onOpenChange={setDetailOpen} type="agent" data={selected} entries={relatedEntries} allClients={store.clients} allBookings={store.bookings} />
     </div>
   );
 }
