@@ -126,7 +126,41 @@ export function useStore() {
     // Entries CRUD
     addEntry: (data: Omit<LedgerEntry, "id" | "createdAt">) => {
       const id = `E${String(nextEntryNum++).padStart(3, "0")}`;
-      entries = [...entries, { ...data, id, createdAt: new Date().toLocaleString("en-PK", { timeZone: "Asia/Karachi" }) }];
+      const entry = { ...data, id, createdAt: new Date().toLocaleString("en-PK", { timeZone: "Asia/Karachi" }) };
+      entries = [...entries, entry];
+
+      // Auto-sync: update related records based on entry type
+      if (data.type === "client_receive" && data.headId) {
+        // Update booking amountReceived
+        const booking = bookings.find((b) => b.headId === data.headId);
+        if (booking) {
+          const totalReceived = entries.filter((e) => e.type === "client_receive" && e.headId === data.headId).reduce((s, e) => s + e.amount, 0);
+          bookings = bookings.map((b) => b.headId === data.headId ? { ...b, amountReceived: totalReceived } : b);
+          // Distribute payment to clients under this head
+          const headClients = clients.filter((c) => c.headId === data.headId);
+          let remaining = totalReceived;
+          clients = clients.map((c) => {
+            if (c.headId !== data.headId) return c;
+            if (remaining <= 0) return { ...c, amountPaid: 0, paymentStatus: "Unpaid" as const };
+            if (remaining >= c.amountDue) { remaining -= c.amountDue; return { ...c, amountPaid: c.amountDue, paymentStatus: "Paid" as const }; }
+            const paid = remaining; remaining = 0;
+            return { ...c, amountPaid: paid, paymentStatus: "Partial" as const };
+          });
+        }
+      }
+
+      if (data.type === "supplier_payment" && data.referenceId) {
+        // Update supplier totalPaid
+        const totalPaid = entries.filter((e) => e.type === "supplier_payment" && e.referenceId === data.referenceId).reduce((s, e) => s + e.amount, 0);
+        suppliers = suppliers.map((s) => s.id === data.referenceId ? { ...s, totalPaid } : s);
+      }
+
+      if (data.type === "agent_commission" && data.referenceId) {
+        // Update agent paidCommission
+        const totalPaid = entries.filter((e) => e.type === "agent_commission" && e.referenceId === data.referenceId).reduce((s, e) => s + e.amount, 0);
+        agents = agents.map((a) => a.id === data.referenceId ? { ...a, paidCommission: totalPaid } : a);
+      }
+
       notify();
       return id;
     },
