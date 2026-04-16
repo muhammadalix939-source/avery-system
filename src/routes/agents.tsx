@@ -28,7 +28,7 @@ function AgentsPage() {
   const [form, setForm] = useState({ name: "", phone: "", email: "", status: "Active" as Agent["status"] });
 
   function handleAdd() {
-    store.addAgent({ name: form.name, phone: form.phone, email: form.email, totalSales: 0, totalClients: 0, commission: 0, status: form.status });
+    store.addAgent({ name: form.name, phone: form.phone, email: form.email, totalSales: 0, totalClients: 0, commission: 0, paidCommission: 0, status: form.status });
     setForm({ name: "", phone: "", email: "", status: "Active" });
     setAddOpen(false);
   }
