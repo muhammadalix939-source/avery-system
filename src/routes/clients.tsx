@@ -207,7 +207,7 @@ function ClientsPage() {
         </DialogContent>
       </Dialog>
 
-      <DetailDialog open={detailOpen} onOpenChange={setDetailOpen} type="client" data={selected} entries={relatedEntries} />
+      <DetailDialog open={detailOpen} onOpenChange={setDetailOpen} type="client" data={selected} entries={relatedEntries} allClients={store.clients} allBookings={store.bookings} />
     </div>
   );
 }
