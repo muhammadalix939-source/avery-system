@@ -71,7 +71,7 @@ function PaymentsPage() {
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">{i + 1}</div>
                 <div className="flex-1">
                   <div className="flex items-center justify-between">
-                    <div><p className="text-sm font-medium">{c.name}</p><p className="text-xs text-muted-foreground">{c.id}</p></div>
+                    <div><p className="text-sm font-medium">{`${c.firstName} ${c.lastName}`.trim()}</p><p className="text-xs text-muted-foreground">{c.id}</p></div>
                     <div className="text-right">
                       <p className="text-sm font-medium"><span className="text-success">{formatCurrency(c.amountPaid)}</span><span className="text-muted-foreground"> / {formatCurrency(c.amountDue)}</span></p>
                       <StatusBadge status={c.paymentStatus} />

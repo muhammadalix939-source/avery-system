@@ -2,7 +2,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
 import StatusBadge from "@/components/StatusBadge";
-import { formatCurrency } from "@/lib/data";
+import { formatCurrency, getClientName } from "@/lib/data";
 import type { Client, Booking, Agent, Supplier } from "@/lib/data";
 import type { LedgerEntry } from "@/lib/store";
 import { generateClientStatement, generateSupplierLedger, generateAgentReport } from "@/lib/pdf";
@@ -31,7 +31,7 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle className="text-primary">
-              {type === "client" && `Client: ${(data as Client).name}`}
+              {type === "client" && `Client: ${getClientName(data as Client)}`}
               {type === "agent" && `Agent: ${(data as Agent).name}`}
               {type === "supplier" && `Supplier: ${(data as Supplier).companyName}`}
               {type === "booking" && `Booking: ${(data as Booking).headId}`}
@@ -88,9 +88,15 @@ function renderClient(c: Client) {
     <>
       <Row label="Client ID" value={c.id} />
       <Row label="Head ID" value={c.headId} />
-      <Row label="Name" value={c.name} />
+      <Row label="First Name" value={c.firstName} />
+      <Row label="Last Name" value={c.lastName} />
+      <Row label="Gender" value={c.gender} />
+      {c.nationality && <Row label="Nationality" value={c.nationality} />}
       <Row label="Passport" value={c.passport} />
       {c.cnic && <Row label="CNIC" value={c.cnic} />}
+      {c.dateOfBirth && <Row label="Date of Birth" value={c.dateOfBirth} />}
+      {c.dateOfIssue && <Row label="Date of Issue" value={c.dateOfIssue} />}
+      {c.dateOfExpire && <Row label="Date of Expire" value={c.dateOfExpire} />}
       <Row label="Phone" value={c.phone} />
       {c.email && <Row label="Email" value={c.email} />}
       <Row label="Package" value={c.packageType} />
@@ -164,9 +170,6 @@ function renderBooking(b: Booking) {
       </div>
       <Row label="Travel Date" value={b.travelDate} />
       <Row label="Created" value={b.createdAt} />
-      {b.headPassport && <Row label="Head Passport" value={b.headPassport} />}
-      {b.headCnic && <Row label="Head CNIC" value={b.headCnic} />}
-      {b.headPhone && <Row label="Head Phone" value={b.headPhone} />}
       {b.driveLink && <Row label="Drive Link" value={b.driveLink} />}
     </>
   );

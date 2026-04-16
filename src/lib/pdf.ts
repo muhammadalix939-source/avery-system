@@ -1,6 +1,6 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { formatCurrency } from "./data";
+import { formatCurrency, getClientName } from "./data";
 import type { Client, Agent, Supplier, Booking } from "./data";
 import type { LedgerEntry } from "./store";
 
@@ -48,7 +48,7 @@ export function generateClientStatement(client: Client, entries: LedgerEntry[]) 
   doc.setFontSize(12);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(40, 40, 40);
-  doc.text(`${client.name}`, 14, y);
+  doc.text(getClientName(client), 14, y);
   y += 6;
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
@@ -98,7 +98,7 @@ export function generateClientStatement(client: Client, entries: LedgerEntry[]) 
   }
 
   addFooter(doc);
-  doc.save(`Statement_${client.id}_${client.name.replace(/\s/g, "_")}.pdf`);
+  doc.save(`Statement_${client.id}_${getClientName(client).replace(/\s/g, "_")}.pdf`);
 }
 
 export function generateSupplierLedger(supplier: Supplier, entries: LedgerEntry[]) {
@@ -242,7 +242,7 @@ export function generateInvoice(booking: Booking, clients: Client[], agent?: Age
     startY: y,
     head: [["#", "Client ID", "Name", "Passport", "Amount Due", "Amount Paid", "Status"]],
     body: clients.map((c, i) => [
-      i + 1, c.id, c.name, c.passport, formatCurrency(c.amountDue), formatCurrency(c.amountPaid), c.paymentStatus,
+      i + 1, c.id, getClientName(c), c.passport, formatCurrency(c.amountDue), formatCurrency(c.amountPaid), c.paymentStatus,
     ]),
     theme: "grid",
     headStyles: { fillColor: [180, 150, 50], textColor: [255, 255, 255], fontSize: 8 },
@@ -285,7 +285,7 @@ export function generateHotelVoucher(booking: Booking, client: Client, hotelName
 
   const rows = [
     ["Booking ID (Head ID)", booking.headId],
-    ["Guest Name", client.name],
+    ["Guest Name", getClientName(client)],
     ["Passport", client.passport],
     ["Hotel Name", hotelName],
     ["Check-in Date", checkIn],
@@ -315,5 +315,5 @@ export function generateHotelVoucher(booking: Booking, client: Client, hotelName
   doc.text("For any changes, contact Avery International Travel & Tours.", 14, y);
 
   addFooter(doc);
-  doc.save(`Voucher_${booking.headId}_${client.name.replace(/\s/g, "_")}.pdf`);
+  doc.save(`Voucher_${booking.headId}_${getClientName(client).replace(/\s/g, "_")}.pdf`);
 }

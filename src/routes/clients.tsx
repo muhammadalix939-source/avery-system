@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import DetailDialog from "@/components/DetailDialog";
-import { formatCurrency, type Client } from "@/lib/data";
+import { formatCurrency, getClientName, type Client } from "@/lib/data";
 import { useStore } from "@/lib/store";
 import { generateClientStatement } from "@/lib/pdf";
 import { useState } from "react";
@@ -26,35 +26,59 @@ function ClientsPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selected, setSelected] = useState<Client | null>(null);
-  const [form, setForm] = useState({ headId: "", name: "", passport: "", cnic: "", phone: "", email: "", packageType: "Umrah" as Client["packageType"], amountDue: "", isVip: false, destination: "", driveLink: "" });
+  const [form, setForm] = useState({
+    headId: "", firstName: "", lastName: "", gender: "Male" as Client["gender"],
+    nationality: "", passport: "", cnic: "", dateOfBirth: "", dateOfIssue: "", dateOfExpire: "",
+    phone: "", email: "", packageType: "Umrah" as Client["packageType"],
+    amountDue: "", isVip: false, destination: "", driveLink: "",
+  });
 
   const filtered = filter === "All" ? store.clients : store.clients.filter((c) => c.paymentStatus === filter);
 
+  const emptyForm = {
+    headId: "", firstName: "", lastName: "", gender: "Male" as Client["gender"],
+    nationality: "", passport: "", cnic: "", dateOfBirth: "", dateOfIssue: "", dateOfExpire: "",
+    phone: "", email: "", packageType: "Umrah" as Client["packageType"],
+    amountDue: "", isVip: false, destination: "", driveLink: "",
+  };
+
   function handleAdd() {
     store.addClient({
-      headId: form.headId, name: form.name, passport: form.passport, cnic: form.cnic,
-      phone: form.phone, email: form.email, packageType: form.packageType,
-      paymentStatus: "Unpaid", amountDue: Number(form.amountDue) || 0, amountPaid: 0,
+      headId: form.headId, firstName: form.firstName, lastName: form.lastName,
+      gender: form.gender, nationality: form.nationality, passport: form.passport,
+      cnic: form.cnic, dateOfBirth: form.dateOfBirth, dateOfIssue: form.dateOfIssue,
+      dateOfExpire: form.dateOfExpire, phone: form.phone, email: form.email,
+      packageType: form.packageType, paymentStatus: "Unpaid",
+      amountDue: Number(form.amountDue) || 0, amountPaid: 0,
       isVip: form.isVip, destination: form.destination, driveLink: form.driveLink,
     });
-    setForm({ headId: "", name: "", passport: "", cnic: "", phone: "", email: "", packageType: "Umrah", amountDue: "", isVip: false, destination: "", driveLink: "" });
+    setForm(emptyForm);
     setAddOpen(false);
   }
 
   function handleEdit() {
     if (!selected) return;
     store.updateClient(selected.id, {
-      headId: form.headId, name: form.name, passport: form.passport, cnic: form.cnic,
-      phone: form.phone, email: form.email, packageType: form.packageType,
-      amountDue: Number(form.amountDue) || 0, isVip: form.isVip,
-      destination: form.destination, driveLink: form.driveLink,
+      headId: form.headId, firstName: form.firstName, lastName: form.lastName,
+      gender: form.gender, nationality: form.nationality, passport: form.passport,
+      cnic: form.cnic, dateOfBirth: form.dateOfBirth, dateOfIssue: form.dateOfIssue,
+      dateOfExpire: form.dateOfExpire, phone: form.phone, email: form.email,
+      packageType: form.packageType, amountDue: Number(form.amountDue) || 0,
+      isVip: form.isVip, destination: form.destination, driveLink: form.driveLink,
     });
     setEditOpen(false);
   }
 
   function openEdit(c: Client) {
     setSelected(c);
-    setForm({ headId: c.headId, name: c.name, passport: c.passport, cnic: c.cnic || "", phone: c.phone, email: c.email || "", packageType: c.packageType, amountDue: String(c.amountDue), isVip: c.isVip, destination: c.destination || "", driveLink: c.driveLink || "" });
+    setForm({
+      headId: c.headId, firstName: c.firstName, lastName: c.lastName,
+      gender: c.gender, nationality: c.nationality || "", passport: c.passport,
+      cnic: c.cnic || "", dateOfBirth: c.dateOfBirth || "", dateOfIssue: c.dateOfIssue || "",
+      dateOfExpire: c.dateOfExpire || "", phone: c.phone, email: c.email || "",
+      packageType: c.packageType, amountDue: String(c.amountDue),
+      isVip: c.isVip, destination: c.destination || "", driveLink: c.driveLink || "",
+    });
     setEditOpen(true);
   }
 
@@ -69,14 +93,29 @@ function ClientsPage() {
     <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
       <div className="grid grid-cols-2 gap-3">
         <div><Label className="text-xs">Head ID</Label><Input value={form.headId} onChange={(e) => setForm({ ...form, headId: e.target.value })} placeholder="AV-HD-001" className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-        <div><Label className="text-xs">Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Full Name" className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+        <div><Label className="text-xs">Nationality</Label><Input value={form.nationality} onChange={(e) => setForm({ ...form, nationality: e.target.value })} placeholder="e.g. Pakistani" className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        <div><Label className="text-xs">First Name</Label><Input value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+        <div><Label className="text-xs">Last Name</Label><Input value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+        <div><Label className="text-xs">Gender</Label>
+          <Select value={form.gender} onValueChange={(v) => setForm({ ...form, gender: v as Client["gender"] })}>
+            <SelectTrigger className="bg-accent/20 border-border mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="Male">Male</SelectItem><SelectItem value="Female">Female</SelectItem><SelectItem value="Custom">Custom</SelectItem></SelectContent>
+          </Select>
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <div><Label className="text-xs">Passport</Label><Input value={form.passport} onChange={(e) => setForm({ ...form, passport: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+        <div><Label className="text-xs">Passport Number</Label><Input value={form.passport} onChange={(e) => setForm({ ...form, passport: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
         <div><Label className="text-xs">CNIC</Label><Input value={form.cnic} onChange={(e) => setForm({ ...form, cnic: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
       </div>
+      <div className="grid grid-cols-3 gap-3">
+        <div><Label className="text-xs">Date of Birth</Label><Input type="date" value={form.dateOfBirth} onChange={(e) => setForm({ ...form, dateOfBirth: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+        <div><Label className="text-xs">Date of Issue</Label><Input type="date" value={form.dateOfIssue} onChange={(e) => setForm({ ...form, dateOfIssue: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+        <div><Label className="text-xs">Date of Expire</Label><Input type="date" value={form.dateOfExpire} onChange={(e) => setForm({ ...form, dateOfExpire: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+      </div>
       <div className="grid grid-cols-2 gap-3">
-        <div><Label className="text-xs">Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+        <div><Label className="text-xs">Contact</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
         <div><Label className="text-xs">Email (optional)</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
       </div>
       <div className="grid grid-cols-2 gap-3">
@@ -105,11 +144,11 @@ function ClientsPage() {
         actions={
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2" onClick={() => setForm({ headId: "", name: "", passport: "", cnic: "", phone: "", email: "", packageType: "Umrah", amountDue: "", isVip: false, destination: "", driveLink: "" })}>
+              <Button className="gap-2" onClick={() => setForm(emptyForm)}>
                 <Plus className="h-4 w-4" /> Add Client
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-card border-border">
+            <DialogContent className="bg-card border-border max-w-lg">
               <DialogHeader><DialogTitle>Add New Client</DialogTitle></DialogHeader>
               {formFields}
               <Button onClick={handleAdd} className="w-full">Add Client</Button>
@@ -138,7 +177,7 @@ function ClientsPage() {
               {filtered.map((c) => (
                 <tr key={c.id} className="border-b border-border/50 transition-colors hover:bg-accent/30">
                   <td className="px-4 py-3 font-semibold text-primary">{c.id}</td>
-                  <td className="px-4 py-3 font-medium">{c.name} {c.isVip && "⭐"}</td>
+                  <td className="px-4 py-3 font-medium">{getClientName(c)} {c.isVip && "⭐"}</td>
                   <td className="px-4 py-3 text-muted-foreground">{c.headId}</td>
                   <td className="px-4 py-3 text-muted-foreground"><span className="flex items-center gap-1"><Phone className="h-3 w-3" />{c.phone}</span></td>
                   <td className="px-4 py-3">{c.packageType}</td>
@@ -161,7 +200,7 @@ function ClientsPage() {
       </motion.div>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="bg-card border-border">
+        <DialogContent className="bg-card border-border max-w-lg">
           <DialogHeader><DialogTitle>Edit Client — {selected?.id}</DialogTitle></DialogHeader>
           {formFields}
           <Button onClick={handleEdit} className="w-full">Save Changes</Button>

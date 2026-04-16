@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import DetailDialog from "@/components/DetailDialog";
-import { formatCurrency, type Client, type Agent, type Supplier, type Booking } from "@/lib/data";
+import { formatCurrency, getClientName, type Client, type Agent, type Supplier, type Booking } from "@/lib/data";
 import { useStore } from "@/lib/store";
 
 export const Route = createFileRoute("/search")({
@@ -116,8 +116,9 @@ function searchAll(query: string, store: ReturnType<typeof useStore>): SearchRes
   });
 
   store.clients.forEach((c) => {
-    if (c.id.toLowerCase().includes(q) || c.name.toLowerCase().includes(q) || c.phone.includes(q) || c.passport.toLowerCase().includes(q)) {
-      results.push({ type: "client", id: c.id, title: c.name, subtitle: `${c.id} · ${c.headId} · ${c.passport}`, status: c.paymentStatus, extra: formatCurrency(c.amountPaid), raw: c });
+    const fullName = getClientName(c).toLowerCase();
+    if (c.id.toLowerCase().includes(q) || fullName.includes(q) || c.phone.includes(q) || c.passport.toLowerCase().includes(q)) {
+      results.push({ type: "client", id: c.id, title: getClientName(c), subtitle: `${c.id} · ${c.headId} · ${c.passport}`, status: c.paymentStatus, extra: formatCurrency(c.amountPaid), raw: c });
     }
   });
 
