@@ -54,6 +54,7 @@ export interface Agent {
   totalSales: number;
   totalClients: number;
   commission: number;
+  paidCommission: number;
   status: "Active" | "Inactive";
 }
 
@@ -78,9 +79,9 @@ export interface SupplierTransaction {
 
 // Mock data
 export const mockAgents: Agent[] = [
-  { id: "AV-A001", name: "Ahmed Khan", phone: "03001234567", email: "ahmed@av.com", totalSales: 2500000, totalClients: 45, commission: 125000, status: "Active" },
-  { id: "AV-A002", name: "Sara Ali", phone: "03009876543", email: "sara@av.com", totalSales: 1800000, totalClients: 32, commission: 90000, status: "Active" },
-  { id: "AV-A003", name: "Usman Malik", phone: "03115554444", email: "usman@av.com", totalSales: 950000, totalClients: 18, commission: 47500, status: "Active" },
+  { id: "AV-A001", name: "Ahmed Khan", phone: "03001234567", email: "ahmed@av.com", totalSales: 2500000, totalClients: 45, commission: 125000, paidCommission: 50000, status: "Active" },
+  { id: "AV-A002", name: "Sara Ali", phone: "03009876543", email: "sara@av.com", totalSales: 1800000, totalClients: 32, commission: 90000, paidCommission: 30000, status: "Active" },
+  { id: "AV-A003", name: "Usman Malik", phone: "03115554444", email: "usman@av.com", totalSales: 950000, totalClients: 18, commission: 47500, paidCommission: 0, status: "Active" },
 ];
 
 export const mockSuppliers: Supplier[] = [
