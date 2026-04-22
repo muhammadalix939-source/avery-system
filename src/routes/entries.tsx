@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import PageHeader from "@/components/PageHeader";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { formatCurrency, getClientName } from "@/lib/data";
 import { useStore, type LedgerEntry } from "@/lib/store";
 import { getPKTDate } from "@/lib/date-utils";
@@ -107,34 +108,49 @@ function EntriesPage() {
 
       {form.type === "client_receive" && (
         <div><Label>Head ID</Label>
-          <Select value={form.headId} onValueChange={(v) => updateReferenceId(v)}>
-            <SelectTrigger className="bg-accent/20 border-border mt-1"><SelectValue placeholder="Select Head ID" /></SelectTrigger>
-            <SelectContent>
-              {store.bookings.map((b) => <SelectItem key={b.headId} value={b.headId}>{b.headId} — {b.packageType}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            value={form.headId}
+            onChange={(v) => updateReferenceId(v)}
+            placeholder="Search Head ID..."
+            options={store.bookings.map((b) => ({
+              value: b.headId,
+              label: `${b.headId} — ${b.packageType}`,
+              hint: `${b.travelDate} · ${formatCurrency(b.totalAmount)}`,
+            }))}
+            className="mt-1"
+          />
         </div>
       )}
 
       {form.type === "supplier_payment" && (
         <div><Label>Supplier</Label>
-          <Select value={form.referenceId} onValueChange={(v) => updateReferenceId(v)}>
-            <SelectTrigger className="bg-accent/20 border-border mt-1"><SelectValue placeholder="Select Supplier" /></SelectTrigger>
-            <SelectContent>
-              {store.suppliers.map((s) => <SelectItem key={s.id} value={s.id}>{s.id} — {s.companyName}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            value={form.referenceId}
+            onChange={(v) => updateReferenceId(v)}
+            placeholder="Search Supplier..."
+            options={store.suppliers.map((s) => ({
+              value: s.id,
+              label: `${s.id} — ${s.companyName}`,
+              hint: s.serviceType,
+            }))}
+            className="mt-1"
+          />
         </div>
       )}
 
       {form.type === "agent_commission" && (
         <div><Label>Agent</Label>
-          <Select value={form.referenceId} onValueChange={(v) => updateReferenceId(v)}>
-            <SelectTrigger className="bg-accent/20 border-border mt-1"><SelectValue placeholder="Select Agent" /></SelectTrigger>
-            <SelectContent>
-              {store.agents.map((a) => <SelectItem key={a.id} value={a.id}>{a.id} — {a.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            value={form.referenceId}
+            onChange={(v) => updateReferenceId(v)}
+            placeholder="Search Agent..."
+            options={store.agents.map((a) => ({
+              value: a.id,
+              label: `${a.id} — ${a.name}`,
+              hint: a.phone,
+            }))}
+            className="mt-1"
+          />
         </div>
       )}
 
