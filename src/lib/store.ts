@@ -16,13 +16,20 @@ export interface LedgerEntry {
   createdAt: string;
 }
 
-// Simple global store using module-level state + listeners
-let clients = [...mockClients];
-let bookings = [...mockBookings];
-let agents = [...mockAgents];
-let suppliers = [...mockSuppliers];
-let monthlyData = [...defaultMonthlyData];
-let entries: LedgerEntry[] = [
+// ---------- Persistence (localStorage) ----------
+const STORAGE_KEY = "av-crm-store-v1";
+
+interface PersistedState {
+  clients: Client[];
+  bookings: Booking[];
+  agents: Agent[];
+  suppliers: Supplier[];
+  monthlyData: typeof defaultMonthlyData;
+  entries: LedgerEntry[];
+  counters: { client: number; agent: number; supplier: number; booking: number; head: number; entry: number };
+}
+
+const defaultEntries: LedgerEntry[] = [
   { id: "E001", date: "2026-03-15", type: "client_receive", headId: "AV-HD-001", referenceId: "AV-C001", referenceName: "Muhammad Ali", amount: 100000, note: "Initial deposit", createdAt: "2026-03-15T10:00:00" },
   { id: "E002", date: "2026-03-20", type: "client_receive", headId: "AV-HD-001", referenceId: "AV-C002", referenceName: "Fatima Ali", amount: 100000, note: "Full payment", createdAt: "2026-03-20T14:30:00" },
   { id: "E003", date: "2026-03-25", type: "supplier_payment", headId: "", referenceId: "AV-S001", referenceName: "Al-Haram Hotels", amount: 200000, note: "Hotel advance", createdAt: "2026-03-25T11:00:00" },
@@ -31,15 +38,55 @@ let entries: LedgerEntry[] = [
   { id: "E006", date: "2026-02-10", type: "client_receive", headId: "AV-HD-002", referenceId: "AV-C006", referenceName: "Zainab Raza", amount: 250000, note: "Full payment Hajj", createdAt: "2026-02-10T10:00:00" },
 ];
 
-let nextClientNum = 11;
-let nextAgentNum = 4;
-let nextSupplierNum = 5;
-let nextBookingNum = 4;
-let nextHeadNum = 4;
-let nextEntryNum = 7;
+function loadState(): PersistedState {
+  if (typeof window === "undefined") {
+    return {
+      clients: [...mockClients], bookings: [...mockBookings], agents: [...mockAgents],
+      suppliers: [...mockSuppliers], monthlyData: [...defaultMonthlyData], entries: defaultEntries,
+      counters: { client: 11, agent: 4, supplier: 5, booking: 4, head: 4, entry: 7 },
+    };
+  }
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw) as PersistedState;
+  } catch {}
+  return {
+    clients: [...mockClients], bookings: [...mockBookings], agents: [...mockAgents],
+    suppliers: [...mockSuppliers], monthlyData: [...defaultMonthlyData], entries: defaultEntries,
+    counters: { client: 11, agent: 4, supplier: 5, booking: 4, head: 4, entry: 7 },
+  };
+}
+
+const initial = loadState();
+let clients = initial.clients;
+let bookings = initial.bookings;
+let agents = initial.agents;
+let suppliers = initial.suppliers;
+let monthlyData = initial.monthlyData;
+let entries: LedgerEntry[] = initial.entries;
+let nextClientNum = initial.counters.client;
+let nextAgentNum = initial.counters.agent;
+let nextSupplierNum = initial.counters.supplier;
+let nextBookingNum = initial.counters.booking;
+let nextHeadNum = initial.counters.head;
+let nextEntryNum = initial.counters.entry;
+
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+function persist() {
+  if (typeof window === "undefined") return;
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        clients, bookings, agents, suppliers, monthlyData, entries,
+        counters: { client: nextClientNum, agent: nextAgentNum, supplier: nextSupplierNum, booking: nextBookingNum, head: nextHeadNum, entry: nextEntryNum },
+      }));
+    } catch {}
+  }, 150);
+}
 
 const listeners = new Set<() => void>();
-function notify() { listeners.forEach((l) => l()); }
+function notify() { persist(); listeners.forEach((l) => l()); }
 
 export function useStore() {
   const [, setTick] = useState(0);
