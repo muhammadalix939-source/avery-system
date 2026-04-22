@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { formatCurrency, getClientName, type Booking } from "@/lib/data";
 import { useStore } from "@/lib/store";
 import { getPKTDate } from "@/lib/date-utils";
@@ -208,8 +209,24 @@ function BookingsPage() {
     <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
       <p className="text-xs text-muted-foreground">Head ID will be auto-generated</p>
       <div className="grid grid-cols-2 gap-3">
-        <div><Label className="text-xs">Agent ID / Direct</Label><Input value={form.agentId} onChange={(e) => setForm({ ...form, agentId: e.target.value })} placeholder="AV-A001 or Direct" className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-        <div><Label className="text-xs">Supplier ID</Label><Input value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })} placeholder="AV-S001" className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+        <div><Label className="text-xs">Agent</Label>
+          <SearchableSelect
+            value={form.agentId}
+            onChange={(v) => setForm({ ...form, agentId: v })}
+            placeholder="Select Agent or Direct"
+            options={[{ value: "Direct", label: "Direct (No Agent)" }, ...store.agents.map((a) => ({ value: a.id, label: `${a.id} — ${a.name}`, hint: a.phone }))]}
+            className="mt-1"
+          />
+        </div>
+        <div><Label className="text-xs">Supplier</Label>
+          <SearchableSelect
+            value={form.supplierId}
+            onChange={(v) => setForm({ ...form, supplierId: v })}
+            placeholder="Select Supplier"
+            options={store.suppliers.map((s) => ({ value: s.id, label: `${s.id} — ${s.companyName}`, hint: s.serviceType }))}
+            className="mt-1"
+          />
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div><Label className="text-xs">Package Type</Label>
@@ -282,8 +299,24 @@ function BookingsPage() {
   const editFormFields = (
     <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
       <div className="grid grid-cols-2 gap-3">
-        <div><Label className="text-xs">Agent ID</Label><Input value={form.agentId} onChange={(e) => setForm({ ...form, agentId: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-        <div><Label className="text-xs">Supplier ID</Label><Input value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+        <div><Label className="text-xs">Agent</Label>
+          <SearchableSelect
+            value={form.agentId}
+            onChange={(v) => setForm({ ...form, agentId: v })}
+            placeholder="Select Agent"
+            options={[{ value: "Direct", label: "Direct (No Agent)" }, ...store.agents.map((a) => ({ value: a.id, label: `${a.id} — ${a.name}`, hint: a.phone }))]}
+            className="mt-1"
+          />
+        </div>
+        <div><Label className="text-xs">Supplier</Label>
+          <SearchableSelect
+            value={form.supplierId}
+            onChange={(v) => setForm({ ...form, supplierId: v })}
+            placeholder="Select Supplier"
+            options={store.suppliers.map((s) => ({ value: s.id, label: `${s.id} — ${s.companyName}`, hint: s.serviceType }))}
+            className="mt-1"
+          />
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div><Label className="text-xs">Package</Label>
