@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Search as SearchIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import PageHeader from "@/components/PageHeader";
@@ -36,13 +36,18 @@ const typeColors: Record<ResultType, string> = {
 function SearchPage() {
   const store = useStore();
   const [query, setQuery] = useState("");
+  const [debounced, setDebounced] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(query), 120);
+    return () => clearTimeout(t);
+  }, [query]);
   const [typeFilter, setTypeFilter] = useState<ResultType | "all">("all");
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedType, setSelectedType] = useState<ResultType>("client");
   const [selectedData, setSelectedData] = useState<Client | Agent | Supplier | Booking | null>(null);
 
-  const results = searchAll(query, store);
-  const filtered = typeFilter === "all" ? results : results.filter((r) => r.type === typeFilter);
+  const results = useMemo(() => searchAll(debounced, store), [debounced, store.bookings, store.clients, store.agents, store.suppliers]);
+  const filtered = useMemo(() => typeFilter === "all" ? results : results.filter((r) => r.type === typeFilter), [results, typeFilter]);
 
   function handleClick(r: SearchResult) {
     setSelectedType(r.type);
