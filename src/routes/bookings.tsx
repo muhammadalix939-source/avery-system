@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { Plus, Eye, Trash2, Pencil, Download } from "lucide-react";
+import { Plus, Eye, Trash2, Pencil, Download, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,10 +9,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import { SearchableSelect } from "@/components/SearchableSelect";
+import BookingServicesMenu, { VoucherDownloadMenu } from "@/components/BookingServicesMenu";
 import { formatCurrency, getClientName, type Booking } from "@/lib/data";
 import { useStore } from "@/lib/store";
 import { getPKTDate } from "@/lib/date-utils";
-import { generateInvoice } from "@/lib/pdf";
+import { generateInvoice, generatePaymentHistory } from "@/lib/pdf";
 import { useState } from "react";
 
 export const Route = createFileRoute("/bookings")({
@@ -203,6 +204,21 @@ function BookingsPage() {
     const agent = store.agents.find((a) => a.id === b.agentId);
     const supplier = store.suppliers.find((s) => s.id === b.supplierId);
     generateInvoice(b, clients, agent, supplier);
+  }
+
+  function downloadPaymentHistory(b: Booking) {
+    const related = store.entries.filter((e) => e.headId === b.headId && e.type === "client_receive");
+    const totalReceived = related.reduce((s, e) => s + e.amount, 0);
+    generatePaymentHistory(
+      `Booking ${b.headId}`,
+      [["Head ID", b.headId], ["Package", b.packageType], ["Travel Date", b.travelDate], ["Members", String(b.members)]],
+      related,
+      [
+        ["Total Amount", formatCurrency(b.totalAmount), "ink"],
+        ["Received", formatCurrency(totalReceived), "success"],
+        ["Pending", formatCurrency(b.totalAmount - totalReceived), "destructive"],
+      ]
+    );
   }
 
   const step1Fields = (
@@ -409,7 +425,10 @@ function BookingsPage() {
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
                         <Link to="/payments" className="rounded p-1 hover:bg-accent"><Eye className="h-3.5 w-3.5 text-primary" /></Link>
-                        <button onClick={() => downloadInvoice(b)} className="rounded p-1 hover:bg-accent" title="Download Invoice"><Download className="h-3.5 w-3.5 text-success" /></button>
+                        <button onClick={() => downloadInvoice(b)} className="rounded p-1 hover:bg-accent" title="Download Invoice"><FileText className="h-3.5 w-3.5 text-success" /></button>
+                        <button onClick={() => downloadPaymentHistory(b)} className="rounded p-1 hover:bg-accent" title="Payment History PDF"><Download className="h-3.5 w-3.5 text-warning" /></button>
+                        <BookingServicesMenu booking={b} clients={clients} />
+                        <VoucherDownloadMenu booking={b} clients={clients} />
                         <button onClick={() => openEdit(b)} className="rounded p-1 hover:bg-accent"><Pencil className="h-3.5 w-3.5 text-warning" /></button>
                         <button onClick={() => store.deleteBooking(b.id)} className="rounded p-1 hover:bg-accent"><Trash2 className="h-3.5 w-3.5 text-destructive" /></button>
                       </div>
