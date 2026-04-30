@@ -5,7 +5,8 @@ import StatusBadge from "@/components/StatusBadge";
 import { formatCurrency, getClientName } from "@/lib/data";
 import type { Client, Booking, Agent, Supplier } from "@/lib/data";
 import type { LedgerEntry } from "@/lib/store";
-import { generateClientStatement, generateSupplierLedger, generateAgentReport } from "@/lib/pdf";
+import { generateClientStatement, generateSupplierLedger, generateAgentReport, generatePaymentHistory } from "@/lib/pdf";
+import { formatCurrency as fc } from "@/lib/data";
 import { useState } from "react";
 
 interface DetailDialogProps {
@@ -34,6 +35,31 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
     if (type === "client") generateClientStatement(data as Client, entries);
     if (type === "supplier") generateSupplierLedger(data as Supplier, entries);
     if (type === "agent") generateAgentReport(data as Agent, entries);
+  }
+
+  function handleHistory() {
+    if (!data) return;
+    if (type === "client") {
+      const c = data as Client;
+      generatePaymentHistory(`Client ${c.id}`,
+        [["Client ID", c.id], ["Name", getClientName(c)], ["Head ID", c.headId], ["Phone", c.phone]],
+        entries.filter((e) => e.type === "client_receive"),
+        [["Total Due", fc(c.amountDue), "ink"], ["Paid", fc(c.amountPaid), "success"], ["Remaining", fc(c.amountDue - c.amountPaid), "destructive"]]);
+    }
+    if (type === "supplier") {
+      const s = data as Supplier;
+      generatePaymentHistory(`Supplier ${s.id}`,
+        [["Supplier ID", s.id], ["Company", s.companyName], ["Contact", s.contactPerson]],
+        entries.filter((e) => e.type === "supplier_payment"),
+        [["Payable", fc(s.totalPayable), "ink"], ["Paid", fc(s.totalPaid), "success"], ["Remaining", fc(s.totalPayable - s.totalPaid), "destructive"]]);
+    }
+    if (type === "agent") {
+      const a = data as Agent;
+      generatePaymentHistory(`Agent ${a.id}`,
+        [["Agent ID", a.id], ["Name", a.name], ["Phone", a.phone]],
+        entries.filter((e) => e.type === "agent_commission"),
+        [["Commission", fc(a.commission), "ink"], ["Paid", fc(a.paidCommission || 0), "success"], ["Payable", fc((a.commission || 0) - (a.paidCommission || 0)), "destructive"]]);
+    }
   }
 
   // Compute agent stats from bookings
@@ -74,9 +100,14 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
                `Booking: ${(data as Booking).headId}`}
             </DialogTitle>
             {type !== "booking" && subView === "main" && (
-              <Button size="sm" variant="outline" onClick={handleDownload} className="gap-1.5 text-xs">
-                <Download className="h-3.5 w-3.5" /> PDF
-              </Button>
+              <div className="flex gap-1">
+                <Button size="sm" variant="outline" onClick={handleDownload} className="gap-1.5 text-xs">
+                  <Download className="h-3.5 w-3.5" /> Statement
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleHistory} className="gap-1.5 text-xs">
+                  <Download className="h-3.5 w-3.5" /> History
+                </Button>
+              </div>
             )}
           </div>
         </DialogHeader>
