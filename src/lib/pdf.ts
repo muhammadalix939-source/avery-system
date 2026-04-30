@@ -5,193 +5,277 @@ import type { Client, Agent, Supplier, Booking, HotelService, FlightService, Tra
 import type { LedgerEntry } from "./store";
 
 // ============================================================
-//  AVERY INTERNATIONAL — Navy + Gold Professional PDF Template
+//  AVERY INTERNATIONAL — Premium Clean Corporate PDF System
+//  Inspired by airline tickets + embassy paperwork
 // ============================================================
 
-const COMPANY = "AVERY INTERNATIONAL TRAVEL & TOURS";
-const COMPANY_TAGLINE = "Umrah & International Travel Specialists, serving worldwide…";
-const COMPANY_ADDR = "IBM Center, Paper Market, Office 204, Karachi";
-const COMPANY_PHONE = "0330-2793701  |  0310-2326386  |  0322-3241659";
-const COMPANY_EMAIL = "averyinternationaltraveltours@gmail.com";
+const COMPANY = "Avery Group of Travel";
+const COMPANY_FULL = "Avery International Travel & Tours";
+const TAGLINE = "Umrah & International Travel Specialists, serving worldwide…";
+const TAGLINE_ALT = "Umrah · Hajj · Visa · Flights · Domestic & International Tours…";
+const ADDR = "IBM Center, Paper Market, Office 204, Karachi";
+const PHONES = "0330-2793701  |  0310-2326386  |  0322-3241659";
+const EMAIL = "averyinternationaltraveltours@gmail.com";
+const FOOTER_TAGLINE = "Your Journey Begins With Trust";
 
-// Brand palette (navy + gold)
-const NAVY: [number, number, number] = [11, 24, 56];          // deep navy
-const NAVY_SOFT: [number, number, number] = [27, 42, 78];
-const GOLD: [number, number, number] = [191, 149, 63];        // primary gold
-const GOLD_SOFT: [number, number, number] = [217, 188, 122];
-const INK: [number, number, number] = [25, 32, 50];
-const MUTED: [number, number, number] = [110, 116, 130];
-const ROW_ALT: [number, number, number] = [248, 246, 240];
+// Strict palette
+const NAVY: [number, number, number] = [11, 31, 58];          // #0B1F3A
+const GOLD: [number, number, number] = [200, 169, 106];       // #C8A96A
+const INK: [number, number, number] = [34, 34, 34];           // #222222
+const MUTED: [number, number, number] = [102, 102, 102];      // #666666
+const DIVIDER: [number, number, number] = [229, 229, 229];    // #E5E5E5
+const TABLE_HEAD_BG: [number, number, number] = [247, 247, 247]; // #F7F7F7
 const WHITE: [number, number, number] = [255, 255, 255];
 
-function header(doc: jsPDF, title: string) {
-  // Top navy band
-  doc.setFillColor(...NAVY);
-  doc.rect(0, 0, 210, 30, "F");
-  // Gold accent stripe
-  doc.setFillColor(...GOLD);
-  doc.rect(0, 30, 210, 1.5, "F");
+// Page geometry (A4 = 210 x 297 mm). Use mm units (jsPDF default).
+const PAGE_W = 210;
+const MARGIN_L = 14;   // ~ 35px @ ~96dpi feel within A4
+const MARGIN_R = 14;
+const CONTENT_W = PAGE_W - MARGIN_L - MARGIN_R;
 
-  // Logo placeholder — gold "A" monogram in circle
-  doc.setDrawColor(...GOLD);
-  doc.setLineWidth(0.6);
-  doc.circle(20, 15, 8);
-  doc.setTextColor(...GOLD);
+// ----------------------------------------------------------------
+// Header: brand left, document title right, gold divider underneath
+// ----------------------------------------------------------------
+function header(doc: jsPDF, title: string) {
+  // Brand block (left)
+  doc.setTextColor(...NAVY);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
-  doc.text("A", 20, 18.5, { align: "center" });
+  doc.text(COMPANY.toUpperCase(), MARGIN_L, 20);
 
-  // Company name
-  doc.setTextColor(...WHITE);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(15);
-  doc.text(COMPANY, 33, 14);
-
-  // Tagline
   doc.setFont("helvetica", "italic");
-  doc.setFontSize(8);
-  doc.setTextColor(...GOLD_SOFT);
-  doc.text(COMPANY_TAGLINE, 33, 19.5);
-
-  // Right side — title + date
-  doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
-  doc.setTextColor(...WHITE);
-  doc.text(title.toUpperCase(), 196, 14, { align: "right" });
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
-  doc.setTextColor(...GOLD_SOFT);
-  const now = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-  doc.text(now, 196, 19.5, { align: "right" });
+  doc.setTextColor(...MUTED);
+  doc.text(TAGLINE, MARGIN_L, 25.5);
+
+  // Document title (right)
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(20);
+  doc.setTextColor(...NAVY);
+  doc.text(title.toUpperCase(), PAGE_W - MARGIN_R, 21, { align: "right" });
+
+  // Thin gold divider
+  doc.setDrawColor(...GOLD);
+  doc.setLineWidth(0.5);
+  doc.line(MARGIN_L, 31, PAGE_W - MARGIN_R, 31);
 
   doc.setTextColor(...INK);
 }
 
-function sectionTitle(doc: jsPDF, text: string, y: number) {
+// ----------------------------------------------------------------
+// Section title: uppercase, gold underline accent
+// ----------------------------------------------------------------
+function section(doc: jsPDF, text: string, y: number): number {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
-  doc.setTextColor(...GOLD);
-  doc.text(text.toUpperCase(), 14, y);
-  // gold underline
+  doc.setTextColor(...NAVY);
+  doc.text(text.toUpperCase(), MARGIN_L, y);
+
+  // small gold underline (left accent)
   doc.setDrawColor(...GOLD);
-  doc.setLineWidth(0.4);
-  doc.line(14, y + 1.5, 60, y + 1.5);
+  doc.setLineWidth(0.6);
+  const w = Math.min(28, doc.getTextWidth(text.toUpperCase()) * 0.45);
+  doc.line(MARGIN_L, y + 1.6, MARGIN_L + w, y + 1.6);
   doc.setTextColor(...INK);
+  return y + 6;
 }
 
+// ----------------------------------------------------------------
+// Footer: divider line, contacts row, tagline
+// ----------------------------------------------------------------
 function footer(doc: jsPDF) {
   const pages = doc.getNumberOfPages();
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i);
-    // Gold accent line above footer
-    doc.setDrawColor(...GOLD);
-    doc.setLineWidth(0.4);
-    doc.line(14, 275, 196, 275);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.5);
-    doc.setTextColor(...NAVY);
-    doc.text(COMPANY_ADDR, 14, 280);
+    // Divider
+    doc.setDrawColor(...DIVIDER);
+    doc.setLineWidth(0.3);
+    doc.line(MARGIN_L, 274, PAGE_W - MARGIN_R, 274);
+
     doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
     doc.setTextColor(...MUTED);
-    doc.text(COMPANY_PHONE, 14, 284);
-    doc.text(COMPANY_EMAIL, 14, 288);
+    // Left: phones
+    doc.text(PHONES, MARGIN_L, 280);
+    // Right: email
+    doc.text(EMAIL, PAGE_W - MARGIN_R, 280, { align: "right" });
+    // Center: address
+    doc.text(ADDR, PAGE_W / 2, 280, { align: "center" });
+
+    // Tagline center
     doc.setFont("helvetica", "italic");
+    doc.setFontSize(9);
     doc.setTextColor(...GOLD);
-    doc.text("Avery International — Your Journey Begins with Trust…", 196, 284, { align: "right" });
+    doc.text(FOOTER_TAGLINE, PAGE_W / 2, 287, { align: "center" });
+
+    // Page no
     doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
     doc.setTextColor(...MUTED);
-    doc.text(`Page ${i} of ${pages}`, 196, 288, { align: "right" });
+    doc.text(`Page ${i} of ${pages}`, PAGE_W - MARGIN_R, 291, { align: "right" });
   }
 }
 
-// Standard table styling (navy header)
-function brandTable(doc: jsPDF, opts: Parameters<typeof autoTable>[1]) {
+// ----------------------------------------------------------------
+// Clean table (minimal: only bottom borders on header & rows)
+// ----------------------------------------------------------------
+function table(doc: jsPDF, opts: Parameters<typeof autoTable>[1]) {
   autoTable(doc, {
-    theme: "grid",
-    headStyles: { fillColor: NAVY, textColor: WHITE, fontSize: 9, fontStyle: "bold", halign: "left" },
-    bodyStyles: { fontSize: 9, textColor: INK, cellPadding: 3 },
-    alternateRowStyles: { fillColor: ROW_ALT },
-    styles: { lineColor: [220, 215, 200], lineWidth: 0.2 },
-    margin: { left: 14, right: 14 },
+    theme: "plain",
+    headStyles: {
+      fillColor: TABLE_HEAD_BG,
+      textColor: NAVY,
+      fontSize: 10,
+      fontStyle: "bold",
+      halign: "left",
+      cellPadding: { top: 3, bottom: 3, left: 3, right: 3 },
+      lineColor: DIVIDER,
+      lineWidth: { bottom: 0.4, top: 0, left: 0, right: 0 },
+    },
+    bodyStyles: {
+      fontSize: 9.5,
+      textColor: INK,
+      cellPadding: { top: 3, bottom: 3, left: 3, right: 3 },
+      lineColor: DIVIDER,
+      lineWidth: { bottom: 0.2, top: 0, left: 0, right: 0 },
+    },
+    styles: { font: "helvetica" },
+    margin: { left: MARGIN_L, right: MARGIN_R },
     ...opts,
   });
 }
 
-// Meta info strip (Voucher No / Issue Date etc)
-function metaStrip(doc: jsPDF, y: number, items: Array<[string, string]>) {
-  brandTable(doc, {
-    startY: y,
-    body: items.map(([k, v]) => [{ content: k, styles: { fontStyle: "bold", fillColor: ROW_ALT, cellWidth: 40 } }, v]),
-    theme: "grid",
+// Meta info inline strip — label/value pairs in two columns, no heavy borders
+function metaBlock(doc: jsPDF, y: number, items: Array<[string, string]>): number {
+  const colW = CONTENT_W / 2;
+  const rowH = 6;
+  let row = 0;
+  doc.setFontSize(10);
+  items.forEach((it, idx) => {
+    const col = idx % 2;
+    if (col === 0 && idx > 0) row++;
+    const x = MARGIN_L + col * colW;
+    const yy = y + row * rowH;
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...NAVY);
+    doc.text(`${it[0]}:`, x, yy);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...INK);
+    doc.text(it[1] || "—", x + 32, yy);
   });
-  return (doc as any).lastAutoTable.finalY;
+  const totalRows = Math.ceil(items.length / 2);
+  return y + totalRows * rowH + 2;
 }
 
 function save(doc: jsPDF, name: string) {
   doc.save(name.replace(/\s+/g, "_"));
 }
 
-// ============================================================
-//  HOTEL VOUCHER — one hotel per voucher OR all combined
-// ============================================================
-export function generateHotelVoucher(booking: Booking, clients: Client[], hotels: HotelService[], opts?: { transports?: TransportService[]; flights?: FlightService[]; voucherSuffix?: string }) {
-  const doc = new jsPDF();
-  const subtitle = booking.packageType === "Umrah" ? "UMRAH HOTEL VOUCHER" : booking.packageType === "Hajj" ? "HAJJ HOTEL VOUCHER" : "HOTEL VOUCHER";
-  header(doc, subtitle);
+function fmtDate(s?: string): string {
+  if (!s) return "—";
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return s;
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
 
-  let y = 40;
-  sectionTitle(doc, subtitle, y);
-  y += 4;
+function todayLong(): string {
+  return new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
+}
+
+function labelType(t: LedgerEntry["type"]): string {
+  switch (t) {
+    case "client_receive": return "Receive";
+    case "supplier_payment": return "Supplier";
+    case "agent_commission": return "Commission";
+    case "expense": return "Expense";
+    default: return t;
+  }
+}
+
+// ============================================================
+//  HOTEL VOUCHER
+// ============================================================
+export function generateHotelVoucher(
+  booking: Booking,
+  clients: Client[],
+  hotels: HotelService[],
+  opts?: { transports?: TransportService[]; flights?: FlightService[]; voucherSuffix?: string }
+) {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const title = booking.packageType === "Umrah" ? "Umrah Hotel Voucher" : booking.packageType === "Hajj" ? "Hajj Hotel Voucher" : "Hotel Voucher";
+  header(doc, title);
+
+  let y = 42;
 
   const voucherNo = `AV-${booking.headId.replace(/[^0-9]/g, "")}${opts?.voucherSuffix || ""}`;
-  y = metaStrip(doc, y + 2, [
-    ["Voucher No", voucherNo],
-    ["Booking", booking.headId],
-    ["Issue Date", new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" })],
-  ]) + 6;
+  // Sub meta line under header (right aligned)
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(...MUTED);
+  doc.text(`Voucher No: `, MARGIN_L, y);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...INK);
+  doc.text(voucherNo, MARGIN_L + 22, y);
 
-  // Passengers
-  sectionTitle(doc, "Passenger Details", y);
-  y += 4;
-  brandTable(doc, {
-    startY: y + 2,
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(...MUTED);
+  doc.text(`Booking: `, MARGIN_L + 75, y);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...INK);
+  doc.text(booking.headId, MARGIN_L + 92, y);
+
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(...MUTED);
+  doc.text(`Issue Date: `, PAGE_W - MARGIN_R - 45, y);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...INK);
+  doc.text(todayLong(), PAGE_W - MARGIN_R, y, { align: "right" });
+
+  y += 10;
+
+  // Passenger details
+  y = section(doc, "Passenger Details", y);
+  table(doc, {
+    startY: y,
     head: [["S#", "Passenger Name", "Passport No", "Type"]],
     body: clients.map((c, i) => [String(i + 1), getClientName(c), c.passport || "—", "Adult"]),
+    columnStyles: { 0: { cellWidth: 12, halign: "center" }, 2: { cellWidth: 40 }, 3: { cellWidth: 25, halign: "center" } },
   });
-  y = (doc as any).lastAutoTable.finalY + 6;
+  y = (doc as any).lastAutoTable.finalY + 8;
 
-  // Accommodation
   if (hotels.length > 0) {
-    sectionTitle(doc, "Accommodation Details", y);
-    y += 4;
-    brandTable(doc, {
-      startY: y + 2,
+    y = section(doc, "Accommodation Details", y);
+    table(doc, {
+      startY: y,
       head: [["City", "Hotel Name", "Room", "Check-In", "Check-Out", "Nights"]],
       body: hotels.map((h) => [h.city, h.hotelName, h.roomType, fmtDate(h.checkIn), fmtDate(h.checkOut), String(h.nights)]),
+      columnStyles: {
+        3: { halign: "center" }, 4: { halign: "center" }, 5: { halign: "center", cellWidth: 18 },
+      },
     });
-    y = (doc as any).lastAutoTable.finalY + 6;
+    y = (doc as any).lastAutoTable.finalY + 8;
   }
 
-  // Transport (optional)
   if (opts?.transports && opts.transports.length > 0) {
-    sectionTitle(doc, "Transport Details", y);
-    y += 4;
-    brandTable(doc, {
-      startY: y + 2,
+    y = section(doc, "Transport Details", y);
+    table(doc, {
+      startY: y,
       head: [["Service", "Route", "Vehicle", "Date"]],
       body: opts.transports.map((t) => [t.service, t.route, t.vehicle, fmtDate(t.date)]),
+      columnStyles: { 3: { halign: "center", cellWidth: 30 } },
     });
-    y = (doc as any).lastAutoTable.finalY + 6;
+    y = (doc as any).lastAutoTable.finalY + 8;
   }
 
-  // Flights (optional)
   if (opts?.flights && opts.flights.length > 0) {
-    sectionTitle(doc, "Flight Details", y);
-    y += 4;
-    brandTable(doc, {
-      startY: y + 2,
+    y = section(doc, "Flight Details", y);
+    table(doc, {
+      startY: y,
       head: [["Date", "Flight", "From", "To", "Departure", "Arrival"]],
       body: opts.flights.map((f) => [fmtDate(f.date), f.flightNo, f.from, f.to, f.departure, f.arrival]),
+      columnStyles: {
+        0: { halign: "center" }, 4: { halign: "center" }, 5: { halign: "center" },
+      },
     });
   }
 
@@ -200,61 +284,70 @@ export function generateHotelVoucher(booking: Booking, clients: Client[], hotels
   save(doc, `Avery_Hotel_Voucher_${booking.headId}${cityTag}.pdf`);
 }
 
+// ============================================================
+//  FLIGHT VOUCHER
+// ============================================================
 export function generateFlightVoucher(booking: Booking, clients: Client[], flights: FlightService[]) {
-  const doc = new jsPDF();
-  header(doc, "FLIGHT VOUCHER");
-  let y = 40;
-  sectionTitle(doc, "Flight Voucher", y);
-  y += 4;
-  y = metaStrip(doc, y + 2, [
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  header(doc, "Flight Voucher");
+  let y = 42;
+  y = metaBlock(doc, y, [
     ["Voucher No", `AV-FL-${booking.headId.replace(/[^0-9]/g, "")}`],
+    ["Issue Date", todayLong()],
     ["Booking", booking.headId],
-    ["Issue Date", new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" })],
-  ]) + 6;
+    ["Package", booking.packageType],
+  ]) + 4;
 
-  sectionTitle(doc, "Passenger Details", y); y += 4;
-  brandTable(doc, {
-    startY: y + 2,
+  y = section(doc, "Passenger Details", y);
+  table(doc, {
+    startY: y,
     head: [["S#", "Passenger Name", "Passport No"]],
     body: clients.map((c, i) => [String(i + 1), getClientName(c), c.passport || "—"]),
+    columnStyles: { 0: { cellWidth: 12, halign: "center" }, 2: { cellWidth: 40 } },
   });
-  y = (doc as any).lastAutoTable.finalY + 6;
+  y = (doc as any).lastAutoTable.finalY + 8;
 
-  sectionTitle(doc, "Flight Details", y); y += 4;
-  brandTable(doc, {
-    startY: y + 2,
+  y = section(doc, "Flight Details", y);
+  table(doc, {
+    startY: y,
     head: [["Date", "Flight", "From", "To", "Departure", "Arrival"]],
     body: flights.map((f) => [fmtDate(f.date), f.flightNo, f.from, f.to, f.departure, f.arrival]),
+    columnStyles: { 0: { halign: "center" }, 4: { halign: "center" }, 5: { halign: "center" } },
   });
 
   footer(doc);
   save(doc, `Avery_Flight_Voucher_${booking.headId}.pdf`);
 }
 
+// ============================================================
+//  TRANSPORT VOUCHER
+// ============================================================
 export function generateTransportVoucher(booking: Booking, clients: Client[], transports: TransportService[]) {
-  const doc = new jsPDF();
-  header(doc, "TRANSPORT VOUCHER");
-  let y = 40;
-  sectionTitle(doc, "Transport Voucher", y); y += 4;
-  y = metaStrip(doc, y + 2, [
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  header(doc, "Transport Voucher");
+  let y = 42;
+  y = metaBlock(doc, y, [
     ["Voucher No", `AV-TR-${booking.headId.replace(/[^0-9]/g, "")}`],
+    ["Issue Date", todayLong()],
     ["Booking", booking.headId],
-    ["Issue Date", new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" })],
-  ]) + 6;
+    ["Package", booking.packageType],
+  ]) + 4;
 
-  sectionTitle(doc, "Passenger Details", y); y += 4;
-  brandTable(doc, {
-    startY: y + 2,
+  y = section(doc, "Passenger Details", y);
+  table(doc, {
+    startY: y,
     head: [["S#", "Passenger Name", "Passport No"]],
     body: clients.map((c, i) => [String(i + 1), getClientName(c), c.passport || "—"]),
+    columnStyles: { 0: { cellWidth: 12, halign: "center" }, 2: { cellWidth: 40 } },
   });
-  y = (doc as any).lastAutoTable.finalY + 6;
+  y = (doc as any).lastAutoTable.finalY + 8;
 
-  sectionTitle(doc, "Transport Details", y); y += 4;
-  brandTable(doc, {
-    startY: y + 2,
+  y = section(doc, "Transport Details", y);
+  table(doc, {
+    startY: y,
     head: [["Service", "Route", "Vehicle", "Date"]],
     body: transports.map((t) => [t.service, t.route, t.vehicle, fmtDate(t.date)]),
+    columnStyles: { 3: { halign: "center", cellWidth: 30 } },
   });
 
   footer(doc);
@@ -264,97 +357,105 @@ export function generateTransportVoucher(booking: Booking, clients: Client[], tr
 // ============================================================
 //  PAYMENT RECEIPT
 // ============================================================
-export function generatePaymentReceipt(entry: LedgerEntry, opts?: { clientName?: string; method?: string; handledBy?: string; reference?: string }) {
-  const doc = new jsPDF();
-  header(doc, "PAYMENT RECEIPT");
+export function generatePaymentReceipt(
+  entry: LedgerEntry,
+  opts?: { clientName?: string; method?: string; handledBy?: string; reference?: string }
+) {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  header(doc, "Payment Receipt");
 
   let y = 42;
-  sectionTitle(doc, "Payment Receipt", y);
-  y += 6;
+  y = metaBlock(doc, y, [
+    ["Receipt No", entry.id],
+    ["Date", fmtDate(entry.date)],
+    ["Received From", opts?.clientName || entry.referenceName],
+    ["Payment Method", opts?.method || "Cash / Bank Transfer"],
+    ["Reference", opts?.reference || entry.headId || "—"],
+    ["Handled By", opts?.handledBy || "Avery Office"],
+  ]) + 6;
 
-  brandTable(doc, {
-    startY: y,
-    body: [
-      [{ content: "Receipt No", styles: { fontStyle: "bold", fillColor: ROW_ALT } }, entry.id, { content: "Date", styles: { fontStyle: "bold", fillColor: ROW_ALT } }, fmtDate(entry.date)],
-      [{ content: "Received From", styles: { fontStyle: "bold", fillColor: ROW_ALT } }, opts?.clientName || entry.referenceName, { content: "Payment Method", styles: { fontStyle: "bold", fillColor: ROW_ALT } }, opts?.method || "Cash / Bank Transfer"],
-      [{ content: "Reference", styles: { fontStyle: "bold", fillColor: ROW_ALT } }, opts?.reference || entry.headId || "—", { content: "Handled By", styles: { fontStyle: "bold", fillColor: ROW_ALT } }, opts?.handledBy || "Avery Office"],
-    ],
-  });
-  y = (doc as any).lastAutoTable.finalY + 8;
-
-  brandTable(doc, {
+  y = section(doc, "Payment Details", y);
+  table(doc, {
     startY: y,
     head: [["Description", "Amount (PKR)"]],
-    body: [[entry.note || "Payment received", { content: formatCurrency(entry.amount).replace("PKR", "").trim(), styles: { halign: "right" } }]],
+    body: [[
+      entry.note || "Payment received",
+      { content: formatCurrency(entry.amount).replace("PKR", "").trim(), styles: { halign: "right" as const, fontStyle: "bold" as const } },
+    ]],
     columnStyles: { 1: { halign: "right", cellWidth: 50 } },
   });
   y = (doc as any).lastAutoTable.finalY + 4;
 
-  // Total band — gold
-  doc.setFillColor(...GOLD);
-  doc.rect(14, y, 182, 12, "F");
-  doc.setTextColor(...WHITE);
+  // Right-aligned grand total
+  const boxX = PAGE_W - MARGIN_R - 80;
+  doc.setDrawColor(...GOLD);
+  doc.setLineWidth(0.6);
+  doc.line(boxX, y, PAGE_W - MARGIN_R, y);
+  y += 6;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.text("TOTAL RECEIVED", 18, y + 8);
-  doc.text(formatCurrency(entry.amount), 192, y + 8, { align: "right" });
+  doc.setFontSize(12);
+  doc.setTextColor(...NAVY);
+  doc.text("Total Received", boxX, y);
+  doc.text(formatCurrency(entry.amount), PAGE_W - MARGIN_R, y, { align: "right" });
+  y += 18;
 
-  y += 30;
-  doc.setDrawColor(...MUTED);
-  doc.setLineWidth(0.2);
-  doc.line(20, y, 80, y);
-  doc.line(130, y, 190, y);
+  doc.setDrawColor(...DIVIDER);
+  doc.setLineWidth(0.3);
+  doc.line(MARGIN_L + 6, y, MARGIN_L + 60, y);
+  doc.line(PAGE_W - MARGIN_R - 60, y, PAGE_W - MARGIN_R - 6, y);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(...INK);
-  doc.text("Authorized Signature", 30, y + 5);
-  doc.text("Company Stamp", 145, y + 5);
-
+  doc.setFontSize(8.5);
   doc.setTextColor(...MUTED);
-  doc.setFontSize(7);
-  doc.text("This is a computer-generated receipt and does not require a physical signature.", 14, y + 18);
+  doc.text("Authorized Signature", MARGIN_L + 6, y + 5);
+  doc.text("Company Stamp", PAGE_W - MARGIN_R - 60, y + 5);
+
+  doc.setFontSize(8);
+  doc.text("This is a computer-generated receipt and does not require a physical signature.", MARGIN_L, y + 16);
 
   footer(doc);
   save(doc, `Avery_Payment_Receipt_${entry.id}.pdf`);
 }
 
 // ============================================================
-//  PAYMENT HISTORY (multi-row, full ledger view)
+//  PAYMENT HISTORY
 // ============================================================
-export function generatePaymentHistory(title: string, ownerInfo: Array<[string, string]>, entries: LedgerEntry[], summary: Array<[string, string, string?]>) {
-  const doc = new jsPDF();
-  header(doc, "PAYMENT HISTORY");
+export function generatePaymentHistory(
+  title: string,
+  ownerInfo: Array<[string, string]>,
+  entries: LedgerEntry[],
+  summary: Array<[string, string, string?]>
+) {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  header(doc, "Payment History");
 
-  let y = 40;
-  sectionTitle(doc, title, y);
-  y += 4;
-  y = metaStrip(doc, y + 2, ownerInfo) + 6;
+  let y = 42;
+  y = metaBlock(doc, y, ownerInfo) + 4;
 
-  // Summary cards row (gold/navy bands)
-  const cardW = 60, cardH = 16, gap = 1;
-  summary.slice(0, 3).forEach(([label, value, color], i) => {
-    const x = 14 + i * (cardW + gap);
-    doc.setFillColor(...NAVY);
-    doc.rect(x, y, cardW, 5, "F");
-    doc.setFillColor(...ROW_ALT);
-    doc.rect(x, y + 5, cardW, cardH - 5, "F");
-    doc.setTextColor(...WHITE);
+  y = section(doc, "Summary", y);
+  // Three clean summary cells
+  const cellW = CONTENT_W / 3;
+  summary.slice(0, 3).forEach(([label, value], i) => {
+    if (!label) return;
+    const x = MARGIN_L + i * cellW;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(...MUTED);
+    doc.text(label.toUpperCase(), x, y);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.5);
-    doc.text(label.toUpperCase(), x + 3, y + 3.5);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.setTextColor(color === "success" ? 0 : color === "destructive" ? 180 : NAVY[0], color === "success" ? 130 : color === "destructive" ? 30 : NAVY[1], color === "success" ? 60 : color === "destructive" ? 30 : NAVY[2]);
-    doc.text(value, x + 3, y + 13);
+    doc.setFontSize(13);
+    doc.setTextColor(...NAVY);
+    doc.text(value, x, y + 6);
   });
-  y += cardH + 8;
+  // gold underline beneath summary row
+  doc.setDrawColor(...DIVIDER);
+  doc.setLineWidth(0.3);
+  doc.line(MARGIN_L, y + 11, PAGE_W - MARGIN_R, y + 11);
+  y += 18;
 
-  doc.setTextColor(...INK);
-  sectionTitle(doc, "Transaction History", y); y += 4;
-
+  y = section(doc, "Transaction History", y);
   let running = 0;
-  brandTable(doc, {
-    startY: y + 2,
+  table(doc, {
+    startY: y,
     head: [["Date", "Receipt", "Description", "Type", "Amount", "Running"]],
     body: entries.map((e) => {
       running += e.amount;
@@ -367,6 +468,7 @@ export function generatePaymentHistory(title: string, ownerInfo: Array<[string, 
         { content: formatCurrency(running), styles: { halign: "right" as const, textColor: NAVY } },
       ];
     }),
+    columnStyles: { 0: { halign: "center", cellWidth: 24 }, 4: { halign: "right" }, 5: { halign: "right" } },
   });
 
   footer(doc);
@@ -374,99 +476,166 @@ export function generatePaymentHistory(title: string, ownerInfo: Array<[string, 
 }
 
 // ============================================================
-//  INVOICE
+//  OFFICIAL INVOICE
 // ============================================================
 export function generateInvoice(booking: Booking, clients: Client[], agent?: Agent, supplier?: Supplier) {
-  const doc = new jsPDF();
-  header(doc, "INVOICE");
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  header(doc, "Official Invoice");
 
-  let y = 40;
-  sectionTitle(doc, "Tax Invoice", y);
-  y += 4;
-  y = metaStrip(doc, y + 2, [
-    ["Invoice No", `INV-${booking.headId.replace("AV-HD-", "")}`],
+  let y = 42;
+  const invoiceNo = `AV-IN${booking.headId.replace(/[^0-9]/g, "")}`;
+  const primary = clients[0];
+
+  // Top meta block — invoice info
+  y = metaBlock(doc, y, [
+    ["Invoice No", invoiceNo],
+    ["Issue Date", todayLong()],
     ["Booking", booking.headId],
     ["Package", booking.packageType],
     ["Travel Date", fmtDate(booking.travelDate)],
     ["Agent", agent ? `${agent.name} (${agent.id})` : "Direct"],
-    ["Supplier", supplier ? `${supplier.companyName} (${supplier.id})` : "—"],
-  ]) + 6;
+  ]) + 4;
 
-  sectionTitle(doc, "Client Breakdown", y); y += 4;
-  brandTable(doc, {
-    startY: y + 2,
-    head: [["#", "Client ID", "Name", "Passport", "Due", "Paid", "Status"]],
+  // Bill To block
+  y = section(doc, "Bill To", y);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(...INK);
+  doc.text(primary ? getClientName(primary) : "—", MARGIN_L, y);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9.5);
+  doc.setTextColor(...MUTED);
+  if (primary?.phone) doc.text(`Contact: ${primary.phone}`, MARGIN_L, y + 5);
+  if (primary?.email) doc.text(`Email: ${primary.email}`, MARGIN_L, y + 10);
+  if (primary?.id) doc.text(`Client ID: ${primary.id}`, PAGE_W - MARGIN_R, y, { align: "right" });
+  y += 16;
+
+  // Services table
+  y = section(doc, "Service Details", y);
+  table(doc, {
+    startY: y,
+    head: [["S#", "Description", "Passport", "Type", "Amount (PKR)"]],
     body: clients.map((c, i) => [
-      String(i + 1), c.id, getClientName(c), c.passport || "—",
-      { content: formatCurrency(c.amountDue), styles: { halign: "right" as const } },
-      { content: formatCurrency(c.amountPaid), styles: { halign: "right" as const, textColor: [0, 130, 60] as [number, number, number] } },
-      c.paymentStatus,
+      String(i + 1),
+      `${booking.packageType} Package${booking.travelDate ? ` — ${fmtDate(booking.travelDate)}` : ""}`,
+      c.passport || "—",
+      "Adult",
+      { content: formatCurrency(c.amountDue).replace("PKR", "").trim(), styles: { halign: "right" as const } },
     ]),
+    columnStyles: {
+      0: { cellWidth: 12, halign: "center" },
+      2: { cellWidth: 30 },
+      3: { cellWidth: 20, halign: "center" },
+      4: { cellWidth: 35, halign: "right" },
+    },
   });
   y = (doc as any).lastAutoTable.finalY + 6;
 
-  // Totals card
-  const balance = booking.totalAmount - booking.amountReceived;
-  doc.setFillColor(...ROW_ALT);
-  doc.rect(110, y, 86, 30, "F");
-  doc.setDrawColor(...GOLD);
-  doc.setLineWidth(0.4);
-  doc.line(110, y, 196, y);
+  // Pricing summary — right aligned, no heavy borders
+  const sumX = PAGE_W - MARGIN_R - 80;
+  const labelX = sumX;
+  const valueX = PAGE_W - MARGIN_R;
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(...INK);
-  doc.text("Total Amount", 114, y + 7);
-  doc.text(formatCurrency(booking.totalAmount), 192, y + 7, { align: "right" });
-  doc.text("Received", 114, y + 14);
-  doc.setTextColor(0, 130, 60);
-  doc.text(formatCurrency(booking.amountReceived), 192, y + 14, { align: "right" });
-
-  // Balance gold band
-  doc.setFillColor(...GOLD);
-  doc.rect(110, y + 18, 86, 12, "F");
-  doc.setTextColor(...WHITE);
-  doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
-  doc.text("BALANCE DUE", 114, y + 26);
-  doc.text(formatCurrency(balance), 192, y + 26, { align: "right" });
+  doc.setTextColor(...INK);
+
+  doc.text("Subtotal", labelX, y);
+  doc.text(formatCurrency(booking.totalAmount), valueX, y, { align: "right" });
+  y += 6;
+  doc.text("Tax (0%)", labelX, y);
+  doc.text("PKR 0", valueX, y, { align: "right" });
+  y += 4;
+
+  // gold divider before grand total
+  doc.setDrawColor(...GOLD);
+  doc.setLineWidth(0.6);
+  doc.line(sumX, y, PAGE_W - MARGIN_R, y);
+  y += 6;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(...NAVY);
+  doc.text("Grand Total", labelX, y);
+  doc.text(formatCurrency(booking.totalAmount), valueX, y, { align: "right" });
+  y += 8;
+
+  // Received / Balance summary (compact)
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(...MUTED);
+  doc.text("Received", labelX, y);
+  doc.setTextColor(...INK);
+  doc.text(formatCurrency(booking.amountReceived), valueX, y, { align: "right" });
+  y += 5;
+  doc.setTextColor(...MUTED);
+  doc.text("Balance Due", labelX, y);
+  doc.setTextColor(...NAVY);
+  doc.setFont("helvetica", "bold");
+  doc.text(formatCurrency(booking.totalAmount - booking.amountReceived), valueX, y, { align: "right" });
+  y += 14;
+
+  // Bank details block
+  if (y > 230) { doc.addPage(); y = 42; }
+  y = section(doc, "Bank Details", y);
+  const bank: Array<[string, string]> = [
+    ["Bank Name", "Meezan Bank Limited"],
+    ["Account Title", "Muhammad Shahid Qadri"],
+    ["IBAN", "PK02 MEZN 0001 6801 1259 1008"],
+    ["Account Number", "0168 0112591008"],
+  ];
+  doc.setFontSize(10);
+  bank.forEach((b, i) => {
+    const yy = y + i * 6;
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...NAVY);
+    doc.text(`${b[0]}:`, MARGIN_L, yy);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...INK);
+    doc.text(b[1], MARGIN_L + 35, yy);
+  });
 
   footer(doc);
-  save(doc, `Avery_Invoice_${booking.headId}.pdf`);
+  save(doc, `Avery_Official_Invoice_${invoiceNo}.pdf`);
 }
 
 // ============================================================
 //  CLIENT STATEMENT
 // ============================================================
 export function generateClientStatement(client: Client, entries: LedgerEntry[]) {
-  const doc = new jsPDF();
-  header(doc, "CLIENT STATEMENT");
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  header(doc, "Client Statement");
 
-  let y = 40;
-  sectionTitle(doc, "Client Statement", y); y += 4;
-  y = metaStrip(doc, y + 2, [
+  let y = 42;
+  y = metaBlock(doc, y, [
     ["Client ID", client.id],
+    ["Issue Date", todayLong()],
     ["Name", getClientName(client)],
     ["Head ID", client.headId],
     ["Passport", client.passport || "—"],
     ["Phone", client.phone],
     ["Package", client.packageType],
-  ]) + 6;
+    ["Status", client.paymentStatus],
+  ]) + 4;
 
-  // Summary tri-card
   const remaining = client.amountDue - client.amountPaid;
-  drawSummaryRow(doc, y, [
-    ["Total Due", formatCurrency(client.amountDue), "ink"],
-    ["Paid", formatCurrency(client.amountPaid), "success"],
-    ["Remaining", formatCurrency(remaining), "destructive"],
+  y = section(doc, "Account Summary", y);
+  drawSummary(doc, y, [
+    ["Total Due", formatCurrency(client.amountDue)],
+    ["Paid", formatCurrency(client.amountPaid)],
+    ["Remaining", formatCurrency(remaining)],
   ]);
-  y += 22;
+  y += 18;
 
   if (entries.length > 0) {
-    sectionTitle(doc, "Transaction History", y); y += 4;
-    brandTable(doc, {
-      startY: y + 2,
+    y = section(doc, "Transaction History", y);
+    table(doc, {
+      startY: y,
       head: [["Date", "Receipt", "Description", "Amount"]],
-      body: entries.map((e) => [fmtDate(e.date), e.id, e.note || e.referenceName, { content: formatCurrency(e.amount), styles: { halign: "right" as const, textColor: [0, 130, 60] as [number, number, number] } }]),
+      body: entries.map((e) => [
+        fmtDate(e.date), e.id, e.note || e.referenceName,
+        { content: formatCurrency(e.amount), styles: { halign: "right" as const } },
+      ]),
+      columnStyles: { 0: { halign: "center", cellWidth: 24 }, 3: { halign: "right" } },
     });
   }
 
@@ -478,34 +647,39 @@ export function generateClientStatement(client: Client, entries: LedgerEntry[]) 
 //  SUPPLIER LEDGER
 // ============================================================
 export function generateSupplierLedger(supplier: Supplier, entries: LedgerEntry[]) {
-  const doc = new jsPDF();
-  header(doc, "SUPPLIER LEDGER");
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  header(doc, "Supplier Ledger");
 
-  let y = 40;
-  sectionTitle(doc, "Supplier Ledger", y); y += 4;
-  y = metaStrip(doc, y + 2, [
+  let y = 42;
+  y = metaBlock(doc, y, [
     ["Supplier ID", supplier.id],
+    ["Issue Date", todayLong()],
     ["Company", supplier.companyName],
     ["Contact", supplier.contactPerson],
     ["Service", supplier.serviceType],
     ["Phone", supplier.phone],
     ["Email", supplier.email],
-  ]) + 6;
+  ]) + 4;
 
   const remaining = supplier.totalPayable - supplier.totalPaid;
-  drawSummaryRow(doc, y, [
-    ["Total Payable", formatCurrency(supplier.totalPayable), "ink"],
-    ["Total Paid", formatCurrency(supplier.totalPaid), "success"],
-    ["Remaining", formatCurrency(remaining), "destructive"],
+  y = section(doc, "Account Summary", y);
+  drawSummary(doc, y, [
+    ["Total Payable", formatCurrency(supplier.totalPayable)],
+    ["Total Paid", formatCurrency(supplier.totalPaid)],
+    ["Remaining", formatCurrency(remaining)],
   ]);
-  y += 22;
+  y += 18;
 
   if (entries.length > 0) {
-    sectionTitle(doc, "Payment History", y); y += 4;
-    brandTable(doc, {
-      startY: y + 2,
+    y = section(doc, "Payment History", y);
+    table(doc, {
+      startY: y,
       head: [["Date", "Receipt", "Reference", "Note", "Amount"]],
-      body: entries.map((e) => [fmtDate(e.date), e.id, e.headId || "—", e.note, { content: formatCurrency(e.amount), styles: { halign: "right" as const } }]),
+      body: entries.map((e) => [
+        fmtDate(e.date), e.id, e.headId || "—", e.note,
+        { content: formatCurrency(e.amount), styles: { halign: "right" as const } },
+      ]),
+      columnStyles: { 0: { halign: "center", cellWidth: 24 }, 4: { halign: "right" } },
     });
   }
 
@@ -517,39 +691,44 @@ export function generateSupplierLedger(supplier: Supplier, entries: LedgerEntry[
 //  AGENT REPORT
 // ============================================================
 export function generateAgentReport(agent: Agent, entries: LedgerEntry[]) {
-  const doc = new jsPDF();
-  header(doc, "AGENT REPORT");
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  header(doc, "Agent Report");
 
-  let y = 40;
-  sectionTitle(doc, "Agent Performance", y); y += 4;
-  y = metaStrip(doc, y + 2, [
+  let y = 42;
+  y = metaBlock(doc, y, [
     ["Agent ID", agent.id],
+    ["Issue Date", todayLong()],
     ["Name", agent.name],
     ["Phone", agent.phone],
     ["Email", agent.email],
     ["Status", agent.status],
-  ]) + 6;
+  ]) + 4;
 
   const payable = (agent.commission || 0) - (agent.paidCommission || 0);
-  drawSummaryRow(doc, y, [
-    ["Total Sales", formatCurrency(agent.totalSales), "ink"],
-    ["Commission", formatCurrency(agent.commission), "ink"],
-    ["Paid", formatCurrency(agent.paidCommission || 0), "success"],
+  y = section(doc, "Performance Summary", y);
+  drawSummary(doc, y, [
+    ["Total Sales", formatCurrency(agent.totalSales)],
+    ["Commission", formatCurrency(agent.commission)],
+    ["Paid", formatCurrency(agent.paidCommission || 0)],
   ]);
-  y += 22;
-  drawSummaryRow(doc, y, [
-    ["Payable", formatCurrency(payable), "destructive"],
-    ["Total Clients", String(agent.totalClients), "ink"],
-    ["", "", "ink"],
+  y += 18;
+  drawSummary(doc, y, [
+    ["Payable", formatCurrency(payable)],
+    ["Total Clients", String(agent.totalClients)],
+    ["", ""],
   ]);
-  y += 22;
+  y += 18;
 
   if (entries.length > 0) {
-    sectionTitle(doc, "Commission History", y); y += 4;
-    brandTable(doc, {
-      startY: y + 2,
+    y = section(doc, "Commission History", y);
+    table(doc, {
+      startY: y,
       head: [["Date", "Receipt", "Note", "Amount"]],
-      body: entries.map((e) => [fmtDate(e.date), e.id, e.note, { content: formatCurrency(e.amount), styles: { halign: "right" as const, textColor: [0, 130, 60] as [number, number, number] } }]),
+      body: entries.map((e) => [
+        fmtDate(e.date), e.id, e.note,
+        { content: formatCurrency(e.amount), styles: { halign: "right" as const } },
+      ]),
+      columnStyles: { 0: { halign: "center", cellWidth: 24 }, 3: { halign: "right" } },
     });
   }
 
@@ -557,45 +736,25 @@ export function generateAgentReport(agent: Agent, entries: LedgerEntry[]) {
   save(doc, `Avery_Agent_Report_${agent.id}.pdf`);
 }
 
-// ============================================================
-//  Shared helpers
-// ============================================================
-function drawSummaryRow(doc: jsPDF, y: number, cards: Array<[string, string, "ink" | "success" | "destructive"]>) {
-  const cardW = 60, gap = 1;
-  cards.forEach(([label, value, tone], i) => {
+// ----------------------------------------------------------------
+// Clean three-cell summary row (no boxes, just typography + divider)
+// ----------------------------------------------------------------
+function drawSummary(doc: jsPDF, y: number, cells: Array<[string, string]>) {
+  const cellW = CONTENT_W / 3;
+  cells.forEach(([label, value], i) => {
     if (!label) return;
-    const x = 14 + i * (cardW + gap);
-    doc.setFillColor(...NAVY);
-    doc.rect(x, y, cardW, 5, "F");
-    doc.setFillColor(...ROW_ALT);
-    doc.rect(x, y + 5, cardW, 17, "F");
-    doc.setTextColor(...WHITE);
+    const x = MARGIN_L + i * cellW;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(...MUTED);
+    doc.text(label.toUpperCase(), x, y);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.5);
-    doc.text(label.toUpperCase(), x + 3, y + 3.5);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    if (tone === "success") doc.setTextColor(0, 130, 60);
-    else if (tone === "destructive") doc.setTextColor(180, 30, 30);
-    else doc.setTextColor(...NAVY);
-    doc.text(value, x + 3, y + 14);
+    doc.setFontSize(13);
+    doc.setTextColor(...NAVY);
+    doc.text(value, x, y + 6);
   });
+  doc.setDrawColor(...DIVIDER);
+  doc.setLineWidth(0.3);
+  doc.line(MARGIN_L, y + 11, PAGE_W - MARGIN_R, y + 11);
   doc.setTextColor(...INK);
-}
-
-function fmtDate(s?: string): string {
-  if (!s) return "—";
-  const d = new Date(s);
-  if (isNaN(d.getTime())) return s;
-  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-}
-
-function labelType(t: LedgerEntry["type"]): string {
-  switch (t) {
-    case "client_receive": return "Receive";
-    case "supplier_payment": return "Supplier";
-    case "agent_commission": return "Commission";
-    case "expense": return "Expense";
-    default: return t;
-  }
 }
