@@ -44,6 +44,37 @@ export interface Booking {
   members: number;
   destination?: string;
   driveLink?: string;
+  hotels?: HotelService[];
+  flights?: FlightService[];
+  transports?: TransportService[];
+}
+
+export interface HotelService {
+  id: string;
+  city: string;        // e.g. Makkah / Madinah
+  hotelName: string;
+  roomType: string;    // e.g. 1 Quad, 2 Triple
+  checkIn: string;     // YYYY-MM-DD
+  checkOut: string;    // YYYY-MM-DD
+  nights: number;
+}
+
+export interface FlightService {
+  id: string;
+  date: string;
+  flightNo: string;
+  from: string;
+  to: string;
+  departure: string;   // HH:mm
+  arrival: string;     // HH:mm
+}
+
+export interface TransportService {
+  id: string;
+  service: string;     // e.g. Airport Transfer
+  route: string;       // e.g. JED Airport - Makkah Hotel
+  vehicle: string;     // e.g. Private Car
+  date: string;
 }
 
 export interface Agent {

@@ -1,6 +1,6 @@
 // Centralized state management for the CRM
 import { useState, useCallback, useEffect } from "react";
-import type { Client, Booking, Agent, Supplier } from "./data";
+import type { Client, Booking, Agent, Supplier, HotelService, FlightService, TransportService } from "./data";
 import { mockClients, mockBookings, mockAgents, mockSuppliers, mockMonthlyData as defaultMonthlyData, generateId } from "./data";
 import { getPKTDate } from "./date-utils";
 
@@ -223,6 +223,38 @@ export function useStore() {
     generateHeadId: () => {
       const id = `AV-HD-${String(nextHeadNum++).padStart(3, "0")}`;
       return id;
+    },
+
+    // Booking services (hotels / flights / transports)
+    addHotel: (bookingId: string, data: Omit<HotelService, "id">) => {
+      const id = `H${Date.now().toString(36)}`;
+      bookings = bookings.map((b) => b.id === bookingId ? { ...b, hotels: [...(b.hotels || []), { ...data, id }] } : b);
+      notify();
+      return id;
+    },
+    deleteHotel: (bookingId: string, hotelId: string) => {
+      bookings = bookings.map((b) => b.id === bookingId ? { ...b, hotels: (b.hotels || []).filter((h) => h.id !== hotelId) } : b);
+      notify();
+    },
+    addFlight: (bookingId: string, data: Omit<FlightService, "id">) => {
+      const id = `F${Date.now().toString(36)}`;
+      bookings = bookings.map((b) => b.id === bookingId ? { ...b, flights: [...(b.flights || []), { ...data, id }] } : b);
+      notify();
+      return id;
+    },
+    deleteFlight: (bookingId: string, flightId: string) => {
+      bookings = bookings.map((b) => b.id === bookingId ? { ...b, flights: (b.flights || []).filter((f) => f.id !== flightId) } : b);
+      notify();
+    },
+    addTransport: (bookingId: string, data: Omit<TransportService, "id">) => {
+      const id = `T${Date.now().toString(36)}`;
+      bookings = bookings.map((b) => b.id === bookingId ? { ...b, transports: [...(b.transports || []), { ...data, id }] } : b);
+      notify();
+      return id;
+    },
+    deleteTransport: (bookingId: string, transportId: string) => {
+      bookings = bookings.map((b) => b.id === bookingId ? { ...b, transports: (b.transports || []).filter((t) => t.id !== transportId) } : b);
+      notify();
     },
   };
 }
