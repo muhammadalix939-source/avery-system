@@ -1,7 +1,7 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import {
-  LayoutDashboard, BookOpen, Users, UserCog, Truck, CreditCard, Search, FileText, ChevronLeft, ChevronRight,
+  LayoutDashboard, BookOpen, Users, UserCog, Truck, CreditCard, Search, FileText, Settings, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -14,6 +14,7 @@ const navItems = [
   { to: "/payments", icon: CreditCard, label: "Payments" },
   { to: "/entries", icon: FileText, label: "Entries" },
   { to: "/search", icon: Search, label: "Search" },
+  { to: "/settings", icon: Settings, label: "Settings" },
 ] as const;
 
 export default function AppSidebar() {
