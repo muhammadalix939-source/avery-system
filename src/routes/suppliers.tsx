@@ -9,10 +9,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import DetailDialog from "@/components/DetailDialog";
-import { formatCurrency, type Supplier } from "@/lib/data";
+import { formatCurrency, SERVICE_TYPES, type Supplier } from "@/lib/data";
 import { useStore } from "@/lib/store";
 import { generateSupplierLedger } from "@/lib/pdf";
 import { useState } from "react";
+import StatementDialog from "@/components/StatementDialog";
 
 export const Route = createFileRoute("/suppliers")({
   component: SuppliersPage,
@@ -25,29 +26,57 @@ function SuppliersPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selected, setSelected] = useState<Supplier | null>(null);
-  const [form, setForm] = useState({ companyName: "", contactPerson: "", phone: "", email: "", serviceType: "Hotel" as Supplier["serviceType"], totalPayable: "", totalPaid: "" });
+  const [stmtOpen, setStmtOpen] = useState(false);
+  const [stmtSupplier, setStmtSupplier] = useState<Supplier | null>(null);
+  const [form, setForm] = useState({
+    companyName: "", contactPerson: "", phone: "", email: "",
+    serviceType: "Hotel" as Supplier["serviceType"],
+    totalPayable: "", totalPaid: "",
+    openingPayable: "", openingPaid: "",
+  });
 
   function handleAdd() {
-    store.addSupplier({ companyName: form.companyName, contactPerson: form.contactPerson, phone: form.phone, email: form.email, serviceType: form.serviceType, totalPayable: Number(form.totalPayable) || 0, totalPaid: Number(form.totalPaid) || 0 });
-    setForm({ companyName: "", contactPerson: "", phone: "", email: "", serviceType: "Hotel", totalPayable: "", totalPaid: "" });
+    store.addSupplier({
+      companyName: form.companyName, contactPerson: form.contactPerson, phone: form.phone, email: form.email,
+      serviceType: form.serviceType,
+      totalPayable: Number(form.totalPayable) || 0,
+      totalPaid: Number(form.totalPaid) || 0,
+      openingPayable: Number(form.openingPayable) || 0,
+      openingPaid: Number(form.openingPaid) || 0,
+    });
+    setForm({ companyName: "", contactPerson: "", phone: "", email: "", serviceType: "Hotel", totalPayable: "", totalPaid: "", openingPayable: "", openingPaid: "" });
     setAddOpen(false);
   }
 
   function handleEdit() {
     if (!selected) return;
-    store.updateSupplier(selected.id, { companyName: form.companyName, contactPerson: form.contactPerson, phone: form.phone, email: form.email, serviceType: form.serviceType, totalPayable: Number(form.totalPayable) || 0, totalPaid: Number(form.totalPaid) || 0 });
+    store.updateSupplier(selected.id, {
+      companyName: form.companyName, contactPerson: form.contactPerson, phone: form.phone, email: form.email,
+      serviceType: form.serviceType,
+      totalPayable: Number(form.totalPayable) || 0,
+      totalPaid: Number(form.totalPaid) || 0,
+      openingPayable: Number(form.openingPayable) || 0,
+      openingPaid: Number(form.openingPaid) || 0,
+    });
     setEditOpen(false);
   }
 
   function openEdit(s: Supplier) {
     setSelected(s);
-    setForm({ companyName: s.companyName, contactPerson: s.contactPerson, phone: s.phone, email: s.email, serviceType: s.serviceType, totalPayable: String(s.totalPayable), totalPaid: String(s.totalPaid) });
+    setForm({
+      companyName: s.companyName, contactPerson: s.contactPerson, phone: s.phone, email: s.email,
+      serviceType: s.serviceType,
+      totalPayable: String(s.totalPayable), totalPaid: String(s.totalPaid),
+      openingPayable: String(s.openingPayable || 0), openingPaid: String(s.openingPaid || 0),
+    });
     setEditOpen(true);
   }
 
-  function downloadLedger(s: Supplier) {
+  function openStmt(s: Supplier) { setStmtSupplier(s); setStmtOpen(true); }
+  function downloadLedger(s: Supplier, range: { fromDate?: string; toDate?: string }) {
     const entries = store.entries.filter((e) => e.referenceId === s.id);
-    generateSupplierLedger(s, entries);
+    const supplierBookings = store.bookings.filter((b) => b.supplierId === s.id);
+    generateSupplierLedger(s, entries, { ...range, bookings: supplierBookings });
   }
 
   const relatedEntries = selected ? store.entries.filter((e) => e.referenceId === selected.id) : [];
@@ -63,12 +92,24 @@ function SuppliersPage() {
       <div><Label className="text-xs">Service Type</Label>
         <Select value={form.serviceType} onValueChange={(v) => setForm({ ...form, serviceType: v as Supplier["serviceType"] })}>
           <SelectTrigger className="bg-accent/20 border-border mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
-          <SelectContent><SelectItem value="Hotel">Hotel</SelectItem><SelectItem value="Airline">Airline</SelectItem><SelectItem value="Transport">Transport</SelectItem><SelectItem value="Visa">Visa</SelectItem></SelectContent>
+          <SelectContent>
+            {SERVICE_TYPES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
         </Select>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div><Label className="text-xs">Total Payable (PKR)</Label><Input type="number" value={form.totalPayable} onChange={(e) => setForm({ ...form, totalPayable: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
         <div><Label className="text-xs">Total Paid (PKR)</Label><Input type="number" value={form.totalPaid} onChange={(e) => setForm({ ...form, totalPaid: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+      </div>
+      <div className="grid grid-cols-2 gap-3 border-t border-border/30 pt-3">
+        <div>
+          <Label className="text-xs text-warning">Opening Payable (carry-forward)</Label>
+          <Input type="number" value={form.openingPayable} onChange={(e) => setForm({ ...form, openingPayable: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" />
+        </div>
+        <div>
+          <Label className="text-xs text-warning">Opening Paid</Label>
+          <Input type="number" value={form.openingPaid} onChange={(e) => setForm({ ...form, openingPaid: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" />
+        </div>
       </div>
     </div>
   );
@@ -121,7 +162,7 @@ function SuppliersPage() {
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
                         <button onClick={() => { setSelected(s); setDetailOpen(true); }} className="rounded p-1 hover:bg-accent"><Eye className="h-3.5 w-3.5 text-primary" /></button>
-                        <button onClick={() => downloadLedger(s)} className="rounded p-1 hover:bg-accent" title="Download Ledger"><Download className="h-3.5 w-3.5 text-success" /></button>
+                        <button onClick={() => openStmt(s)} className="rounded p-1 hover:bg-accent" title="Download Statement"><Download className="h-3.5 w-3.5 text-success" /></button>
                         <button onClick={() => openEdit(s)} className="rounded p-1 hover:bg-accent"><Pencil className="h-3.5 w-3.5 text-warning" /></button>
                         <button onClick={() => store.deleteSupplier(s.id)} className="rounded p-1 hover:bg-accent"><Trash2 className="h-3.5 w-3.5 text-destructive" /></button>
                       </div>
@@ -157,6 +198,13 @@ function SuppliersPage() {
       </Dialog>
 
       <DetailDialog open={detailOpen} onOpenChange={setDetailOpen} type="supplier" data={selected} entries={relatedEntries} allClients={store.clients} allBookings={store.bookings} />
+
+      <StatementDialog
+        open={stmtOpen} onOpenChange={setStmtOpen}
+        title={`Supplier Statement — ${stmtSupplier?.companyName || ""}`}
+        subtitle="Choose a date range or all-time. Includes hotel/flight/visa/transport sections."
+        onDownload={(range) => stmtSupplier && downloadLedger(stmtSupplier, range)}
+      />
     </div>
   );
 }
