@@ -13,6 +13,7 @@ import { formatCurrency, type Agent } from "@/lib/data";
 import { useStore } from "@/lib/store";
 import { generateAgentReport } from "@/lib/pdf";
 import { useState } from "react";
+import StatementDialog from "@/components/StatementDialog";
 
 export const Route = createFileRoute("/agents")({
   component: AgentsPage,
@@ -25,29 +26,57 @@ function AgentsPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selected, setSelected] = useState<Agent | null>(null);
-  const [form, setForm] = useState({ name: "", phone: "", email: "", status: "Active" as Agent["status"] });
+  const [stmtOpen, setStmtOpen] = useState(false);
+  const [stmtAgent, setStmtAgent] = useState<Agent | null>(null);
+  const [form, setForm] = useState({
+    name: "", phone: "", email: "",
+    status: "Active" as Agent["status"],
+    openingSales: "", openingClients: "", openingCommission: "", openingPaidCommission: "",
+  });
 
   function handleAdd() {
-    store.addAgent({ name: form.name, phone: form.phone, email: form.email, totalSales: 0, totalClients: 0, commission: 0, paidCommission: 0, status: form.status });
-    setForm({ name: "", phone: "", email: "", status: "Active" });
+    store.addAgent({
+      name: form.name, phone: form.phone, email: form.email,
+      totalSales: 0, totalClients: 0, commission: 0, paidCommission: 0,
+      status: form.status,
+      openingSales: Number(form.openingSales) || 0,
+      openingClients: Number(form.openingClients) || 0,
+      openingCommission: Number(form.openingCommission) || 0,
+      openingPaidCommission: Number(form.openingPaidCommission) || 0,
+    });
+    setForm({ name: "", phone: "", email: "", status: "Active", openingSales: "", openingClients: "", openingCommission: "", openingPaidCommission: "" });
     setAddOpen(false);
   }
 
   function handleEdit() {
     if (!selected) return;
-    store.updateAgent(selected.id, { name: form.name, phone: form.phone, email: form.email, status: form.status });
+    store.updateAgent(selected.id, {
+      name: form.name, phone: form.phone, email: form.email, status: form.status,
+      openingSales: Number(form.openingSales) || 0,
+      openingClients: Number(form.openingClients) || 0,
+      openingCommission: Number(form.openingCommission) || 0,
+      openingPaidCommission: Number(form.openingPaidCommission) || 0,
+    });
     setEditOpen(false);
   }
 
   function openEdit(a: Agent) {
     setSelected(a);
-    setForm({ name: a.name, phone: a.phone, email: a.email, status: a.status });
+    setForm({
+      name: a.name, phone: a.phone, email: a.email, status: a.status,
+      openingSales: String(a.openingSales || 0),
+      openingClients: String(a.openingClients || 0),
+      openingCommission: String(a.openingCommission || 0),
+      openingPaidCommission: String(a.openingPaidCommission || 0),
+    });
     setEditOpen(true);
   }
 
-  function downloadReport(a: Agent) {
+  function openStmt(a: Agent) { setStmtAgent(a); setStmtOpen(true); }
+  function downloadReport(a: Agent, range: { fromDate?: string; toDate?: string }) {
     const entries = store.entries.filter((e) => e.referenceId === a.id);
-    generateAgentReport(a, entries);
+    const agentBookings = store.bookings.filter((b) => b.agentId === a.id);
+    generateAgentReport(a, entries, { ...range, bookings: agentBookings });
   }
 
   const relatedEntries = selected ? store.entries.filter((e) => e.referenceId === selected.id) : [];
@@ -65,6 +94,15 @@ function AgentsPage() {
           <SelectContent><SelectItem value="Active">Active</SelectItem><SelectItem value="Inactive">Inactive</SelectItem></SelectContent>
         </Select>
       </div>
+      <div className="border-t border-border/30 pt-3">
+        <p className="text-xs font-semibold text-warning mb-2">Opening Balances (legacy / carry-forward)</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div><Label className="text-xs">Previous Sales</Label><Input type="number" value={form.openingSales} onChange={(e) => setForm({ ...form, openingSales: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+          <div><Label className="text-xs">Previous Clients</Label><Input type="number" value={form.openingClients} onChange={(e) => setForm({ ...form, openingClients: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+          <div><Label className="text-xs">Previous Commission</Label><Input type="number" value={form.openingCommission} onChange={(e) => setForm({ ...form, openingCommission: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+          <div><Label className="text-xs">Previous Paid</Label><Input type="number" value={form.openingPaidCommission} onChange={(e) => setForm({ ...form, openingPaidCommission: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+        </div>
+      </div>
     </div>
   );
 
@@ -76,7 +114,7 @@ function AgentsPage() {
         actions={
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2" onClick={() => setForm({ name: "", phone: "", email: "", status: "Active" })}>
+              <Button className="gap-2" onClick={() => setForm({ name: "", phone: "", email: "", status: "Active", openingSales: "", openingClients: "", openingCommission: "", openingPaidCommission: "" })}>
                 <Plus className="h-4 w-4" /> Add Agent
               </Button>
             </DialogTrigger>
@@ -99,7 +137,7 @@ function AgentsPage() {
               <div className="flex items-center gap-2">
                 <StatusBadge status={a.status} />
                 <button onClick={() => { setSelected(a); setDetailOpen(true); }} className="rounded p-1 hover:bg-accent"><Eye className="h-3.5 w-3.5 text-primary" /></button>
-                <button onClick={() => downloadReport(a)} className="rounded p-1 hover:bg-accent" title="Download Report"><Download className="h-3.5 w-3.5 text-success" /></button>
+                <button onClick={() => openStmt(a)} className="rounded p-1 hover:bg-accent" title="Download Statement"><Download className="h-3.5 w-3.5 text-success" /></button>
                 <button onClick={() => openEdit(a)} className="rounded p-1 hover:bg-accent"><Pencil className="h-3.5 w-3.5 text-warning" /></button>
                 <button onClick={() => store.deleteAgent(a.id)} className="rounded p-1 hover:bg-accent"><Trash2 className="h-3.5 w-3.5 text-destructive" /></button>
               </div>
@@ -129,6 +167,13 @@ function AgentsPage() {
       </Dialog>
 
       <DetailDialog open={detailOpen} onOpenChange={setDetailOpen} type="agent" data={selected} entries={relatedEntries} allClients={store.clients} allBookings={store.bookings} />
+
+      <StatementDialog
+        open={stmtOpen} onOpenChange={setStmtOpen}
+        title={`Agent Statement — ${stmtAgent?.name || ""}`}
+        subtitle="Choose a date range or all-time. Commission, services and history included."
+        onDownload={(range) => stmtAgent && downloadReport(stmtAgent, range)}
+      />
     </div>
   );
 }
