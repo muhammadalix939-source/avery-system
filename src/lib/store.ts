@@ -1,6 +1,6 @@
 // Centralized state management for the CRM
 import { useState, useCallback, useEffect } from "react";
-import type { Client, Booking, Agent, Supplier, HotelService, FlightService, TransportService } from "./data";
+import type { Client, Booking, Agent, Supplier, HotelService, FlightService, TransportService, VisaService, OtherService } from "./data";
 import { mockClients, mockBookings, mockAgents, mockSuppliers, mockMonthlyData as defaultMonthlyData, generateId } from "./data";
 import { getPKTDate } from "./date-utils";
 
@@ -19,6 +19,20 @@ export interface LedgerEntry {
 // ---------- Persistence (localStorage) ----------
 const STORAGE_KEY = "av-crm-store-v1";
 
+export interface OpeningBalances {
+  revenue: number;
+  pending: number;
+  bookings: number;
+  clients: number;
+  supplierDue: number;
+  profit: number;
+  note?: string;
+}
+
+const defaultOpening: OpeningBalances = {
+  revenue: 0, pending: 0, bookings: 0, clients: 0, supplierDue: 0, profit: 0,
+};
+
 interface PersistedState {
   clients: Client[];
   bookings: Booking[];
@@ -27,6 +41,7 @@ interface PersistedState {
   monthlyData: typeof defaultMonthlyData;
   entries: LedgerEntry[];
   counters: { client: number; agent: number; supplier: number; booking: number; head: number; entry: number };
+  opening?: OpeningBalances;
 }
 
 const defaultEntries: LedgerEntry[] = [
@@ -64,6 +79,7 @@ let agents = initial.agents;
 let suppliers = initial.suppliers;
 let monthlyData = initial.monthlyData;
 let entries: LedgerEntry[] = initial.entries;
+let opening: OpeningBalances = initial.opening || { ...defaultOpening };
 let nextClientNum = initial.counters.client;
 let nextAgentNum = initial.counters.agent;
 let nextSupplierNum = initial.counters.supplier;
@@ -78,7 +94,7 @@ function persist() {
   saveTimer = setTimeout(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        clients, bookings, agents, suppliers, monthlyData, entries,
+        clients, bookings, agents, suppliers, monthlyData, entries, opening,
         counters: { client: nextClientNum, agent: nextAgentNum, supplier: nextSupplierNum, booking: nextBookingNum, head: nextHeadNum, entry: nextEntryNum },
       }));
     } catch {}
@@ -104,6 +120,7 @@ export function useStore() {
     suppliers,
     monthlyData,
     entries,
+    opening,
 
     // Client CRUD
     addClient: (data: Omit<Client, "id">) => {
@@ -254,6 +271,32 @@ export function useStore() {
     },
     deleteTransport: (bookingId: string, transportId: string) => {
       bookings = bookings.map((b) => b.id === bookingId ? { ...b, transports: (b.transports || []).filter((t) => t.id !== transportId) } : b);
+      notify();
+    },
+    addVisa: (bookingId: string, data: Omit<VisaService, "id">) => {
+      const id = `V${Date.now().toString(36)}`;
+      bookings = bookings.map((b) => b.id === bookingId ? { ...b, visas: [...(b.visas || []), { ...data, id }] } : b);
+      notify();
+      return id;
+    },
+    deleteVisa: (bookingId: string, visaId: string) => {
+      bookings = bookings.map((b) => b.id === bookingId ? { ...b, visas: (b.visas || []).filter((v) => v.id !== visaId) } : b);
+      notify();
+    },
+    addOther: (bookingId: string, data: Omit<OtherService, "id">) => {
+      const id = `O${Date.now().toString(36)}`;
+      bookings = bookings.map((b) => b.id === bookingId ? { ...b, others: [...(b.others || []), { ...data, id }] } : b);
+      notify();
+      return id;
+    },
+    deleteOther: (bookingId: string, otherId: string) => {
+      bookings = bookings.map((b) => b.id === bookingId ? { ...b, others: (b.others || []).filter((o) => o.id !== otherId) } : b);
+      notify();
+    },
+
+    // Opening balances (dashboard baseline)
+    setOpeningBalances: (data: Partial<OpeningBalances>) => {
+      opening = { ...opening, ...data };
       notify();
     },
   };

@@ -29,12 +29,13 @@ const monthOrder = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep
 
 function Dashboard() {
   const store = useStore();
-  const totalRevenue = store.bookings.reduce((s, b) => s + b.amountReceived, 0);
-  const totalPending = store.bookings.reduce((s, b) => s + (b.totalAmount - b.amountReceived), 0);
-  const totalClients = store.clients.length;
-  const totalBookings = store.bookings.length;
-  const supplierPayable = store.suppliers.reduce((s, sp) => s + (sp.totalPayable - sp.totalPaid), 0);
-  const profit = totalRevenue - store.suppliers.reduce((s, sp) => s + sp.totalPaid, 0);
+  const o = store.opening;
+  const totalRevenue = store.bookings.reduce((s, b) => s + b.amountReceived, 0) + (o.revenue || 0);
+  const totalPending = store.bookings.reduce((s, b) => s + (b.totalAmount - b.amountReceived), 0) + (o.pending || 0);
+  const totalClients = store.clients.length + (o.clients || 0);
+  const totalBookings = store.bookings.length + (o.bookings || 0);
+  const supplierPayable = store.suppliers.reduce((s, sp) => s + (sp.totalPayable - sp.totalPaid), 0) + (o.supplierDue || 0);
+  const profit = totalRevenue - store.suppliers.reduce((s, sp) => s + sp.totalPaid, 0) + (o.profit || 0);
 
   // Sort monthly data: current month first
   const currentMonthIdx = new Date().getMonth(); // 0-based (April = 3)

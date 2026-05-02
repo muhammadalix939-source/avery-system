@@ -1,5 +1,32 @@
 // CRM Data Types and Mock Data
 
+// Expanded service catalogue used across Bookings, Suppliers and Services menus.
+export const SERVICE_TYPES = [
+  "Umrah Package",
+  "Hajj Package",
+  "Hotel",
+  "Flight",
+  "Visa",
+  "Transport",
+  "Ziyarah",
+  "Domestic Tour",
+  "International Tour",
+  "Insurance",
+  "Other",
+] as const;
+export type ServiceType = (typeof SERVICE_TYPES)[number];
+
+export const PACKAGE_TYPES = [
+  "Umrah",
+  "Hajj",
+  "Ziyarah",
+  "Domestic Tour",
+  "International Tour",
+  "Visa Only",
+  "Custom",
+] as const;
+export type PackageType = (typeof PACKAGE_TYPES)[number];
+
 export interface Client {
   id: string;
   headId: string;
@@ -14,10 +41,12 @@ export interface Client {
   dateOfExpire?: string;
   phone: string;
   email?: string;
-  packageType: "Umrah" | "Hajj" | "Tour";
+  packageType: PackageType | "Tour";
   paymentStatus: "Paid" | "Partial" | "Unpaid";
   amountDue: number;
   amountPaid: number;
+  /** Carry-forward balance from before this system (added to amountPaid baseline). */
+  openingPaid?: number;
   isVip: boolean;
   destination?: string;
   driveLink?: string;
@@ -38,7 +67,7 @@ export interface Booking {
   commission: number;
   clientIds: string[];
   status: "Confirmed" | "Pending" | "Cancelled";
-  packageType: "Umrah" | "Hajj" | "Tour";
+  packageType: PackageType | "Tour";
   travelDate: string;
   createdAt: string;
   members: number;
@@ -47,6 +76,8 @@ export interface Booking {
   hotels?: HotelService[];
   flights?: FlightService[];
   transports?: TransportService[];
+  visas?: VisaService[];
+  others?: OtherService[];
 }
 
 export interface HotelService {
@@ -75,6 +106,24 @@ export interface TransportService {
   route: string;       // e.g. JED Airport - Makkah Hotel
   vehicle: string;     // e.g. Private Car
   date: string;
+  amount?: number;
+}
+
+export interface VisaService {
+  id: string;
+  visaType: string;    // e.g. Umrah / Tourist
+  country: string;     // e.g. Saudi Arabia
+  reference: string;   // visa / file number
+  issueDate?: string;
+  amount?: number;
+}
+
+export interface OtherService {
+  id: string;
+  category: string;    // e.g. Ziyarah / Insurance / Lunch
+  description: string;
+  date?: string;
+  amount?: number;
 }
 
 export interface Agent {
@@ -86,6 +135,10 @@ export interface Agent {
   totalClients: number;
   commission: number;
   paidCommission: number;
+  openingCommission?: number;      // legacy commission earned before system
+  openingPaidCommission?: number;  // legacy commission already paid
+  openingClients?: number;         // legacy client count
+  openingSales?: number;           // legacy sales
   status: "Active" | "Inactive";
 }
 
@@ -95,9 +148,11 @@ export interface Supplier {
   contactPerson: string;
   phone: string;
   email: string;
-  serviceType: "Visa" | "Hotel" | "Transport" | "Airline";
+  serviceType: ServiceType;
   totalPayable: number;
   totalPaid: number;
+  openingPayable?: number;
+  openingPaid?: number;
 }
 
 export interface SupplierTransaction {
@@ -117,7 +172,7 @@ export const mockAgents: Agent[] = [
 
 export const mockSuppliers: Supplier[] = [
   { id: "AV-S001", companyName: "Al-Haram Hotels", contactPerson: "Fahad Sheikh", phone: "03211112222", email: "fahad@alharam.com", serviceType: "Hotel", totalPayable: 800000, totalPaid: 500000 },
-  { id: "AV-S002", companyName: "Sky Wings Airlines", contactPerson: "Bilal Ahmed", phone: "03223334444", email: "bilal@skywings.com", serviceType: "Airline", totalPayable: 600000, totalPaid: 600000 },
+  { id: "AV-S002", companyName: "Sky Wings Airlines", contactPerson: "Bilal Ahmed", phone: "03223334444", email: "bilal@skywings.com", serviceType: "Flight", totalPayable: 600000, totalPaid: 600000 },
   { id: "AV-S003", companyName: "Noor Transport", contactPerson: "Imran Hussain", phone: "03335556666", email: "imran@noor.com", serviceType: "Transport", totalPayable: 200000, totalPaid: 120000 },
   { id: "AV-S004", companyName: "Fast Visa Services", contactPerson: "Tariq Mehmood", phone: "03447778888", email: "tariq@fastvisa.com", serviceType: "Visa", totalPayable: 150000, totalPaid: 150000 },
 ];
