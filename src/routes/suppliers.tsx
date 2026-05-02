@@ -122,7 +122,7 @@ function SuppliersPage() {
         actions={
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2" onClick={() => setForm({ companyName: "", contactPerson: "", phone: "", email: "", serviceType: "Hotel", totalPayable: "", totalPaid: "" })}>
+              <Button className="gap-2" onClick={() => setForm({ companyName: "", contactPerson: "", phone: "", email: "", serviceType: "Hotel", totalPayable: "", totalPaid: "", openingPayable: "", openingPaid: "" })}>
                 <Plus className="h-4 w-4" /> Add Supplier
               </Button>
             </DialogTrigger>
