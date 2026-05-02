@@ -172,7 +172,7 @@ export const mockAgents: Agent[] = [
 
 export const mockSuppliers: Supplier[] = [
   { id: "AV-S001", companyName: "Al-Haram Hotels", contactPerson: "Fahad Sheikh", phone: "03211112222", email: "fahad@alharam.com", serviceType: "Hotel", totalPayable: 800000, totalPaid: 500000 },
-  { id: "AV-S002", companyName: "Sky Wings Airlines", contactPerson: "Bilal Ahmed", phone: "03223334444", email: "bilal@skywings.com", serviceType: "Airline", totalPayable: 600000, totalPaid: 600000 },
+  { id: "AV-S002", companyName: "Sky Wings Airlines", contactPerson: "Bilal Ahmed", phone: "03223334444", email: "bilal@skywings.com", serviceType: "Flight", totalPayable: 600000, totalPaid: 600000 },
   { id: "AV-S003", companyName: "Noor Transport", contactPerson: "Imran Hussain", phone: "03335556666", email: "imran@noor.com", serviceType: "Transport", totalPayable: 200000, totalPaid: 120000 },
   { id: "AV-S004", companyName: "Fast Visa Services", contactPerson: "Tariq Mehmood", phone: "03447778888", email: "tariq@fastvisa.com", serviceType: "Visa", totalPayable: 150000, totalPaid: 150000 },
 ];
