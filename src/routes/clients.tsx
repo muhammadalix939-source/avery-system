@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import DetailDialog from "@/components/DetailDialog";
-import { formatCurrency, getClientName, type Client } from "@/lib/data";
+import { formatCurrency, getClientName, PACKAGE_TYPES, type Client } from "@/lib/data";
 import { useStore } from "@/lib/store";
 import { generateClientStatement } from "@/lib/pdf";
 import { useState } from "react";
@@ -122,7 +122,9 @@ function ClientsPage() {
         <div><Label className="text-xs">Package Type</Label>
           <Select value={form.packageType} onValueChange={(v) => setForm({ ...form, packageType: v as Client["packageType"] })}>
             <SelectTrigger className="bg-accent/20 border-border mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectItem value="Umrah">Umrah</SelectItem><SelectItem value="Hajj">Hajj</SelectItem><SelectItem value="Tour">Tour</SelectItem></SelectContent>
+            <SelectContent>
+              {PACKAGE_TYPES.map((p) => (<SelectItem key={p} value={p}>{p}</SelectItem>))}
+            </SelectContent>
           </Select>
         </div>
         <div><Label className="text-xs">Amount Due (PKR)</Label><Input type="number" value={form.amountDue} onChange={(e) => setForm({ ...form, amountDue: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>

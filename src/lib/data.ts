@@ -18,11 +18,21 @@ export type ServiceType = (typeof SERVICE_TYPES)[number];
 
 export const PACKAGE_TYPES = [
   "Umrah",
+  "Umrah Economy",
+  "Umrah Standard",
+  "Umrah VIP",
   "Hajj",
+  "Hajj Shifting",
+  "Hajj Aziziya",
   "Ziyarah",
-  "Domestic Tour",
   "International Tour",
+  "Domestic Tour",
+  "Pakistan Tour",
+  "Honeymoon Package",
+  "Group Tour",
+  "Family Package",
   "Visa Only",
+  "Tour",
   "Custom",
 ] as const;
 export type PackageType = (typeof PACKAGE_TYPES)[number];
@@ -41,7 +51,7 @@ export interface Client {
   dateOfExpire?: string;
   phone: string;
   email?: string;
-  packageType: PackageType | "Tour";
+  packageType: PackageType;
   paymentStatus: "Paid" | "Partial" | "Unpaid";
   amountDue: number;
   amountPaid: number;
@@ -67,7 +77,7 @@ export interface Booking {
   commission: number;
   clientIds: string[];
   status: "Confirmed" | "Pending" | "Cancelled";
-  packageType: PackageType | "Tour";
+  packageType: PackageType;
   travelDate: string;
   createdAt: string;
   members: number;

@@ -387,7 +387,7 @@ export function generateSupplierLedger(supplier: Supplier, entries: LedgerEntry[
   const remaining = totalPayable - totalPaid;
 
   y = summaryCards(doc, y, [
-    ["Opening Balance", formatCurrency(openingPayable - openingPaid), "ink"],
+    ["Brought Forward (B/F)", formatCurrency(openingPayable - openingPaid), "ink"],
     ["Total Payable", formatCurrency(totalPayable), "navy" as any],
     ["Total Paid", formatCurrency(totalPaid), "success"],
     ["Remaining", formatCurrency(remaining), "danger"],
@@ -406,7 +406,7 @@ export function generateSupplierLedger(supplier: Supplier, entries: LedgerEntry[
       startY: y + 1,
       head: [["Date", "Receipt", "Reference", "Note", "Amount", "Balance"]],
       body: [
-        [{ content: "Opening Balance", colSpan: 4, styles: { fontStyle: "bold" as const, fillColor: ROW_ALT } }, { content: formatCurrency(openingPayable - openingPaid), styles: { halign: "right" as const, fillColor: ROW_ALT } }, { content: formatCurrency(running), styles: { halign: "right" as const, fillColor: ROW_ALT, textColor: NAVY } }],
+        [{ content: "Brought Forward (B/F)", colSpan: 4, styles: { fontStyle: "bold" as const, fillColor: ROW_ALT } }, { content: formatCurrency(openingPayable - openingPaid), styles: { halign: "right" as const, fillColor: ROW_ALT } }, { content: formatCurrency(running), styles: { halign: "right" as const, fillColor: ROW_ALT, textColor: NAVY } }],
         ...filtered.map((e) => {
           running -= e.amount;
           return [
@@ -483,7 +483,7 @@ export function generateAgentReport(agent: Agent, entries: LedgerEntry[], opts: 
       startY: y + 1,
       head: [["Date", "Receipt", "Note", "Amount", "Balance"]],
       body: [
-        [{ content: "Opening Balance", colSpan: 3, styles: { fontStyle: "bold" as const, fillColor: ROW_ALT } }, { content: formatCurrency(openingComm - openingPaid), styles: { halign: "right" as const, fillColor: ROW_ALT } }, { content: formatCurrency(running), styles: { halign: "right" as const, fillColor: ROW_ALT, textColor: NAVY } }],
+        [{ content: "Brought Forward (B/F)", colSpan: 3, styles: { fontStyle: "bold" as const, fillColor: ROW_ALT } }, { content: formatCurrency(openingComm - openingPaid), styles: { halign: "right" as const, fillColor: ROW_ALT } }, { content: formatCurrency(running), styles: { halign: "right" as const, fillColor: ROW_ALT, textColor: NAVY } }],
         ...filtered.map((e) => {
           running -= e.amount;
           return [

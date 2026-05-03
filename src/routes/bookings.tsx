@@ -10,7 +10,7 @@ import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import BookingServicesMenu, { VoucherDownloadMenu } from "@/components/BookingServicesMenu";
-import { formatCurrency, getClientName, type Booking } from "@/lib/data";
+import { formatCurrency, getClientName, PACKAGE_TYPES, type Booking } from "@/lib/data";
 import { useStore } from "@/lib/store";
 import { getPKTDate } from "@/lib/date-utils";
 import { generateInvoice, generatePaymentHistory } from "@/lib/pdf";
@@ -248,7 +248,9 @@ function BookingsPage() {
         <div><Label className="text-xs">Package Type</Label>
           <Select value={form.packageType} onValueChange={(v) => setForm({ ...form, packageType: v as Booking["packageType"] })}>
             <SelectTrigger className="bg-accent/20 border-border mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectItem value="Umrah">Umrah</SelectItem><SelectItem value="Hajj">Hajj</SelectItem><SelectItem value="Tour">Tour</SelectItem></SelectContent>
+            <SelectContent>
+              {PACKAGE_TYPES.map((p) => (<SelectItem key={p} value={p}>{p}</SelectItem>))}
+            </SelectContent>
           </Select>
         </div>
         <div><Label className="text-xs">Status</Label>
@@ -338,7 +340,9 @@ function BookingsPage() {
         <div><Label className="text-xs">Package</Label>
           <Select value={form.packageType} onValueChange={(v) => setForm({ ...form, packageType: v as Booking["packageType"] })}>
             <SelectTrigger className="bg-accent/20 border-border mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectItem value="Umrah">Umrah</SelectItem><SelectItem value="Hajj">Hajj</SelectItem><SelectItem value="Tour">Tour</SelectItem></SelectContent>
+            <SelectContent>
+              {PACKAGE_TYPES.map((p) => (<SelectItem key={p} value={p}>{p}</SelectItem>))}
+            </SelectContent>
           </Select>
         </div>
         <div><Label className="text-xs">Status</Label>

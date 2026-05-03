@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { DollarSign, Users, BookOpen, TrendingUp, Clock, UserCog } from "lucide-react";
+import { DollarSign, Users, BookOpen, TrendingUp, Clock, Receipt } from "lucide-react";
 import StatsCard from "@/components/StatsCard";
 import StatusBadge from "@/components/StatusBadge";
 import PageHeader from "@/components/PageHeader";
@@ -35,7 +35,8 @@ function Dashboard() {
   const totalClients = store.clients.length + (o.clients || 0);
   const totalBookings = store.bookings.length + (o.bookings || 0);
   const supplierPayable = store.suppliers.reduce((s, sp) => s + (sp.totalPayable - sp.totalPaid), 0) + (o.supplierDue || 0);
-  const profit = totalRevenue - store.suppliers.reduce((s, sp) => s + sp.totalPaid, 0) + (o.profit || 0);
+  const totalExpenses = store.entries.filter((e) => e.type === "expense").reduce((s, e) => s + e.amount, 0);
+  const profit = totalRevenue - store.suppliers.reduce((s, sp) => s + sp.totalPaid, 0) - totalExpenses + (o.profit || 0);
 
   // Sort monthly data: current month first
   const currentMonthIdx = new Date().getMonth(); // 0-based (April = 3)
@@ -58,7 +59,11 @@ function Dashboard() {
         <StatsCard title="Active Bookings" value={String(totalBookings)} subtitle="Head IDs" icon={BookOpen} delay={0.1} />
         <StatsCard title="Total Clients" value={String(totalClients)} icon={Users} delay={0.15} />
         <StatsCard title="Supplier Due" value={formatCurrency(supplierPayable)} icon={TrendingUp} delay={0.2} />
-        <StatsCard title="Profit" value={formatCurrency(profit)} icon={DollarSign} trend={{ value: "8%", positive: true }} delay={0.25} />
+        <StatsCard title="Expenses" value={formatCurrency(totalExpenses)} icon={Receipt} delay={0.25} />
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <StatsCard title="Net Profit" value={formatCurrency(profit)} icon={DollarSign} trend={{ value: "8%", positive: true }} delay={0.3} />
+        <StatsCard title="Cash on Hand" value={formatCurrency(totalRevenue - store.suppliers.reduce((s, sp) => s + sp.totalPaid, 0) - totalExpenses - store.entries.filter((e) => e.type === "agent_commission").reduce((s, e) => s + e.amount, 0))} icon={DollarSign} delay={0.35} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
