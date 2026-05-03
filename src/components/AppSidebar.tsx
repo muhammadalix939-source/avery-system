@@ -1,7 +1,7 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import {
-  LayoutDashboard, BookOpen, Users, UserCog, Truck, CreditCard, Search, FileText, Settings, ChevronLeft, ChevronRight,
+  LayoutDashboard, BookOpen, Users, UserCog, Truck, CreditCard, Search, FileText, Settings, ChevronLeft, ChevronRight, Receipt,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -13,6 +13,7 @@ const navItems = [
   { to: "/suppliers", icon: Truck, label: "Suppliers" },
   { to: "/payments", icon: CreditCard, label: "Payments" },
   { to: "/entries", icon: FileText, label: "Entries" },
+  { to: "/expenses", icon: Receipt, label: "Expenses" },
   { to: "/search", icon: Search, label: "Search" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ] as const;
