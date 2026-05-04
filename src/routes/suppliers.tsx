@@ -4,7 +4,7 @@ import { Plus, Trash2, Pencil, Eye, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
@@ -30,21 +30,30 @@ function SuppliersPage() {
   const [stmtSupplier, setStmtSupplier] = useState<Supplier | null>(null);
   const [form, setForm] = useState({
     companyName: "", contactPerson: "", phone: "", email: "",
-    serviceType: "Hotel" as Supplier["serviceType"],
+    serviceTypes: ["Hotel"] as string[],
     totalPayable: "", totalPaid: "",
     openingPayable: "", openingPaid: "",
   });
 
+  const resetSupplierForm = () => setForm({ companyName: "", contactPerson: "", phone: "", email: "", serviceTypes: ["Hotel"], totalPayable: "", totalPaid: "", openingPayable: "", openingPaid: "" });
+
+  function toggleService(service: string) {
+    const next = form.serviceTypes.includes(service)
+      ? form.serviceTypes.filter((item) => item !== service)
+      : [...form.serviceTypes, service];
+    setForm({ ...form, serviceTypes: next.length ? next : [service] });
+  }
+
   function handleAdd() {
     store.addSupplier({
       companyName: form.companyName, contactPerson: form.contactPerson, phone: form.phone, email: form.email,
-      serviceType: form.serviceType,
+      serviceType: form.serviceTypes.join(", "),
       totalPayable: Number(form.totalPayable) || 0,
       totalPaid: Number(form.totalPaid) || 0,
       openingPayable: Number(form.openingPayable) || 0,
       openingPaid: Number(form.openingPaid) || 0,
     });
-    setForm({ companyName: "", contactPerson: "", phone: "", email: "", serviceType: "Hotel", totalPayable: "", totalPaid: "", openingPayable: "", openingPaid: "" });
+    resetSupplierForm();
     setAddOpen(false);
   }
 
@@ -52,7 +61,7 @@ function SuppliersPage() {
     if (!selected) return;
     store.updateSupplier(selected.id, {
       companyName: form.companyName, contactPerson: form.contactPerson, phone: form.phone, email: form.email,
-      serviceType: form.serviceType,
+      serviceType: form.serviceTypes.join(", "),
       totalPayable: Number(form.totalPayable) || 0,
       totalPaid: Number(form.totalPaid) || 0,
       openingPayable: Number(form.openingPayable) || 0,
@@ -65,7 +74,7 @@ function SuppliersPage() {
     setSelected(s);
     setForm({
       companyName: s.companyName, contactPerson: s.contactPerson, phone: s.phone, email: s.email,
-      serviceType: s.serviceType,
+      serviceTypes: s.serviceType.split(",").map((item) => item.trim()).filter(Boolean),
       totalPayable: String(s.totalPayable), totalPaid: String(s.totalPaid),
       openingPayable: String(s.openingPayable || 0), openingPaid: String(s.openingPaid || 0),
     });
@@ -89,13 +98,15 @@ function SuppliersPage() {
         <div><Label className="text-xs">Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
         <div><Label className="text-xs">Email</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
       </div>
-      <div><Label className="text-xs">Service Type</Label>
-        <Select value={form.serviceType} onValueChange={(v) => setForm({ ...form, serviceType: v as Supplier["serviceType"] })}>
-          <SelectTrigger className="bg-accent/20 border-border mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {SERVICE_TYPES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-          </SelectContent>
-        </Select>
+      <div><Label className="text-xs">Service Types</Label>
+        <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg border border-border/50 bg-accent/10 p-3 sm:grid-cols-3">
+          {SERVICE_TYPES.map((s) => (
+            <label key={s} className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Checkbox checked={form.serviceTypes.includes(s)} onCheckedChange={() => toggleService(s)} />
+              <span>{s}</span>
+            </label>
+          ))}
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div><Label className="text-xs">Total Payable (PKR)</Label><Input type="number" value={form.totalPayable} onChange={(e) => setForm({ ...form, totalPayable: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
@@ -122,7 +133,7 @@ function SuppliersPage() {
         actions={
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2" onClick={() => setForm({ companyName: "", contactPerson: "", phone: "", email: "", serviceType: "Hotel", totalPayable: "", totalPaid: "", openingPayable: "", openingPaid: "" })}>
+              <Button className="gap-2" onClick={resetSupplierForm}>
                 <Plus className="h-4 w-4" /> Add Supplier
               </Button>
             </DialogTrigger>
@@ -147,16 +158,18 @@ function SuppliersPage() {
             </thead>
             <tbody>
               {store.suppliers.map((s) => {
-                const remaining = s.totalPayable - s.totalPaid;
-                const status = remaining === 0 ? "Paid" : remaining < s.totalPayable ? "Partial" : "Unpaid";
+                const payable = s.totalPayable + (s.openingPayable || 0);
+                const paid = s.totalPaid + (s.openingPaid || 0);
+                const remaining = payable - paid;
+                const status = remaining <= 0 ? "Paid" : paid > 0 ? "Partial" : "Unpaid";
                 return (
                   <tr key={s.id} className="border-b border-border/50 transition-colors hover:bg-accent/30">
                     <td className="px-4 py-3 font-semibold text-primary">{s.id}</td>
                     <td className="px-4 py-3 font-medium">{s.companyName}</td>
                     <td className="px-4 py-3"><p className="text-sm">{s.contactPerson}</p><p className="text-xs text-muted-foreground">{s.phone}</p></td>
                     <td className="px-4 py-3">{s.serviceType}</td>
-                    <td className="px-4 py-3">{formatCurrency(s.totalPayable)}</td>
-                    <td className="px-4 py-3 text-success">{formatCurrency(s.totalPaid)}</td>
+                    <td className="px-4 py-3"><p>{formatCurrency(payable)}</p>{(s.openingPayable || 0) > 0 && <p className="text-[9px] text-muted-foreground">incl. {formatCurrency(s.openingPayable || 0)} B/F</p>}</td>
+                    <td className="px-4 py-3 text-success"><p>{formatCurrency(paid)}</p>{(s.openingPaid || 0) > 0 && <p className="text-[9px] text-muted-foreground">incl. {formatCurrency(s.openingPaid || 0)} B/F</p>}</td>
                     <td className="px-4 py-3 text-destructive">{formatCurrency(remaining)}</td>
                     <td className="px-4 py-3"><StatusBadge status={status} /></td>
                     <td className="px-4 py-3">
@@ -177,13 +190,19 @@ function SuppliersPage() {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {store.suppliers.map((s, i) => {
-          const remaining = s.totalPayable - s.totalPaid;
-          const paidPercent = s.totalPayable > 0 ? Math.round((s.totalPaid / s.totalPayable) * 100) : 0;
+          const payable = s.totalPayable + (s.openingPayable || 0);
+          const paid = s.totalPaid + (s.openingPaid || 0);
+          const remaining = payable - paid;
+          const paidPercent = payable > 0 ? Math.min(100, Math.round((paid / payable) * 100)) : 0;
           return (
             <motion.div key={s.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="glass-card rounded-xl p-5">
-              <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-semibold">{s.companyName}</h3><span className="text-xs text-muted-foreground">{s.id}</span></div>
+              <div className="mb-3 flex items-center justify-between"><div><h3 className="text-sm font-semibold">{s.companyName}</h3><p className="text-[10px] text-muted-foreground">{s.serviceType}</p></div><span className="text-xs text-muted-foreground">{s.id}</span></div>
               <div className="mb-2 h-2 overflow-hidden rounded-full bg-accent/30"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${paidPercent}%` }} /></div>
-              <div className="flex justify-between text-xs text-muted-foreground"><span>Paid: {formatCurrency(s.totalPaid)}</span><span>Remaining: {formatCurrency(remaining)}</span></div>
+              <div className="grid grid-cols-3 gap-2 border-t border-border/50 pt-3 text-xs">
+                <div><p className="text-[10px] uppercase text-muted-foreground">Payable</p><p className="font-semibold text-primary">{formatCurrency(payable)}</p>{(s.openingPayable || 0) > 0 && <p className="text-[9px] text-muted-foreground">incl. {formatCurrency(s.openingPayable || 0)} B/F</p>}</div>
+                <div><p className="text-[10px] uppercase text-muted-foreground">Paid</p><p className="font-semibold text-success">{formatCurrency(paid)}</p>{(s.openingPaid || 0) > 0 && <p className="text-[9px] text-muted-foreground">incl. {formatCurrency(s.openingPaid || 0)} B/F</p>}</div>
+                <div><p className="text-[10px] uppercase text-muted-foreground">Remaining</p><p className="font-semibold text-destructive">{formatCurrency(remaining)}</p></div>
+              </div>
             </motion.div>
           );
         })}
