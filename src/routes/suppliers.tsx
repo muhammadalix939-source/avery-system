@@ -4,7 +4,7 @@ import { Plus, Trash2, Pencil, Eye, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
@@ -30,21 +30,30 @@ function SuppliersPage() {
   const [stmtSupplier, setStmtSupplier] = useState<Supplier | null>(null);
   const [form, setForm] = useState({
     companyName: "", contactPerson: "", phone: "", email: "",
-    serviceType: "Hotel" as Supplier["serviceType"],
+    serviceTypes: ["Hotel"] as string[],
     totalPayable: "", totalPaid: "",
     openingPayable: "", openingPaid: "",
   });
 
+  const resetSupplierForm = () => setForm({ companyName: "", contactPerson: "", phone: "", email: "", serviceTypes: ["Hotel"], totalPayable: "", totalPaid: "", openingPayable: "", openingPaid: "" });
+
+  function toggleService(service: string) {
+    const next = form.serviceTypes.includes(service)
+      ? form.serviceTypes.filter((item) => item !== service)
+      : [...form.serviceTypes, service];
+    setForm({ ...form, serviceTypes: next.length ? next : [service] });
+  }
+
   function handleAdd() {
     store.addSupplier({
       companyName: form.companyName, contactPerson: form.contactPerson, phone: form.phone, email: form.email,
-      serviceType: form.serviceType,
+      serviceType: form.serviceTypes.join(", "),
       totalPayable: Number(form.totalPayable) || 0,
       totalPaid: Number(form.totalPaid) || 0,
       openingPayable: Number(form.openingPayable) || 0,
       openingPaid: Number(form.openingPaid) || 0,
     });
-    setForm({ companyName: "", contactPerson: "", phone: "", email: "", serviceType: "Hotel", totalPayable: "", totalPaid: "", openingPayable: "", openingPaid: "" });
+    resetSupplierForm();
     setAddOpen(false);
   }
 
@@ -52,7 +61,7 @@ function SuppliersPage() {
     if (!selected) return;
     store.updateSupplier(selected.id, {
       companyName: form.companyName, contactPerson: form.contactPerson, phone: form.phone, email: form.email,
-      serviceType: form.serviceType,
+      serviceType: form.serviceTypes.join(", "),
       totalPayable: Number(form.totalPayable) || 0,
       totalPaid: Number(form.totalPaid) || 0,
       openingPayable: Number(form.openingPayable) || 0,
