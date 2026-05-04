@@ -48,10 +48,12 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
     }
     if (type === "supplier") {
       const s = data as Supplier;
+      const payable = s.totalPayable + (s.openingPayable || 0);
+      const paid = s.totalPaid + (s.openingPaid || 0);
       generatePaymentHistory(`Supplier ${s.id}`,
         [["Supplier ID", s.id], ["Company", s.companyName], ["Contact", s.contactPerson]],
         entries.filter((e) => e.type === "supplier_payment"),
-        [["Payable", fc(s.totalPayable), "ink"], ["Paid", fc(s.totalPaid), "success"], ["Remaining", fc(s.totalPayable - s.totalPaid), "destructive"]]);
+        [["Payable", fc(payable), "ink"], ["Paid", fc(paid), "success"], ["Remaining", fc(payable - paid), "destructive"]]);
     }
     if (type === "agent") {
       const a = data as Agent;
@@ -75,8 +77,10 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
   // Compute supplier stats from bookings
   function getSupplierStats(s: Supplier) {
     const supplierBookings = allBookings.filter((b) => b.supplierId === s.id);
-    const totalCost = supplierBookings.reduce((sum, b) => sum + (b.totalCost || 0), 0);
-    const totalPaid = entries.filter((e) => e.type === "supplier_payment" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
+    const purchaseTotal = entries.filter((e) => e.type === "purchase" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
+    const bookingCostTotal = supplierBookings.reduce((sum, b) => sum + (b.totalCost || 0), 0);
+    const totalCost = Math.max(s.totalPayable || 0, purchaseTotal || 0, bookingCostTotal || 0) + (s.openingPayable || 0);
+    const totalPaid = entries.filter((e) => e.type === "supplier_payment" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0) + (s.openingPaid || 0);
     return { supplierBookings, totalCost, totalPaid, remaining: totalCost - totalPaid };
   }
 
