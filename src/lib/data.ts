@@ -158,7 +158,7 @@ export interface Supplier {
   contactPerson: string;
   phone: string;
   email: string;
-  serviceType: ServiceType;
+  serviceType: string;
   totalPayable: number;
   totalPaid: number;
   openingPayable?: number;
