@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { DollarSign, Users, BookOpen, TrendingUp, Clock, Receipt } from "lucide-react";
+import { DollarSign, Users, BookOpen, TrendingUp, Clock, Receipt, ShoppingCart } from "lucide-react";
 import StatsCard from "@/components/StatsCard";
 import StatusBadge from "@/components/StatusBadge";
 import PageHeader from "@/components/PageHeader";
@@ -36,7 +36,14 @@ function Dashboard() {
   const totalBookings = store.bookings.length + (o.bookings || 0);
   const supplierPayable = store.suppliers.reduce((s, sp) => s + (sp.totalPayable - sp.totalPaid), 0) + (o.supplierDue || 0);
   const totalExpenses = store.entries.filter((e) => e.type === "expense").reduce((s, e) => s + e.amount, 0);
-  const profit = totalRevenue - store.suppliers.reduce((s, sp) => s + sp.totalPaid, 0) - totalExpenses + (o.profit || 0);
+  const totalSupplierPaid = store.suppliers.reduce((s, sp) => s + sp.totalPaid, 0);
+  const totalAgentCommissionPaid = store.entries.filter((e) => e.type === "agent_commission").reduce((s, e) => s + e.amount, 0);
+  const profit = totalRevenue - totalSupplierPaid - totalExpenses - totalAgentCommissionPaid + (o.profit || 0);
+  const cashOnHand = totalRevenue - totalSupplierPaid - totalExpenses - totalAgentCommissionPaid;
+
+  const hasAnyData =
+    store.bookings.length > 0 || store.clients.length > 0 || store.entries.length > 0 ||
+    store.agents.length > 0  || store.suppliers.length > 0;
 
   // Sort monthly data: current month first
   const currentMonthIdx = new Date().getMonth(); // 0-based (April = 3)
@@ -54,7 +61,7 @@ function Dashboard() {
       <PageHeader title="Dashboard" subtitle="Overview of your travel business" />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <StatsCard title="Total Revenue" value={formatCurrency(totalRevenue)} icon={DollarSign} trend={{ value: "12%", positive: true }} delay={0} />
+        <StatsCard title="Total Revenue" value={formatCurrency(totalRevenue)} icon={DollarSign} delay={0} />
         <StatsCard title="Pending" value={formatCurrency(totalPending)} icon={Clock} delay={0.05} />
         <StatsCard title="Active Bookings" value={String(totalBookings)} subtitle="Head IDs" icon={BookOpen} delay={0.1} />
         <StatsCard title="Total Clients" value={String(totalClients)} icon={Users} delay={0.15} />
@@ -62,10 +69,11 @@ function Dashboard() {
         <StatsCard title="Expenses" value={formatCurrency(totalExpenses)} icon={Receipt} delay={0.25} />
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <StatsCard title="Net Profit" value={formatCurrency(profit)} icon={DollarSign} trend={{ value: "8%", positive: true }} delay={0.3} />
-        <StatsCard title="Cash on Hand" value={formatCurrency(totalRevenue - store.suppliers.reduce((s, sp) => s + sp.totalPaid, 0) - totalExpenses - store.entries.filter((e) => e.type === "agent_commission").reduce((s, e) => s + e.amount, 0))} icon={DollarSign} delay={0.35} />
+        <StatsCard title="Net Profit" value={formatCurrency(profit)} icon={DollarSign} delay={0.3} />
+        <StatsCard title="Cash on Hand" value={formatCurrency(cashOnHand)} icon={DollarSign} delay={0.35} />
       </div>
 
+      {hasAnyData && (
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="glass-card col-span-2 rounded-xl p-5">
           <h3 className="mb-4 text-sm font-semibold text-foreground">Monthly Revenue</h3>
@@ -97,8 +105,10 @@ function Dashboard() {
           </div>
         </motion.div>
       </div>
+      )}
 
       {/* Monthly Records — current month first */}
+      {sortedMonthly.length > 0 && (
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="glass-card rounded-xl p-5">
         <h3 className="mb-4 text-sm font-semibold text-foreground">Monthly Records</h3>
         <div className="overflow-x-auto">
@@ -121,8 +131,10 @@ function Dashboard() {
           </table>
         </div>
       </motion.div>
+      )}
 
       {/* Recent Bookings & Agent Performance */}
+      {hasAnyData && (
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="glass-card rounded-xl p-5">
           <h3 className="mb-4 text-sm font-semibold text-foreground">Recent Bookings</h3>
@@ -133,6 +145,7 @@ function Dashboard() {
                 <div className="text-right"><p className="text-sm font-medium text-primary">{formatCurrency(b.amountReceived)}</p><StatusBadge status={b.status} /></div>
               </div>
             ))}
+            {store.bookings.length === 0 && <p className="text-xs text-muted-foreground">No bookings yet.</p>}
           </div>
         </motion.div>
 
@@ -141,13 +154,21 @@ function Dashboard() {
           <div className="space-y-3">
             {store.agents.map((a) => (
               <div key={a.id} className="flex items-center justify-between rounded-lg bg-accent/20 px-4 py-3">
-                <div><p className="text-sm font-medium">{a.name}</p><p className="text-xs text-muted-foreground">{a.id} · {a.totalClients} clients</p></div>
-                <div className="text-right"><p className="text-sm font-medium text-primary">{formatCurrency(a.totalSales)}</p><p className="text-xs text-muted-foreground">Commission: {formatCurrency(a.commission)}</p></div>
+                <div><p className="text-sm font-medium">{a.name}</p><p className="text-xs text-muted-foreground">{a.id} · {a.totalClients + (a.openingClients || 0)} clients</p></div>
+                <div className="text-right"><p className="text-sm font-medium text-primary">{formatCurrency(a.totalSales + (a.openingSales || 0))}</p><p className="text-xs text-muted-foreground">Commission: {formatCurrency(a.commission + (a.openingCommission || 0))}</p></div>
               </div>
             ))}
+            {store.agents.length === 0 && <p className="text-xs text-muted-foreground">No agents yet.</p>}
           </div>
         </motion.div>
       </div>
+      )}
+
+      {!hasAnyData && (
+        <div className="glass-card rounded-xl p-10 text-center">
+          <p className="text-sm text-muted-foreground">No data yet. Add a booking, client, agent or entry to see live insights.</p>
+        </div>
+      )}
     </div>
   );
 }

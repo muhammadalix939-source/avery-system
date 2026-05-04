@@ -21,6 +21,7 @@ export const Route = createFileRoute("/entries")({
 
 const typeLabels: Record<LedgerEntry["type"], string> = {
   client_receive: "Client Payment Received",
+  purchase: "Purchase from Supplier",
   supplier_payment: "Supplier Payment",
   agent_commission: "Agent Commission",
   expense: "Expense",
@@ -28,6 +29,7 @@ const typeLabels: Record<LedgerEntry["type"], string> = {
 
 const typeColors: Record<LedgerEntry["type"], string> = {
   client_receive: "text-success",
+  purchase: "text-warning",
   supplier_payment: "text-destructive",
   agent_commission: "text-warning",
   expense: "text-destructive",
@@ -40,13 +42,15 @@ function EntriesPage() {
   const [selected, setSelected] = useState<LedgerEntry | null>(null);
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [form, setForm] = useState({ date: "", type: "client_receive" as LedgerEntry["type"], headId: "", referenceId: "", referenceName: "", amount: "", note: "" });
+  const [serviceCategory, setServiceCategory] = useState<string>("");
 
   const sorted = [...store.entries].sort((a, b) => b.date.localeCompare(a.date));
   const filtered = typeFilter === "all" ? sorted : sorted.filter((e) => e.type === typeFilter);
 
   function handleAdd() {
-    store.addEntry({ date: form.date || getPKTDate(), type: form.type, headId: form.headId, referenceId: form.referenceId, referenceName: form.referenceName, amount: Number(form.amount) || 0, note: form.note });
+    store.addEntry({ date: form.date || getPKTDate(), type: form.type, headId: form.headId, referenceId: form.referenceId, referenceName: form.referenceName, amount: Number(form.amount) || 0, note: form.note, serviceCategory: serviceCategory || undefined });
     setForm({ date: "", type: "client_receive", headId: "", referenceId: "", referenceName: "", amount: "", note: "" });
+    setServiceCategory("");
     setAddOpen(false);
   }
 
@@ -59,11 +63,13 @@ function EntriesPage() {
   function openEdit(e: LedgerEntry) {
     setSelected(e);
     setForm({ date: e.date, type: e.type, headId: e.headId, referenceId: e.referenceId, referenceName: e.referenceName, amount: String(e.amount), note: e.note });
+    setServiceCategory(e.serviceCategory || "");
     setEditOpen(true);
   }
 
   const totalReceived = store.entries.filter((e) => e.type === "client_receive").reduce((s, e) => s + e.amount, 0);
   const totalPaid = store.entries.filter((e) => e.type === "supplier_payment" || e.type === "agent_commission" || e.type === "expense").reduce((s, e) => s + e.amount, 0);
+  const totalPurchases = store.entries.filter((e) => e.type === "purchase").reduce((s, e) => s + e.amount, 0);
 
   // Auto-populate reference name when type or referenceId changes
   function updateFormType(type: LedgerEntry["type"]) {
@@ -79,7 +85,7 @@ function EntriesPage() {
         name = headClient ? getClientName(headClient) : refId;
       }
       setForm({ ...form, referenceId: refId, referenceName: name || form.referenceName, headId: refId });
-    } else if (form.type === "supplier_payment") {
+    } else if (form.type === "supplier_payment" || form.type === "purchase") {
       const supplier = store.suppliers.find((s) => s.id === refId);
       name = supplier?.companyName || "";
       setForm({ ...form, referenceId: refId, referenceName: name || form.referenceName });
@@ -99,6 +105,7 @@ function EntriesPage() {
           <SelectTrigger className="bg-accent/20 border-border mt-1"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="client_receive">Client Payment Received</SelectItem>
+            <SelectItem value="purchase">Purchase from Supplier</SelectItem>
             <SelectItem value="supplier_payment">Supplier Payment</SelectItem>
             <SelectItem value="agent_commission">Agent Commission</SelectItem>
             <SelectItem value="expense">Expense</SelectItem>
@@ -123,8 +130,9 @@ function EntriesPage() {
         </div>
       )}
 
-      {form.type === "supplier_payment" && (
-        <div><Label>Supplier</Label>
+      {(form.type === "supplier_payment" || form.type === "purchase") && (
+        <div className="space-y-3">
+          <div><Label>Supplier</Label>
           <SearchableSelect
             value={form.referenceId}
             onChange={(v) => updateReferenceId(v)}
@@ -136,6 +144,28 @@ function EntriesPage() {
             }))}
             className="mt-1"
           />
+          </div>
+          {form.type === "purchase" && (
+            <>
+              <div><Label>Service Category</Label>
+                <Select value={serviceCategory} onValueChange={setServiceCategory}>
+                  <SelectTrigger className="bg-accent/20 border-border mt-1"><SelectValue placeholder="Hotel / Flight / Visa / Transport / Other" /></SelectTrigger>
+                  <SelectContent>
+                    {["Hotel","Flight","Visa","Transport","Ziyarah","Insurance","Other"].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div><Label>Link to Head ID (optional)</Label>
+                <SearchableSelect
+                  value={form.headId}
+                  onChange={(v) => setForm({ ...form, headId: v })}
+                  placeholder="Tag this purchase to a booking..."
+                  options={store.bookings.map((b) => ({ value: b.headId, label: `${b.headId} — ${b.packageType}`, hint: b.travelDate }))}
+                  className="mt-1"
+                />
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -186,10 +216,14 @@ function EntriesPage() {
       />
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         <div className="glass-card rounded-xl p-5">
           <p className="text-[10px] uppercase text-muted-foreground">Total Received</p>
           <p className="text-xl font-bold text-success">{formatCurrency(totalReceived)}</p>
+        </div>
+        <div className="glass-card rounded-xl p-5">
+          <p className="text-[10px] uppercase text-muted-foreground">Total Purchases</p>
+          <p className="text-xl font-bold text-warning">{formatCurrency(totalPurchases)}</p>
         </div>
         <div className="glass-card rounded-xl p-5">
           <p className="text-[10px] uppercase text-muted-foreground">Total Paid Out</p>
@@ -203,7 +237,7 @@ function EntriesPage() {
 
       {/* Type Filters */}
       <div className="flex flex-wrap gap-2">
-        {(["all", "client_receive", "supplier_payment", "agent_commission", "expense"] as const).map((t) => (
+        {(["all", "client_receive", "purchase", "supplier_payment", "agent_commission", "expense"] as const).map((t) => (
           <button key={t} onClick={() => setTypeFilter(t)} className={`rounded-lg px-4 py-2 text-xs font-medium transition-all ${typeFilter === t ? "bg-primary text-primary-foreground" : "bg-accent/30 text-muted-foreground hover:bg-accent/50"}`}>
             {t === "all" ? "All" : typeLabels[t]}
           </button>

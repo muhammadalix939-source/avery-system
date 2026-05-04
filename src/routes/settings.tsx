@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useState } from "react";
-import { Save, Settings as SettingsIcon } from "lucide-react";
+import { Save, Settings as SettingsIcon, Trash2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,6 +43,16 @@ function SettingsPage() {
 
   function reset() {
     setForm({ revenue: "0", pending: "0", bookings: "0", clients: "0", supplierDue: "0", profit: "0", note: "" });
+  }
+
+  function wipeAll(keepOpening: boolean) {
+    const msg = keepOpening
+      ? "This will permanently delete all clients, bookings, agents, suppliers, entries and monthly history. Opening balances will be kept. Continue?"
+      : "This will permanently delete EVERYTHING (including opening balances) and reset the system to a true blank slate. Continue?";
+    if (!confirm(msg)) return;
+    store.resetAllData({ keepOpening });
+    if (!keepOpening) setForm({ revenue: "0", pending: "0", bookings: "0", clients: "0", supplierDue: "0", profit: "0", note: "" });
+    toast.success(keepOpening ? "All operational data cleared." : "System fully reset to blank slate.");
   }
 
   const fields: Array<[keyof typeof form, string, string]> = [
@@ -125,6 +135,27 @@ function SettingsPage() {
           <span className="text-primary font-medium"> clients</span> are set inside each record's edit form
           (Previous Commission, Previous Payable, etc). These flow into their statements automatically.
         </p>
+      </motion.div>
+
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+        className="glass-card rounded-xl p-6 border-destructive/40">
+        <div className="flex items-center gap-3 border-b border-border/50 pb-4 mb-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/10">
+            <AlertTriangle className="h-5 w-5 text-destructive" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-destructive">Danger Zone</h3>
+            <p className="text-xs text-muted-foreground">Use these only when starting fresh. Mock / sample data lingering in the system can be wiped here.</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => wipeAll(true)} variant="outline" className="gap-2 border-warning/40 text-warning hover:bg-warning/10">
+            <Trash2 className="h-4 w-4" /> Clear all operational data (keep opening balances)
+          </Button>
+          <Button onClick={() => wipeAll(false)} variant="destructive" className="gap-2">
+            <Trash2 className="h-4 w-4" /> Wipe everything (full reset)
+          </Button>
+        </div>
       </motion.div>
     </div>
   );
