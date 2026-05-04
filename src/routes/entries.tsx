@@ -42,6 +42,7 @@ function EntriesPage() {
   const [selected, setSelected] = useState<LedgerEntry | null>(null);
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [form, setForm] = useState({ date: "", type: "client_receive" as LedgerEntry["type"], headId: "", referenceId: "", referenceName: "", amount: "", note: "" });
+  const [serviceCategory, setServiceCategory] = useState<string>("");
 
   const sorted = [...store.entries].sort((a, b) => b.date.localeCompare(a.date));
   const filtered = typeFilter === "all" ? sorted : sorted.filter((e) => e.type === typeFilter);
