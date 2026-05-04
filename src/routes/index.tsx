@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { DollarSign, Users, BookOpen, TrendingUp, Clock, Receipt, ShoppingCart } from "lucide-react";
+import { DollarSign, Users, BookOpen, TrendingUp, Clock, Receipt } from "lucide-react";
 import StatsCard from "@/components/StatsCard";
 import StatusBadge from "@/components/StatusBadge";
 import PageHeader from "@/components/PageHeader";
@@ -30,16 +30,20 @@ const monthOrder = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep
 function Dashboard() {
   const store = useStore();
   const o = store.opening;
-  const totalRevenue = store.bookings.reduce((s, b) => s + b.amountReceived, 0) + (o.revenue || 0);
-  const totalPending = store.bookings.reduce((s, b) => s + (b.totalAmount - b.amountReceived), 0) + (o.pending || 0);
+  const liveClientReceived = store.entries.filter((e) => e.type === "client_receive").reduce((s, e) => s + e.amount, 0);
+  const livePurchases = store.entries.filter((e) => e.type === "purchase").reduce((s, e) => s + e.amount, 0);
+  const liveSupplierPaid = store.entries.filter((e) => e.type === "supplier_payment").reduce((s, e) => s + e.amount, 0);
+  const liveExpenses = store.entries.filter((e) => e.type === "expense").reduce((s, e) => s + e.amount, 0);
+  const liveAgentCommissionPaid = store.entries.filter((e) => e.type === "agent_commission").reduce((s, e) => s + e.amount, 0);
+  const bookedSales = store.bookings.reduce((s, b) => s + b.totalAmount, 0);
+  const totalRevenue = liveClientReceived + (o.revenue || 0);
+  const totalPending = Math.max(0, bookedSales + (o.pending || 0) - totalRevenue);
   const totalClients = store.clients.length + (o.clients || 0);
   const totalBookings = store.bookings.length + (o.bookings || 0);
-  const supplierPayable = store.suppliers.reduce((s, sp) => s + (sp.totalPayable - sp.totalPaid), 0) + (o.supplierDue || 0);
-  const totalExpenses = store.entries.filter((e) => e.type === "expense").reduce((s, e) => s + e.amount, 0);
-  const totalSupplierPaid = store.suppliers.reduce((s, sp) => s + sp.totalPaid, 0);
-  const totalAgentCommissionPaid = store.entries.filter((e) => e.type === "agent_commission").reduce((s, e) => s + e.amount, 0);
-  const profit = totalRevenue - totalSupplierPaid - totalExpenses - totalAgentCommissionPaid + (o.profit || 0);
-  const cashOnHand = totalRevenue - totalSupplierPaid - totalExpenses - totalAgentCommissionPaid;
+  const supplierPayable = store.suppliers.reduce((s, sp) => s + Math.max(0, (sp.totalPayable + (sp.openingPayable || 0)) - (sp.totalPaid + (sp.openingPaid || 0))), 0) + (o.supplierDue || 0);
+  const totalExpenses = liveExpenses;
+  const profit = totalRevenue - livePurchases - totalExpenses - liveAgentCommissionPaid + (o.profit || 0);
+  const cashOnHand = totalRevenue - liveSupplierPaid - totalExpenses - liveAgentCommissionPaid;
 
   const hasAnyData =
     store.bookings.length > 0 || store.clients.length > 0 || store.entries.length > 0 ||
@@ -108,7 +112,7 @@ function Dashboard() {
       )}
 
       {/* Monthly Records — current month first */}
-      {sortedMonthly.length > 0 && (
+      {hasAnyData && sortedMonthly.length > 0 && (
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="glass-card rounded-xl p-5">
         <h3 className="mb-4 text-sm font-semibold text-foreground">Monthly Records</h3>
         <div className="overflow-x-auto">
