@@ -216,10 +216,14 @@ function EntriesPage() {
       />
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         <div className="glass-card rounded-xl p-5">
           <p className="text-[10px] uppercase text-muted-foreground">Total Received</p>
           <p className="text-xl font-bold text-success">{formatCurrency(totalReceived)}</p>
+        </div>
+        <div className="glass-card rounded-xl p-5">
+          <p className="text-[10px] uppercase text-muted-foreground">Total Purchases</p>
+          <p className="text-xl font-bold text-warning">{formatCurrency(totalPurchases)}</p>
         </div>
         <div className="glass-card rounded-xl p-5">
           <p className="text-[10px] uppercase text-muted-foreground">Total Paid Out</p>
@@ -233,7 +237,7 @@ function EntriesPage() {
 
       {/* Type Filters */}
       <div className="flex flex-wrap gap-2">
-        {(["all", "client_receive", "supplier_payment", "agent_commission", "expense"] as const).map((t) => (
+        {(["all", "client_receive", "purchase", "supplier_payment", "agent_commission", "expense"] as const).map((t) => (
           <button key={t} onClick={() => setTypeFilter(t)} className={`rounded-lg px-4 py-2 text-xs font-medium transition-all ${typeFilter === t ? "bg-primary text-primary-foreground" : "bg-accent/30 text-muted-foreground hover:bg-accent/50"}`}>
             {t === "all" ? "All" : typeLabels[t]}
           </button>
