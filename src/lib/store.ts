@@ -7,13 +7,15 @@ import { getPKTDate } from "./date-utils";
 export interface LedgerEntry {
   id: string;
   date: string;
-  type: "client_receive" | "supplier_payment" | "agent_commission" | "expense";
+  type: "client_receive" | "supplier_payment" | "agent_commission" | "expense" | "purchase";
   headId: string;
   referenceId: string; // client/supplier/agent ID
   referenceName: string;
   amount: number;
   note: string;
   createdAt: string;
+  // For purchase entries: which service was bought (Hotel, Flight, Visa, Transport, Other)
+  serviceCategory?: string;
 }
 
 // ---------- Persistence (localStorage) ----------
@@ -278,6 +280,18 @@ export function useStore() {
         suppliers = suppliers.map((s) => s.id === data.referenceId ? { ...s, totalPaid } : s);
       }
 
+      if (data.type === "purchase" && data.referenceId) {
+        // Purchase: increase supplier totalPayable (we owe them more)
+        const totalPurchases = entries.filter((e) => e.type === "purchase" && e.referenceId === data.referenceId).reduce((s, e) => s + e.amount, 0);
+        const sup = suppliers.find((s) => s.id === data.referenceId);
+        if (sup) {
+          // Recompute payable = (sum of all purchases for this supplier) + opening, leaving paid alone
+          // But other bookings may also contribute totalCost to totalPayable in legacy data,
+          // so we treat purchase entries as the canonical source: add the new amount only.
+          suppliers = suppliers.map((s) => s.id === data.referenceId ? { ...s, totalPayable: s.totalPayable + (data.amount || 0) } : s);
+        }
+      }
+
       if (data.type === "agent_commission" && data.referenceId) {
         // Update agent paidCommission
         const totalPaid = entries.filter((e) => e.type === "agent_commission" && e.referenceId === data.referenceId).reduce((s, e) => s + e.amount, 0);
@@ -292,7 +306,22 @@ export function useStore() {
       notify();
     },
     deleteEntry: (id: string) => {
+      const e = entries.find((x) => x.id === id);
       entries = entries.filter((e) => e.id !== id);
+      // Reverse side effects
+      if (e) {
+        if (e.type === "purchase" && e.referenceId) {
+          suppliers = suppliers.map((s) => s.id === e.referenceId ? { ...s, totalPayable: Math.max(0, s.totalPayable - e.amount) } : s);
+        }
+        if (e.type === "supplier_payment" && e.referenceId) {
+          const totalPaid = entries.filter((x) => x.type === "supplier_payment" && x.referenceId === e.referenceId).reduce((s, x) => s + x.amount, 0);
+          suppliers = suppliers.map((s) => s.id === e.referenceId ? { ...s, totalPaid } : s);
+        }
+        if (e.type === "agent_commission" && e.referenceId) {
+          const totalPaid = entries.filter((x) => x.type === "agent_commission" && x.referenceId === e.referenceId).reduce((s, x) => s + x.amount, 0);
+          agents = agents.map((a) => a.id === e.referenceId ? { ...a, paidCommission: totalPaid } : a);
+        }
+      }
       notify();
     },
 
@@ -356,6 +385,20 @@ export function useStore() {
     // Opening balances (dashboard baseline)
     setOpeningBalances: (data: Partial<OpeningBalances>) => {
       opening = { ...opening, ...data };
+      notify();
+    },
+
+    // Wipe everything to a true blank slate (keeps opening balances editable in settings)
+    resetAllData: (opts?: { keepOpening?: boolean }) => {
+      clients = [];
+      bookings = [];
+      agents = [];
+      suppliers = [];
+      entries = [];
+      monthlyData = [];
+      if (!opts?.keepOpening) opening = { ...defaultOpening };
+      nextClientNum = 1; nextAgentNum = 1; nextSupplierNum = 1;
+      nextBookingNum = 1; nextHeadNum = 1; nextEntryNum = 1;
       notify();
     },
   };
