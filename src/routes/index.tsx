@@ -35,6 +35,10 @@ function Dashboard() {
   const liveSupplierPaid = store.entries.filter((e) => e.type === "supplier_payment").reduce((s, e) => s + e.amount, 0);
   const liveExpenses = store.entries.filter((e) => e.type === "expense").reduce((s, e) => s + e.amount, 0);
   const liveAgentCommissionPaid = store.entries.filter((e) => e.type === "agent_commission").reduce((s, e) => s + e.amount, 0);
+  const purchaseHeads = new Set(store.entries.filter((e) => e.type === "purchase" && e.headId).map((e) => e.headId));
+  const bookingCostFallback = store.bookings.filter((b) => !purchaseHeads.has(b.headId)).reduce((s, b) => s + (b.totalCost || 0), 0);
+  const totalBusinessCost = livePurchases + bookingCostFallback;
+  const agentCommissionEarned = store.bookings.reduce((s, b) => s + (b.commission || 0), 0);
   const bookedSales = store.bookings.reduce((s, b) => s + b.totalAmount, 0);
   const totalRevenue = liveClientReceived + (o.revenue || 0);
   const totalPending = Math.max(0, bookedSales + (o.pending || 0) - totalRevenue);
@@ -42,7 +46,7 @@ function Dashboard() {
   const totalBookings = store.bookings.length + (o.bookings || 0);
   const supplierPayable = store.suppliers.reduce((s, sp) => s + Math.max(0, (sp.totalPayable + (sp.openingPayable || 0)) - (sp.totalPaid + (sp.openingPaid || 0))), 0) + (o.supplierDue || 0);
   const totalExpenses = liveExpenses;
-  const profit = totalRevenue - livePurchases - totalExpenses - liveAgentCommissionPaid + (o.profit || 0);
+  const profit = totalRevenue - totalBusinessCost - totalExpenses - agentCommissionEarned + (o.profit || 0);
   const cashOnHand = totalRevenue - liveSupplierPaid - totalExpenses - liveAgentCommissionPaid;
 
   const hasAnyData =
