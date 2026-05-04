@@ -158,16 +158,18 @@ function SuppliersPage() {
             </thead>
             <tbody>
               {store.suppliers.map((s) => {
-                const remaining = s.totalPayable - s.totalPaid;
-                const status = remaining === 0 ? "Paid" : remaining < s.totalPayable ? "Partial" : "Unpaid";
+                const payable = s.totalPayable + (s.openingPayable || 0);
+                const paid = s.totalPaid + (s.openingPaid || 0);
+                const remaining = payable - paid;
+                const status = remaining <= 0 ? "Paid" : paid > 0 ? "Partial" : "Unpaid";
                 return (
                   <tr key={s.id} className="border-b border-border/50 transition-colors hover:bg-accent/30">
                     <td className="px-4 py-3 font-semibold text-primary">{s.id}</td>
                     <td className="px-4 py-3 font-medium">{s.companyName}</td>
                     <td className="px-4 py-3"><p className="text-sm">{s.contactPerson}</p><p className="text-xs text-muted-foreground">{s.phone}</p></td>
                     <td className="px-4 py-3">{s.serviceType}</td>
-                    <td className="px-4 py-3">{formatCurrency(s.totalPayable)}</td>
-                    <td className="px-4 py-3 text-success">{formatCurrency(s.totalPaid)}</td>
+                    <td className="px-4 py-3"><p>{formatCurrency(payable)}</p>{(s.openingPayable || 0) > 0 && <p className="text-[9px] text-muted-foreground">incl. {formatCurrency(s.openingPayable || 0)} B/F</p>}</td>
+                    <td className="px-4 py-3 text-success"><p>{formatCurrency(paid)}</p>{(s.openingPaid || 0) > 0 && <p className="text-[9px] text-muted-foreground">incl. {formatCurrency(s.openingPaid || 0)} B/F</p>}</td>
                     <td className="px-4 py-3 text-destructive">{formatCurrency(remaining)}</td>
                     <td className="px-4 py-3"><StatusBadge status={status} /></td>
                     <td className="px-4 py-3">
@@ -188,13 +190,19 @@ function SuppliersPage() {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {store.suppliers.map((s, i) => {
-          const remaining = s.totalPayable - s.totalPaid;
-          const paidPercent = s.totalPayable > 0 ? Math.round((s.totalPaid / s.totalPayable) * 100) : 0;
+          const payable = s.totalPayable + (s.openingPayable || 0);
+          const paid = s.totalPaid + (s.openingPaid || 0);
+          const remaining = payable - paid;
+          const paidPercent = payable > 0 ? Math.min(100, Math.round((paid / payable) * 100)) : 0;
           return (
             <motion.div key={s.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="glass-card rounded-xl p-5">
-              <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-semibold">{s.companyName}</h3><span className="text-xs text-muted-foreground">{s.id}</span></div>
+              <div className="mb-3 flex items-center justify-between"><div><h3 className="text-sm font-semibold">{s.companyName}</h3><p className="text-[10px] text-muted-foreground">{s.serviceType}</p></div><span className="text-xs text-muted-foreground">{s.id}</span></div>
               <div className="mb-2 h-2 overflow-hidden rounded-full bg-accent/30"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${paidPercent}%` }} /></div>
-              <div className="flex justify-between text-xs text-muted-foreground"><span>Paid: {formatCurrency(s.totalPaid)}</span><span>Remaining: {formatCurrency(remaining)}</span></div>
+              <div className="grid grid-cols-3 gap-2 border-t border-border/50 pt-3 text-xs">
+                <div><p className="text-[10px] uppercase text-muted-foreground">Payable</p><p className="font-semibold text-primary">{formatCurrency(payable)}</p>{(s.openingPayable || 0) > 0 && <p className="text-[9px] text-muted-foreground">incl. {formatCurrency(s.openingPayable || 0)} B/F</p>}</div>
+                <div><p className="text-[10px] uppercase text-muted-foreground">Paid</p><p className="font-semibold text-success">{formatCurrency(paid)}</p>{(s.openingPaid || 0) > 0 && <p className="text-[9px] text-muted-foreground">incl. {formatCurrency(s.openingPaid || 0)} B/F</p>}</div>
+                <div><p className="text-[10px] uppercase text-muted-foreground">Remaining</p><p className="font-semibold text-destructive">{formatCurrency(remaining)}</p></div>
+              </div>
             </motion.div>
           );
         })}
