@@ -74,7 +74,7 @@ function SuppliersPage() {
     setSelected(s);
     setForm({
       companyName: s.companyName, contactPerson: s.contactPerson, phone: s.phone, email: s.email,
-      serviceType: s.serviceType,
+      serviceTypes: s.serviceType.split(",").map((item) => item.trim()).filter(Boolean),
       totalPayable: String(s.totalPayable), totalPaid: String(s.totalPaid),
       openingPayable: String(s.openingPayable || 0), openingPaid: String(s.openingPaid || 0),
     });
@@ -98,13 +98,15 @@ function SuppliersPage() {
         <div><Label className="text-xs">Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
         <div><Label className="text-xs">Email</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
       </div>
-      <div><Label className="text-xs">Service Type</Label>
-        <Select value={form.serviceType} onValueChange={(v) => setForm({ ...form, serviceType: v as Supplier["serviceType"] })}>
-          <SelectTrigger className="bg-accent/20 border-border mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {SERVICE_TYPES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-          </SelectContent>
-        </Select>
+      <div><Label className="text-xs">Service Types</Label>
+        <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg border border-border/50 bg-accent/10 p-3 sm:grid-cols-3">
+          {SERVICE_TYPES.map((s) => (
+            <label key={s} className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Checkbox checked={form.serviceTypes.includes(s)} onCheckedChange={() => toggleService(s)} />
+              <span>{s}</span>
+            </label>
+          ))}
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div><Label className="text-xs">Total Payable (PKR)</Label><Input type="number" value={form.totalPayable} onChange={(e) => setForm({ ...form, totalPayable: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
@@ -131,7 +133,7 @@ function SuppliersPage() {
         actions={
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2" onClick={() => setForm({ companyName: "", contactPerson: "", phone: "", email: "", serviceType: "Hotel", totalPayable: "", totalPaid: "", openingPayable: "", openingPaid: "" })}>
+              <Button className="gap-2" onClick={resetSupplierForm}>
                 <Plus className="h-4 w-4" /> Add Supplier
               </Button>
             </DialogTrigger>
