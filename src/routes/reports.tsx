@@ -156,7 +156,7 @@ function ReportsPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.28 0.01 260)" />
                 <XAxis dataKey="packageType" stroke="oklch(0.6 0.02 260)" fontSize={11} />
                 <YAxis stroke="oklch(0.6 0.02 260)" fontSize={11} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
-                <Tooltip contentStyle={{ background: "oklch(0.17 0.01 260)", border: "1px solid oklch(0.28 0.01 260)", borderRadius: 8 }} formatter={(v: number) => formatCurrency(v)} />
+                <Tooltip contentStyle={{ background: "oklch(0.17 0.01 260)", border: "1px solid oklch(0.28 0.01 260)", borderRadius: 8 }} formatter={(v: any) => formatCurrency(Number(v))} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Bar dataKey="revenue" fill="oklch(0.8 0.12 80)" name="Revenue" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="cost" fill="oklch(0.6 0.15 280)" name="Cost" radius={[4, 4, 0, 0]} />
@@ -201,7 +201,7 @@ function ReportsPage() {
               <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.28 0.01 260)" />
               <XAxis dataKey="month" stroke="oklch(0.6 0.02 260)" fontSize={11} />
               <YAxis stroke="oklch(0.6 0.02 260)" fontSize={11} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
-              <Tooltip contentStyle={{ background: "oklch(0.17 0.01 260)", border: "1px solid oklch(0.28 0.01 260)", borderRadius: 8 }} formatter={(v: number) => formatCurrency(v)} />
+              <Tooltip contentStyle={{ background: "oklch(0.17 0.01 260)", border: "1px solid oklch(0.28 0.01 260)", borderRadius: 8 }} formatter={(v: any) => formatCurrency(Number(v))} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Line type="monotone" dataKey="revenue" stroke="oklch(0.8 0.12 80)" strokeWidth={2} dot={false} name="Revenue" />
               <Line type="monotone" dataKey="cost" stroke="oklch(0.6 0.15 280)" strokeWidth={2} dot={false} name="Cost" />
@@ -241,7 +241,7 @@ function ReportsPage() {
                   <Pie data={expCats} dataKey="amount" nameKey="category" cx="50%" cy="50%" innerRadius={45} outerRadius={75} stroke="none">
                     {expCats.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Pie>
-                  <Tooltip contentStyle={{ background: "oklch(0.17 0.01 260)", border: "1px solid oklch(0.28 0.01 260)", borderRadius: 8 }} formatter={(v: number) => formatCurrency(v)} />
+                  <Tooltip contentStyle={{ background: "oklch(0.17 0.01 260)", border: "1px solid oklch(0.28 0.01 260)", borderRadius: 8 }} formatter={(v: any) => formatCurrency(Number(v))} />
                 </PieChart>
               </ResponsiveContainer>
               <table className="mt-3 w-full text-sm">
