@@ -76,10 +76,6 @@ function Dashboard() {
         <StatsCard title="Supplier Due" value={formatCurrency(supplierPayable)} icon={TrendingUp} delay={0.2} />
         <StatsCard title="Expenses" value={formatCurrency(totalExpenses)} icon={Receipt} delay={0.25} />
       </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <StatsCard title="Net Profit" value={formatCurrency(profit)} icon={DollarSign} delay={0.3} />
-        <StatsCard title="Cash on Hand" value={formatCurrency(cashOnHand)} icon={DollarSign} delay={0.35} />
-      </div>
 
       {hasAnyData && (
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
