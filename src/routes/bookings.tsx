@@ -118,6 +118,7 @@ function BookingsPage() {
         firstName: m.firstName || `Member`,
         lastName: m.lastName || `${i + 1}`,
         gender: m.gender,
+        ageCategory: m.ageCategory,
         nationality: m.nationality || memberForms[0]?.nationality || "",
         passport: m.passport,
         cnic: m.cnic,
