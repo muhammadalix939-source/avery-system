@@ -291,42 +291,57 @@ function BookingsPage() {
     </div>
   );
 
-  const step2Fields = (
-    <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1">
-      <p className="text-xs text-muted-foreground">Member 1's nationality, phone & email auto-fill to all members. Override individually if needed.</p>
-      {memberForms.map((m, i) => (
-        <div key={i} className="rounded-lg border border-border/50 p-3 space-y-2">
-          <p className="text-xs font-semibold text-primary">Member {i + 1} {i === 0 && "(Head)"}</p>
-          <div className="grid grid-cols-3 gap-2">
-            <div><Label className="text-[10px]">First Name</Label><Input value={m.firstName} onChange={(e) => updateMember(i, "firstName", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
-            <div><Label className="text-[10px]">Last Name</Label><Input value={m.lastName} onChange={(e) => updateMember(i, "lastName", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
-            <div><Label className="text-[10px]">Gender</Label>
-              <Select value={m.gender} onValueChange={(v) => updateMember(i, "gender", v)}>
-                <SelectTrigger className="bg-accent/20 border-border mt-0.5 h-7 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="Male">Male</SelectItem><SelectItem value="Female">Female</SelectItem><SelectItem value="Custom">Custom</SelectItem></SelectContent>
-              </Select>
-            </div>
+  const currentMember = memberForms[memberIndex];
+  const step2Fields = currentMember ? (
+    <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
+      <div className="flex items-center justify-between rounded-lg bg-accent/20 px-3 py-2">
+        <p className="text-xs font-semibold text-primary">
+          Member {memberIndex + 1} of {memberForms.length} {memberIndex === 0 && "(Head)"}
+        </p>
+        <div className="flex gap-1">
+          {memberForms.map((_, i) => (
+            <span key={i} className={`h-1.5 w-6 rounded-full ${i === memberIndex ? "bg-primary" : i < memberIndex ? "bg-primary/50" : "bg-border"}`} />
+          ))}
+        </div>
+      </div>
+      <div className="rounded-lg border border-border/50 p-3 space-y-2">
+        <div className="grid grid-cols-2 gap-2">
+          <div><Label className="text-[10px]">Type</Label>
+            <Select value={currentMember.ageCategory} onValueChange={(v) => updateMember(memberIndex, "ageCategory", v)}>
+              <SelectTrigger className="bg-accent/20 border-border mt-0.5 h-7 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="Adult">Adult</SelectItem><SelectItem value="Child">Child</SelectItem></SelectContent>
+            </Select>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div><Label className="text-[10px]">Nationality</Label><Input value={m.nationality} onChange={(e) => updateMember(i, "nationality", e.target.value)} placeholder={i > 0 ? "Auto from Member 1" : "e.g. Pakistani"} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
-            <div><Label className="text-[10px]">Date of Birth</Label><Input type="date" value={m.dateOfBirth} onChange={(e) => updateMember(i, "dateOfBirth", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div><Label className="text-[10px]">Passport Number</Label><Input value={m.passport} onChange={(e) => updateMember(i, "passport", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
-            <div><Label className="text-[10px]">CNIC</Label><Input value={m.cnic} onChange={(e) => updateMember(i, "cnic", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div><Label className="text-[10px]">Date of Issue</Label><Input type="date" value={m.dateOfIssue} onChange={(e) => updateMember(i, "dateOfIssue", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
-            <div><Label className="text-[10px]">Date of Expire</Label><Input type="date" value={m.dateOfExpire} onChange={(e) => updateMember(i, "dateOfExpire", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div><Label className="text-[10px]">Contact</Label><Input value={m.phone} onChange={(e) => updateMember(i, "phone", e.target.value)} placeholder={i > 0 ? "Auto from Member 1" : ""} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
-            <div><Label className="text-[10px]">Email</Label><Input value={m.email} onChange={(e) => updateMember(i, "email", e.target.value)} placeholder={i > 0 ? "Auto from Member 1" : ""} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+          <div><Label className="text-[10px]">Gender</Label>
+            <Select value={currentMember.gender} onValueChange={(v) => updateMember(memberIndex, "gender", v)}>
+              <SelectTrigger className="bg-accent/20 border-border mt-0.5 h-7 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="Male">Male</SelectItem><SelectItem value="Female">Female</SelectItem><SelectItem value="Custom">Custom</SelectItem></SelectContent>
+            </Select>
           </div>
         </div>
-      ))}
+        <div className="grid grid-cols-2 gap-2">
+          <div><Label className="text-[10px]">First Name</Label><Input value={currentMember.firstName} onChange={(e) => updateMember(memberIndex, "firstName", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+          <div><Label className="text-[10px]">Last Name</Label><Input value={currentMember.lastName} onChange={(e) => updateMember(memberIndex, "lastName", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div><Label className="text-[10px]">Nationality</Label><Input value={currentMember.nationality} onChange={(e) => updateMember(memberIndex, "nationality", e.target.value)} placeholder={memberIndex > 0 ? "Auto from Member 1" : "e.g. Pakistani"} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+          <div><Label className="text-[10px]">Date of Birth</Label><Input type="date" value={currentMember.dateOfBirth} onChange={(e) => updateMember(memberIndex, "dateOfBirth", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div><Label className="text-[10px]">Passport Number</Label><Input value={currentMember.passport} onChange={(e) => updateMember(memberIndex, "passport", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+          <div><Label className="text-[10px]">CNIC</Label><Input value={currentMember.cnic} onChange={(e) => updateMember(memberIndex, "cnic", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div><Label className="text-[10px]">Date of Issue</Label><Input type="date" value={currentMember.dateOfIssue} onChange={(e) => updateMember(memberIndex, "dateOfIssue", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+          <div><Label className="text-[10px]">Date of Expire</Label><Input type="date" value={currentMember.dateOfExpire} onChange={(e) => updateMember(memberIndex, "dateOfExpire", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div><Label className="text-[10px]">Contact</Label><Input value={currentMember.phone} onChange={(e) => updateMember(memberIndex, "phone", e.target.value)} placeholder={memberIndex > 0 ? "Auto from Member 1" : ""} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+          <div><Label className="text-[10px]">Email</Label><Input value={currentMember.email} onChange={(e) => updateMember(memberIndex, "email", e.target.value)} placeholder={memberIndex > 0 ? "Auto from Member 1" : ""} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+        </div>
+      </div>
     </div>
-  );
+  ) : null;
 
   const editFormFields = (
     <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
