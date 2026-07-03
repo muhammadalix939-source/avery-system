@@ -25,6 +25,7 @@ interface MemberForm {
   firstName: string;
   lastName: string;
   gender: "Male" | "Female" | "Custom";
+  ageCategory: "Adult" | "Child";
   nationality: string;
   passport: string;
   cnic: string;
@@ -36,7 +37,7 @@ interface MemberForm {
 }
 
 const emptyMember: MemberForm = {
-  firstName: "", lastName: "", gender: "Male", nationality: "", passport: "", cnic: "",
+  firstName: "", lastName: "", gender: "Male", ageCategory: "Adult", nationality: "", passport: "", cnic: "",
   dateOfBirth: "", dateOfIssue: "", dateOfExpire: "", phone: "", email: "",
 };
 
@@ -50,22 +51,31 @@ function BookingsPage() {
   const [form, setForm] = useState({
     agentId: "", supplierId: "", totalAmount: "", amountReceived: "", totalCost: "", commission: "",
     packageType: "Umrah" as Booking["packageType"], status: "Pending" as Booking["status"],
-    travelDate: "", members: "1", destination: "", driveLink: "",
+    travelDate: "", adults: "1", children: "0", destination: "", driveLink: "",
   });
 
   const [memberForms, setMemberForms] = useState<MemberForm[]>([]);
+  const [memberIndex, setMemberIndex] = useState(0);
 
   function resetForm() {
-    setForm({ agentId: "", supplierId: "", totalAmount: "", amountReceived: "", totalCost: "", commission: "", packageType: "Umrah", status: "Pending", travelDate: "", members: "1", destination: "", driveLink: "" });
+    setForm({ agentId: "", supplierId: "", totalAmount: "", amountReceived: "", totalCost: "", commission: "", packageType: "Umrah", status: "Pending", travelDate: "", adults: "1", children: "0", destination: "", driveLink: "" });
     setMemberForms([]);
+    setMemberIndex(0);
     setStep(1);
   }
 
   function goToStep2() {
-    const count = Math.max(1, Number(form.members) || 1);
-    const existing = [...memberForms];
-    while (existing.length < count) existing.push({ ...emptyMember });
-    setMemberForms(existing.slice(0, count));
+    const adults = Math.max(0, Number(form.adults) || 0);
+    const children = Math.max(0, Number(form.children) || 0);
+    const total = Math.max(1, adults + children);
+    const built: MemberForm[] = [];
+    for (let i = 0; i < total; i++) {
+      const existing = memberForms[i];
+      const category: "Adult" | "Child" = i < adults ? "Adult" : "Child";
+      built.push(existing ? { ...existing, ageCategory: category } : { ...emptyMember, ageCategory: category });
+    }
+    setMemberForms(built);
+    setMemberIndex(0);
     setStep(2);
   }
 
