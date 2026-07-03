@@ -418,11 +418,22 @@ function BookingsPage() {
               </DialogHeader>
               {step === 1 ? step1Fields : step2Fields}
               <div className="flex gap-2">
-                {step === 2 && <Button variant="outline" onClick={() => setStep(1)} className="flex-1">Back</Button>}
                 {step === 1 ? (
                   <Button onClick={goToStep2} className="w-full">Next → Member Details</Button>
                 ) : (
-                  <Button onClick={handleAdd} className="flex-1">Create Booking</Button>
+                  <>
+                    <Button variant="outline" onClick={() => {
+                      if (memberIndex === 0) setStep(1);
+                      else setMemberIndex(memberIndex - 1);
+                    }} className="flex-1">
+                      {memberIndex === 0 ? "← Booking Details" : "← Previous Member"}
+                    </Button>
+                    {memberIndex < memberForms.length - 1 ? (
+                      <Button onClick={() => setMemberIndex(memberIndex + 1)} className="flex-1">Next Member →</Button>
+                    ) : (
+                      <Button onClick={handleAdd} className="flex-1">Create Booking</Button>
+                    )}
+                  </>
                 )}
               </div>
             </DialogContent>
