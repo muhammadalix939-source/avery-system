@@ -25,7 +25,7 @@ interface MemberForm {
   firstName: string;
   lastName: string;
   gender: "Male" | "Female" | "Custom";
-  ageCategory: "Adult" | "Child";
+  ageCategory: "Adult" | "Child" | "Infant";
   nationality: string;
   passport: string;
   cnic: string;
@@ -51,14 +51,16 @@ function BookingsPage() {
   const [form, setForm] = useState({
     agentId: "", supplierId: "", totalAmount: "", amountReceived: "", totalCost: "", commission: "",
     packageType: "Umrah" as Booking["packageType"], status: "Pending" as Booking["status"],
-    travelDate: "", adults: "1", children: "0", destination: "", driveLink: "",
+    travelDate: "", adults: "1", children: "0", infants: "0", destination: "", driveLink: "",
+    pricingMode: "total" as "total" | "per_person",
+    adultPrice: "", childPrice: "", infantPrice: "",
   });
 
   const [memberForms, setMemberForms] = useState<MemberForm[]>([]);
   const [memberIndex, setMemberIndex] = useState(0);
 
   function resetForm() {
-    setForm({ agentId: "", supplierId: "", totalAmount: "", amountReceived: "", totalCost: "", commission: "", packageType: "Umrah", status: "Pending", travelDate: "", adults: "1", children: "0", destination: "", driveLink: "" });
+    setForm({ agentId: "", supplierId: "", totalAmount: "", amountReceived: "", totalCost: "", commission: "", packageType: "Umrah", status: "Pending", travelDate: "", adults: "1", children: "0", infants: "0", destination: "", driveLink: "", pricingMode: "total", adultPrice: "", childPrice: "", infantPrice: "" });
     setMemberForms([]);
     setMemberIndex(0);
     setStep(1);
@@ -67,11 +69,13 @@ function BookingsPage() {
   function goToStep2() {
     const adults = Math.max(0, Number(form.adults) || 0);
     const children = Math.max(0, Number(form.children) || 0);
-    const total = Math.max(1, adults + children);
+    const infants = Math.max(0, Number(form.infants) || 0);
+    const total = Math.max(1, adults + children + infants);
     const built: MemberForm[] = [];
     for (let i = 0; i < total; i++) {
       const existing = memberForms[i];
-      const category: "Adult" | "Child" = i < adults ? "Adult" : "Child";
+      const category: "Adult" | "Child" | "Infant" =
+        i < adults ? "Adult" : i < adults + children ? "Child" : "Infant";
       built.push(existing ? { ...existing, ageCategory: category } : { ...emptyMember, ageCategory: category });
     }
     setMemberForms(built);
@@ -101,18 +105,41 @@ function BookingsPage() {
   function handleAdd() {
     const headId = store.generateHeadId();
     const today = getPKTDate();
+
+    // Compute per-member due based on pricing mode
+    const adultsCount = memberForms.filter((m) => m.ageCategory === "Adult").length;
+    const childrenCount = memberForms.filter((m) => m.ageCategory === "Child").length;
+    const infantsCount = memberForms.filter((m) => m.ageCategory === "Infant").length;
+    const childPrice = Number(form.childPrice) || 0;
+    const infantPrice = Number(form.infantPrice) || 0;
+    let adultPrice = 0;
+    let computedTotal = 0;
+    if (form.pricingMode === "per_person") {
+      adultPrice = Number(form.adultPrice) || 0;
+      computedTotal = adultPrice * adultsCount + childPrice * childrenCount + infantPrice * infantsCount;
+    } else {
+      // total mode: form.totalAmount is package total; child/infant priced separately, remainder split across adults
+      const totalEntered = Number(form.totalAmount) || 0;
+      const adultPortion = Math.max(0, totalEntered - childPrice * childrenCount - infantPrice * infantsCount);
+      adultPrice = adultsCount > 0 ? Math.round(adultPortion / adultsCount) : 0;
+      computedTotal = totalEntered;
+    }
+
     const bookingId = store.addBooking({
       headId, agentId: form.agentId, supplierId: form.supplierId,
-      totalAmount: Number(form.totalAmount) || 0, amountReceived: Number(form.amountReceived) || 0,
+      totalAmount: computedTotal, amountReceived: Number(form.amountReceived) || 0,
       totalCost: Number(form.totalCost) || 0, commission: Number(form.commission) || 0,
       clientIds: [], status: form.status, packageType: form.packageType, travelDate: form.travelDate,
       createdAt: today, members: memberForms.length,
       destination: form.destination, driveLink: form.driveLink,
     });
 
-    const perPerson = memberForms.length > 0 ? Math.round((Number(form.totalAmount) || 0) / memberForms.length) : 0;
     const clientIds: string[] = [];
     memberForms.forEach((m, i) => {
+      const due =
+        m.ageCategory === "Child" ? childPrice :
+        m.ageCategory === "Infant" ? infantPrice :
+        adultPrice;
       const cid = store.addClient({
         headId,
         firstName: m.firstName || `Member`,
@@ -129,7 +156,7 @@ function BookingsPage() {
         email: m.email || memberForms[0]?.email || "",
         packageType: form.packageType,
         paymentStatus: "Unpaid",
-        amountDue: perPerson,
+        amountDue: due,
         amountPaid: 0,
         isVip: false,
         destination: form.destination,
@@ -207,6 +234,9 @@ function BookingsPage() {
       travelDate: b.travelDate,
       adults: String(b.members || b.clientIds.length),
       children: "0",
+      infants: "0",
+      pricingMode: "total",
+      adultPrice: "", childPrice: "", infantPrice: "",
       destination: b.destination || "", driveLink: b.driveLink || "",
     });
     setEditOpen(true);
