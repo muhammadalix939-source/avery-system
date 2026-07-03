@@ -385,7 +385,7 @@ function BookingsPage() {
           <div><Label className="text-[10px]">Type</Label>
             <Select value={currentMember.ageCategory} onValueChange={(v) => updateMember(memberIndex, "ageCategory", v)}>
               <SelectTrigger className="bg-accent/20 border-border mt-0.5 h-7 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="Adult">Adult</SelectItem><SelectItem value="Child">Child</SelectItem></SelectContent>
+              <SelectContent><SelectItem value="Adult">Adult</SelectItem><SelectItem value="Child">Child</SelectItem><SelectItem value="Infant">Infant</SelectItem></SelectContent>
             </Select>
           </div>
           <div><Label className="text-[10px]">Gender</Label>
