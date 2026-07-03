@@ -25,7 +25,7 @@ interface MemberForm {
   firstName: string;
   lastName: string;
   gender: "Male" | "Female" | "Custom";
-  ageCategory: "Adult" | "Child";
+  ageCategory: "Adult" | "Child" | "Infant";
   nationality: string;
   passport: string;
   cnic: string;
@@ -51,14 +51,16 @@ function BookingsPage() {
   const [form, setForm] = useState({
     agentId: "", supplierId: "", totalAmount: "", amountReceived: "", totalCost: "", commission: "",
     packageType: "Umrah" as Booking["packageType"], status: "Pending" as Booking["status"],
-    travelDate: "", adults: "1", children: "0", destination: "", driveLink: "",
+    travelDate: "", adults: "1", children: "0", infants: "0", destination: "", driveLink: "",
+    pricingMode: "total" as "total" | "per_person",
+    adultPrice: "", childPrice: "", infantPrice: "",
   });
 
   const [memberForms, setMemberForms] = useState<MemberForm[]>([]);
   const [memberIndex, setMemberIndex] = useState(0);
 
   function resetForm() {
-    setForm({ agentId: "", supplierId: "", totalAmount: "", amountReceived: "", totalCost: "", commission: "", packageType: "Umrah", status: "Pending", travelDate: "", adults: "1", children: "0", destination: "", driveLink: "" });
+    setForm({ agentId: "", supplierId: "", totalAmount: "", amountReceived: "", totalCost: "", commission: "", packageType: "Umrah", status: "Pending", travelDate: "", adults: "1", children: "0", infants: "0", destination: "", driveLink: "", pricingMode: "total", adultPrice: "", childPrice: "", infantPrice: "" });
     setMemberForms([]);
     setMemberIndex(0);
     setStep(1);
@@ -67,11 +69,13 @@ function BookingsPage() {
   function goToStep2() {
     const adults = Math.max(0, Number(form.adults) || 0);
     const children = Math.max(0, Number(form.children) || 0);
-    const total = Math.max(1, adults + children);
+    const infants = Math.max(0, Number(form.infants) || 0);
+    const total = Math.max(1, adults + children + infants);
     const built: MemberForm[] = [];
     for (let i = 0; i < total; i++) {
       const existing = memberForms[i];
-      const category: "Adult" | "Child" = i < adults ? "Adult" : "Child";
+      const category: "Adult" | "Child" | "Infant" =
+        i < adults ? "Adult" : i < adults + children ? "Child" : "Infant";
       built.push(existing ? { ...existing, ageCategory: category } : { ...emptyMember, ageCategory: category });
     }
     setMemberForms(built);
@@ -101,18 +105,41 @@ function BookingsPage() {
   function handleAdd() {
     const headId = store.generateHeadId();
     const today = getPKTDate();
+
+    // Compute per-member due based on pricing mode
+    const adultsCount = memberForms.filter((m) => m.ageCategory === "Adult").length;
+    const childrenCount = memberForms.filter((m) => m.ageCategory === "Child").length;
+    const infantsCount = memberForms.filter((m) => m.ageCategory === "Infant").length;
+    const childPrice = Number(form.childPrice) || 0;
+    const infantPrice = Number(form.infantPrice) || 0;
+    let adultPrice = 0;
+    let computedTotal = 0;
+    if (form.pricingMode === "per_person") {
+      adultPrice = Number(form.adultPrice) || 0;
+      computedTotal = adultPrice * adultsCount + childPrice * childrenCount + infantPrice * infantsCount;
+    } else {
+      // total mode: form.totalAmount is package total; child/infant priced separately, remainder split across adults
+      const totalEntered = Number(form.totalAmount) || 0;
+      const adultPortion = Math.max(0, totalEntered - childPrice * childrenCount - infantPrice * infantsCount);
+      adultPrice = adultsCount > 0 ? Math.round(adultPortion / adultsCount) : 0;
+      computedTotal = totalEntered;
+    }
+
     const bookingId = store.addBooking({
       headId, agentId: form.agentId, supplierId: form.supplierId,
-      totalAmount: Number(form.totalAmount) || 0, amountReceived: Number(form.amountReceived) || 0,
+      totalAmount: computedTotal, amountReceived: Number(form.amountReceived) || 0,
       totalCost: Number(form.totalCost) || 0, commission: Number(form.commission) || 0,
       clientIds: [], status: form.status, packageType: form.packageType, travelDate: form.travelDate,
       createdAt: today, members: memberForms.length,
       destination: form.destination, driveLink: form.driveLink,
     });
 
-    const perPerson = memberForms.length > 0 ? Math.round((Number(form.totalAmount) || 0) / memberForms.length) : 0;
     const clientIds: string[] = [];
     memberForms.forEach((m, i) => {
+      const due =
+        m.ageCategory === "Child" ? childPrice :
+        m.ageCategory === "Infant" ? infantPrice :
+        adultPrice;
       const cid = store.addClient({
         headId,
         firstName: m.firstName || `Member`,
@@ -129,7 +156,7 @@ function BookingsPage() {
         email: m.email || memberForms[0]?.email || "",
         packageType: form.packageType,
         paymentStatus: "Unpaid",
-        amountDue: perPerson,
+        amountDue: due,
         amountPaid: 0,
         isVip: false,
         destination: form.destination,
@@ -207,6 +234,9 @@ function BookingsPage() {
       travelDate: b.travelDate,
       adults: String(b.members || b.clientIds.length),
       children: "0",
+      infants: "0",
+      pricingMode: "total",
+      adultPrice: "", childPrice: "", infantPrice: "",
       destination: b.destination || "", driveLink: b.driveLink || "",
     });
     setEditOpen(true);
@@ -273,18 +303,64 @@ function BookingsPage() {
           </Select>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label className="text-xs">Total Amount (PKR)</Label><Input type="number" value={form.totalAmount} onChange={(e) => setForm({ ...form, totalAmount: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-        <div><Label className="text-xs">Amount Received (PKR)</Label><Input type="number" value={form.amountReceived} onChange={(e) => setForm({ ...form, amountReceived: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+      <div className="grid grid-cols-4 gap-3">
+        <div><Label className="text-xs">Travel Date</Label><Input type="date" value={form.travelDate} onChange={(e) => setForm({ ...form, travelDate: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+        <div><Label className="text-xs">Adults</Label><Input type="number" min="0" value={form.adults} onChange={(e) => setForm({ ...form, adults: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+        <div><Label className="text-xs">Children</Label><Input type="number" min="0" value={form.children} onChange={(e) => setForm({ ...form, children: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+        <div><Label className="text-xs">Infants</Label><Input type="number" min="0" value={form.infants} onChange={(e) => setForm({ ...form, infants: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+      </div>
+      <div className="rounded-lg border border-border/50 p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <Label className="text-xs font-semibold">Pricing Mode</Label>
+          <div className="flex gap-1 rounded-md bg-accent/20 p-0.5">
+            <button type="button" onClick={() => setForm({ ...form, pricingMode: "total" })}
+              className={`px-3 py-1 text-[11px] rounded ${form.pricingMode === "total" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>Total Package</button>
+            <button type="button" onClick={() => setForm({ ...form, pricingMode: "per_person" })}
+              className={`px-3 py-1 text-[11px] rounded ${form.pricingMode === "per_person" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>Per Person</button>
+          </div>
+        </div>
+        {form.pricingMode === "total" ? (
+          <div className="grid grid-cols-3 gap-2">
+            <div><Label className="text-[10px]">Total Amount</Label><Input type="number" value={form.totalAmount} onChange={(e) => setForm({ ...form, totalAmount: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+            <div><Label className="text-[10px]">Child Price (each)</Label><Input type="number" value={form.childPrice} onChange={(e) => setForm({ ...form, childPrice: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+            <div><Label className="text-[10px]">Infant Price (each)</Label><Input type="number" value={form.infantPrice} onChange={(e) => setForm({ ...form, infantPrice: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-2">
+            <div><Label className="text-[10px]">Adult Price (each)</Label><Input type="number" value={form.adultPrice} onChange={(e) => setForm({ ...form, adultPrice: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+            <div><Label className="text-[10px]">Child Price (each)</Label><Input type="number" value={form.childPrice} onChange={(e) => setForm({ ...form, childPrice: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+            <div><Label className="text-[10px]">Infant Price (each)</Label><Input type="number" value={form.infantPrice} onChange={(e) => setForm({ ...form, infantPrice: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+          </div>
+        )}
+        {(() => {
+          const a = Math.max(0, Number(form.adults) || 0);
+          const c = Math.max(0, Number(form.children) || 0);
+          const inf = Math.max(0, Number(form.infants) || 0);
+          const cp = Number(form.childPrice) || 0;
+          const ip = Number(form.infantPrice) || 0;
+          let adultEach = 0; let total = 0;
+          if (form.pricingMode === "per_person") {
+            adultEach = Number(form.adultPrice) || 0;
+            total = adultEach * a + cp * c + ip * inf;
+          } else {
+            total = Number(form.totalAmount) || 0;
+            const rem = Math.max(0, total - cp * c - ip * inf);
+            adultEach = a > 0 ? Math.round(rem / a) : 0;
+          }
+          return (
+            <div className="flex flex-wrap gap-3 text-[10px] text-muted-foreground pt-1 border-t border-border/40">
+              <span>Adult × {a} @ <span className="text-primary">{formatCurrency(adultEach)}</span></span>
+              <span>Child × {c} @ <span className="text-primary">{formatCurrency(cp)}</span></span>
+              <span>Infant × {inf} @ <span className="text-primary">{formatCurrency(ip)}</span></span>
+              <span className="ml-auto font-semibold text-foreground">Total: {formatCurrency(total)}</span>
+            </div>
+          );
+        })()}
+        <div><Label className="text-[10px]">Amount Received (PKR)</Label><Input type="number" value={form.amountReceived} onChange={(e) => setForm({ ...form, amountReceived: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div><Label className="text-xs">Total Cost (PKR)</Label><Input type="number" value={form.totalCost} onChange={(e) => setForm({ ...form, totalCost: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
         <div><Label className="text-xs">Commission (PKR)</Label><Input type="number" value={form.commission} onChange={(e) => setForm({ ...form, commission: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-      </div>
-      <div className="grid grid-cols-3 gap-3">
-        <div><Label className="text-xs">Travel Date</Label><Input type="date" value={form.travelDate} onChange={(e) => setForm({ ...form, travelDate: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-        <div><Label className="text-xs">Adults</Label><Input type="number" min="0" value={form.adults} onChange={(e) => setForm({ ...form, adults: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-        <div><Label className="text-xs">Children</Label><Input type="number" min="0" value={form.children} onChange={(e) => setForm({ ...form, children: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
       </div>
       <div><Label className="text-xs">Destination</Label><Input value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} placeholder="Makkah / Madinah" className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
       <div><Label className="text-xs">Google Drive Link (optional)</Label><Input value={form.driveLink} onChange={(e) => setForm({ ...form, driveLink: e.target.value })} placeholder="https://drive.google.com/..." className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
@@ -309,7 +385,7 @@ function BookingsPage() {
           <div><Label className="text-[10px]">Type</Label>
             <Select value={currentMember.ageCategory} onValueChange={(v) => updateMember(memberIndex, "ageCategory", v)}>
               <SelectTrigger className="bg-accent/20 border-border mt-0.5 h-7 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="Adult">Adult</SelectItem><SelectItem value="Child">Child</SelectItem></SelectContent>
+              <SelectContent><SelectItem value="Adult">Adult</SelectItem><SelectItem value="Child">Child</SelectItem><SelectItem value="Infant">Infant</SelectItem></SelectContent>
             </Select>
           </div>
           <div><Label className="text-[10px]">Gender</Label>
