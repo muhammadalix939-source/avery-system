@@ -25,6 +25,7 @@ interface MemberForm {
   firstName: string;
   lastName: string;
   gender: "Male" | "Female" | "Custom";
+  ageCategory: "Adult" | "Child";
   nationality: string;
   passport: string;
   cnic: string;
@@ -36,7 +37,7 @@ interface MemberForm {
 }
 
 const emptyMember: MemberForm = {
-  firstName: "", lastName: "", gender: "Male", nationality: "", passport: "", cnic: "",
+  firstName: "", lastName: "", gender: "Male", ageCategory: "Adult", nationality: "", passport: "", cnic: "",
   dateOfBirth: "", dateOfIssue: "", dateOfExpire: "", phone: "", email: "",
 };
 
@@ -50,22 +51,31 @@ function BookingsPage() {
   const [form, setForm] = useState({
     agentId: "", supplierId: "", totalAmount: "", amountReceived: "", totalCost: "", commission: "",
     packageType: "Umrah" as Booking["packageType"], status: "Pending" as Booking["status"],
-    travelDate: "", members: "1", destination: "", driveLink: "",
+    travelDate: "", adults: "1", children: "0", destination: "", driveLink: "",
   });
 
   const [memberForms, setMemberForms] = useState<MemberForm[]>([]);
+  const [memberIndex, setMemberIndex] = useState(0);
 
   function resetForm() {
-    setForm({ agentId: "", supplierId: "", totalAmount: "", amountReceived: "", totalCost: "", commission: "", packageType: "Umrah", status: "Pending", travelDate: "", members: "1", destination: "", driveLink: "" });
+    setForm({ agentId: "", supplierId: "", totalAmount: "", amountReceived: "", totalCost: "", commission: "", packageType: "Umrah", status: "Pending", travelDate: "", adults: "1", children: "0", destination: "", driveLink: "" });
     setMemberForms([]);
+    setMemberIndex(0);
     setStep(1);
   }
 
   function goToStep2() {
-    const count = Math.max(1, Number(form.members) || 1);
-    const existing = [...memberForms];
-    while (existing.length < count) existing.push({ ...emptyMember });
-    setMemberForms(existing.slice(0, count));
+    const adults = Math.max(0, Number(form.adults) || 0);
+    const children = Math.max(0, Number(form.children) || 0);
+    const total = Math.max(1, adults + children);
+    const built: MemberForm[] = [];
+    for (let i = 0; i < total; i++) {
+      const existing = memberForms[i];
+      const category: "Adult" | "Child" = i < adults ? "Adult" : "Child";
+      built.push(existing ? { ...existing, ageCategory: category } : { ...emptyMember, ageCategory: category });
+    }
+    setMemberForms(built);
+    setMemberIndex(0);
     setStep(2);
   }
 
@@ -108,6 +118,7 @@ function BookingsPage() {
         firstName: m.firstName || `Member`,
         lastName: m.lastName || `${i + 1}`,
         gender: m.gender,
+        ageCategory: m.ageCategory,
         nationality: m.nationality || memberForms[0]?.nationality || "",
         passport: m.passport,
         cnic: m.cnic,
@@ -193,7 +204,9 @@ function BookingsPage() {
       agentId: b.agentId, supplierId: b.supplierId, totalAmount: String(b.totalAmount),
       amountReceived: String(b.amountReceived), totalCost: String(b.totalCost || 0),
       commission: String(b.commission || 0), packageType: b.packageType, status: b.status,
-      travelDate: b.travelDate, members: String(b.members || b.clientIds.length),
+      travelDate: b.travelDate,
+      adults: String(b.members || b.clientIds.length),
+      children: "0",
       destination: b.destination || "", driveLink: b.driveLink || "",
     });
     setEditOpen(true);
@@ -268,51 +281,67 @@ function BookingsPage() {
         <div><Label className="text-xs">Total Cost (PKR)</Label><Input type="number" value={form.totalCost} onChange={(e) => setForm({ ...form, totalCost: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
         <div><Label className="text-xs">Commission (PKR)</Label><Input type="number" value={form.commission} onChange={(e) => setForm({ ...form, commission: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <div><Label className="text-xs">Travel Date</Label><Input type="date" value={form.travelDate} onChange={(e) => setForm({ ...form, travelDate: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-        <div><Label className="text-xs">Number of Members</Label><Input type="number" min="1" value={form.members} onChange={(e) => setForm({ ...form, members: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+        <div><Label className="text-xs">Adults</Label><Input type="number" min="0" value={form.adults} onChange={(e) => setForm({ ...form, adults: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+        <div><Label className="text-xs">Children</Label><Input type="number" min="0" value={form.children} onChange={(e) => setForm({ ...form, children: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
       </div>
       <div><Label className="text-xs">Destination</Label><Input value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} placeholder="Makkah / Madinah" className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
       <div><Label className="text-xs">Google Drive Link (optional)</Label><Input value={form.driveLink} onChange={(e) => setForm({ ...form, driveLink: e.target.value })} placeholder="https://drive.google.com/..." className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
     </div>
   );
 
-  const step2Fields = (
-    <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1">
-      <p className="text-xs text-muted-foreground">Member 1's nationality, phone & email auto-fill to all members. Override individually if needed.</p>
-      {memberForms.map((m, i) => (
-        <div key={i} className="rounded-lg border border-border/50 p-3 space-y-2">
-          <p className="text-xs font-semibold text-primary">Member {i + 1} {i === 0 && "(Head)"}</p>
-          <div className="grid grid-cols-3 gap-2">
-            <div><Label className="text-[10px]">First Name</Label><Input value={m.firstName} onChange={(e) => updateMember(i, "firstName", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
-            <div><Label className="text-[10px]">Last Name</Label><Input value={m.lastName} onChange={(e) => updateMember(i, "lastName", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
-            <div><Label className="text-[10px]">Gender</Label>
-              <Select value={m.gender} onValueChange={(v) => updateMember(i, "gender", v)}>
-                <SelectTrigger className="bg-accent/20 border-border mt-0.5 h-7 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="Male">Male</SelectItem><SelectItem value="Female">Female</SelectItem><SelectItem value="Custom">Custom</SelectItem></SelectContent>
-              </Select>
-            </div>
+  const currentMember = memberForms[memberIndex];
+  const step2Fields = currentMember ? (
+    <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
+      <div className="flex items-center justify-between rounded-lg bg-accent/20 px-3 py-2">
+        <p className="text-xs font-semibold text-primary">
+          Member {memberIndex + 1} of {memberForms.length} {memberIndex === 0 && "(Head)"}
+        </p>
+        <div className="flex gap-1">
+          {memberForms.map((_, i) => (
+            <span key={i} className={`h-1.5 w-6 rounded-full ${i === memberIndex ? "bg-primary" : i < memberIndex ? "bg-primary/50" : "bg-border"}`} />
+          ))}
+        </div>
+      </div>
+      <div className="rounded-lg border border-border/50 p-3 space-y-2">
+        <div className="grid grid-cols-2 gap-2">
+          <div><Label className="text-[10px]">Type</Label>
+            <Select value={currentMember.ageCategory} onValueChange={(v) => updateMember(memberIndex, "ageCategory", v)}>
+              <SelectTrigger className="bg-accent/20 border-border mt-0.5 h-7 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="Adult">Adult</SelectItem><SelectItem value="Child">Child</SelectItem></SelectContent>
+            </Select>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div><Label className="text-[10px]">Nationality</Label><Input value={m.nationality} onChange={(e) => updateMember(i, "nationality", e.target.value)} placeholder={i > 0 ? "Auto from Member 1" : "e.g. Pakistani"} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
-            <div><Label className="text-[10px]">Date of Birth</Label><Input type="date" value={m.dateOfBirth} onChange={(e) => updateMember(i, "dateOfBirth", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div><Label className="text-[10px]">Passport Number</Label><Input value={m.passport} onChange={(e) => updateMember(i, "passport", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
-            <div><Label className="text-[10px]">CNIC</Label><Input value={m.cnic} onChange={(e) => updateMember(i, "cnic", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div><Label className="text-[10px]">Date of Issue</Label><Input type="date" value={m.dateOfIssue} onChange={(e) => updateMember(i, "dateOfIssue", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
-            <div><Label className="text-[10px]">Date of Expire</Label><Input type="date" value={m.dateOfExpire} onChange={(e) => updateMember(i, "dateOfExpire", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div><Label className="text-[10px]">Contact</Label><Input value={m.phone} onChange={(e) => updateMember(i, "phone", e.target.value)} placeholder={i > 0 ? "Auto from Member 1" : ""} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
-            <div><Label className="text-[10px]">Email</Label><Input value={m.email} onChange={(e) => updateMember(i, "email", e.target.value)} placeholder={i > 0 ? "Auto from Member 1" : ""} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+          <div><Label className="text-[10px]">Gender</Label>
+            <Select value={currentMember.gender} onValueChange={(v) => updateMember(memberIndex, "gender", v)}>
+              <SelectTrigger className="bg-accent/20 border-border mt-0.5 h-7 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="Male">Male</SelectItem><SelectItem value="Female">Female</SelectItem><SelectItem value="Custom">Custom</SelectItem></SelectContent>
+            </Select>
           </div>
         </div>
-      ))}
+        <div className="grid grid-cols-2 gap-2">
+          <div><Label className="text-[10px]">First Name</Label><Input value={currentMember.firstName} onChange={(e) => updateMember(memberIndex, "firstName", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+          <div><Label className="text-[10px]">Last Name</Label><Input value={currentMember.lastName} onChange={(e) => updateMember(memberIndex, "lastName", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div><Label className="text-[10px]">Nationality</Label><Input value={currentMember.nationality} onChange={(e) => updateMember(memberIndex, "nationality", e.target.value)} placeholder={memberIndex > 0 ? "Auto from Member 1" : "e.g. Pakistani"} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+          <div><Label className="text-[10px]">Date of Birth</Label><Input type="date" value={currentMember.dateOfBirth} onChange={(e) => updateMember(memberIndex, "dateOfBirth", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div><Label className="text-[10px]">Passport Number</Label><Input value={currentMember.passport} onChange={(e) => updateMember(memberIndex, "passport", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+          <div><Label className="text-[10px]">CNIC</Label><Input value={currentMember.cnic} onChange={(e) => updateMember(memberIndex, "cnic", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div><Label className="text-[10px]">Date of Issue</Label><Input type="date" value={currentMember.dateOfIssue} onChange={(e) => updateMember(memberIndex, "dateOfIssue", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+          <div><Label className="text-[10px]">Date of Expire</Label><Input type="date" value={currentMember.dateOfExpire} onChange={(e) => updateMember(memberIndex, "dateOfExpire", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div><Label className="text-[10px]">Contact</Label><Input value={currentMember.phone} onChange={(e) => updateMember(memberIndex, "phone", e.target.value)} placeholder={memberIndex > 0 ? "Auto from Member 1" : ""} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+          <div><Label className="text-[10px]">Email</Label><Input value={currentMember.email} onChange={(e) => updateMember(memberIndex, "email", e.target.value)} placeholder={memberIndex > 0 ? "Auto from Member 1" : ""} className="bg-accent/20 border-border mt-0.5 h-7 text-xs" /></div>
+        </div>
+      </div>
     </div>
-  );
+  ) : null;
 
   const editFormFields = (
     <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
@@ -389,11 +418,22 @@ function BookingsPage() {
               </DialogHeader>
               {step === 1 ? step1Fields : step2Fields}
               <div className="flex gap-2">
-                {step === 2 && <Button variant="outline" onClick={() => setStep(1)} className="flex-1">Back</Button>}
                 {step === 1 ? (
                   <Button onClick={goToStep2} className="w-full">Next → Member Details</Button>
                 ) : (
-                  <Button onClick={handleAdd} className="flex-1">Create Booking</Button>
+                  <>
+                    <Button variant="outline" onClick={() => {
+                      if (memberIndex === 0) setStep(1);
+                      else setMemberIndex(memberIndex - 1);
+                    }} className="flex-1">
+                      {memberIndex === 0 ? "← Booking Details" : "← Previous Member"}
+                    </Button>
+                    {memberIndex < memberForms.length - 1 ? (
+                      <Button onClick={() => setMemberIndex(memberIndex + 1)} className="flex-1">Next Member →</Button>
+                    ) : (
+                      <Button onClick={handleAdd} className="flex-1">Create Booking</Button>
+                    )}
+                  </>
                 )}
               </div>
             </DialogContent>

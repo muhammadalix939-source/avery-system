@@ -43,6 +43,7 @@ export interface Client {
   firstName: string;
   lastName: string;
   gender: "Male" | "Female" | "Custom";
+  ageCategory?: "Adult" | "Child";
   nationality: string;
   passport: string;
   cnic?: string;
