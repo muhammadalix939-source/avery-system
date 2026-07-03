@@ -186,6 +186,36 @@ export function useStore() {
       const after = bookings.find((b) => b.id === id);
       // Auto-sync deltas to agent / supplier when totals change
       if (before && after) {
+        // ---- Sync clients when totalAmount or amountReceived changes ----
+        const headClients = clients.filter((c) => c.headId === after.headId);
+        const totalChanged = (before.totalAmount || 0) !== (after.totalAmount || 0);
+        const receivedChanged = (before.amountReceived || 0) !== (after.amountReceived || 0);
+        if ((totalChanged || receivedChanged) && headClients.length > 0) {
+          const perPerson = Math.round((after.totalAmount || 0) / headClients.length);
+          let remaining = after.amountReceived || 0;
+          clients = clients.map((c) => {
+            if (c.headId !== after.headId) return c;
+            const due = totalChanged ? perPerson : c.amountDue;
+            if (remaining <= 0) return { ...c, amountDue: due, amountPaid: 0, paymentStatus: "Unpaid" as const };
+            if (remaining >= due) { remaining -= due; return { ...c, amountDue: due, amountPaid: due, paymentStatus: "Paid" as const }; }
+            const paid = remaining; remaining = 0;
+            return { ...c, amountDue: due, amountPaid: paid, paymentStatus: "Partial" as const };
+          });
+          // Sync a client_receive ledger entry so totals reconcile
+          if (receivedChanged) {
+            const existingReceived = entries.filter((e) => e.type === "client_receive" && e.headId === after.headId).reduce((s, e) => s + e.amount, 0);
+            const delta = (after.amountReceived || 0) - existingReceived;
+            if (delta !== 0) {
+              const eid = `E${String(nextEntryNum++).padStart(3, "0")}`;
+              entries = [...entries, {
+                id: eid, date: getPKTDate(), type: "client_receive", headId: after.headId,
+                referenceId: after.headId, referenceName: `Booking ${after.headId}`,
+                amount: delta, note: `Adjustment from booking edit`,
+                createdAt: new Date().toLocaleString("en-PK", { timeZone: "Asia/Karachi" }),
+              }];
+            }
+          }
+        }
         // Agent commission / sales delta
         if (after.agentId && after.agentId !== "Direct") {
           const agent = agents.find((a) => a.id === after.agentId);
