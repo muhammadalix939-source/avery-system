@@ -690,7 +690,21 @@ function BookingsPage() {
             const paid = memberEdit.amountPaid;
             const due = memberEdit.amountDue;
             const status: "Paid" | "Partial" | "Unpaid" = paid >= due && due > 0 ? "Paid" : paid > 0 ? "Partial" : "Unpaid";
-            store.updateClient(memberEdit.id, { ...memberEdit, paymentStatus: status });
+            if (!memberEdit.id) {
+              // New member — create client and attach to booking
+              const { id: _omit, ...rest } = memberEdit;
+              void _omit;
+              const newId = store.addClient({ ...rest, paymentStatus: status });
+              const booking = store.bookings.find((bk) => bk.headId === memberEdit.headId);
+              if (booking) {
+                store.updateBooking(booking.id, {
+                  clientIds: [...booking.clientIds, newId],
+                  members: (booking.members || booking.clientIds.length) + 1,
+                });
+              }
+            } else {
+              store.updateClient(memberEdit.id, { ...memberEdit, paymentStatus: status });
+            }
             setMemberEditOpen(false);
           }} className="w-full">Save Member</Button>
         </DialogContent>
