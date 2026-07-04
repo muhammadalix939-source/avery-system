@@ -10,7 +10,7 @@ import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import BookingServicesMenu, { VoucherDownloadMenu } from "@/components/BookingServicesMenu";
-import { formatCurrency, getClientName, PACKAGE_TYPES, type Booking } from "@/lib/data";
+import { formatCurrency, getClientName, PACKAGE_TYPES, type Booking, type Client } from "@/lib/data";
 import { useStore } from "@/lib/store";
 import { getPKTDate } from "@/lib/date-utils";
 import { generateInvoice, generatePaymentHistory } from "@/lib/pdf";
@@ -47,6 +47,9 @@ function BookingsPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [selected, setSelected] = useState<Booking | null>(null);
   const [step, setStep] = useState(1);
+
+  const [memberEditOpen, setMemberEditOpen] = useState(false);
+  const [memberEdit, setMemberEdit] = useState<Client | null>(null);
 
   const [form, setForm] = useState({
     agentId: "", supplierId: "", totalAmount: "", amountReceived: "", totalCost: "", commission: "",
@@ -215,28 +218,65 @@ function BookingsPage() {
 
   function handleEdit() {
     if (!selected) return;
+    const cs = store.clients.filter((c) => c.headId === selected.headId);
+    const adults = cs.filter((c) => (c.ageCategory || "Adult") === "Adult");
+    const children = cs.filter((c) => c.ageCategory === "Child");
+    const infants = cs.filter((c) => c.ageCategory === "Infant");
+    const childPrice = Number(form.childPrice) || 0;
+    const infantPrice = Number(form.infantPrice) || 0;
+    let adultPrice = 0;
+    let computedTotal = 0;
+    if (form.pricingMode === "per_person") {
+      adultPrice = Number(form.adultPrice) || 0;
+      computedTotal = adultPrice * adults.length + childPrice * children.length + infantPrice * infants.length;
+    } else {
+      computedTotal = Number(form.totalAmount) || 0;
+      const rem = Math.max(0, computedTotal - childPrice * children.length - infantPrice * infants.length);
+      adultPrice = adults.length > 0 ? Math.round(rem / adults.length) : 0;
+    }
     store.updateBooking(selected.id, {
       agentId: form.agentId, supplierId: form.supplierId,
-      totalAmount: Number(form.totalAmount) || 0, amountReceived: Number(form.amountReceived) || 0,
+      totalAmount: computedTotal, amountReceived: Number(form.amountReceived) || 0,
       totalCost: Number(form.totalCost) || 0, commission: Number(form.commission) || 0,
       packageType: form.packageType, status: form.status, travelDate: form.travelDate,
       destination: form.destination, driveLink: form.driveLink,
+    });
+    // Override per-category dues and redistribute the payment
+    let remaining = Number(form.amountReceived) || 0;
+    const ordered = [...adults, ...children, ...infants];
+    ordered.forEach((c) => {
+      const due = c.ageCategory === "Child" ? childPrice : c.ageCategory === "Infant" ? infantPrice : adultPrice;
+      let paid = 0;
+      let status: "Paid" | "Partial" | "Unpaid" = "Unpaid";
+      if (due <= 0) { paid = 0; status = "Paid"; }
+      else if (remaining >= due) { paid = due; remaining -= due; status = "Paid"; }
+      else if (remaining > 0) { paid = remaining; remaining = 0; status = "Partial"; }
+      store.updateClient(c.id, {
+        amountDue: due, amountPaid: paid, paymentStatus: status,
+        packageType: form.packageType, destination: form.destination,
+      });
     });
     setEditOpen(false);
   }
 
   function openEdit(b: Booking) {
+    const cs = store.clients.filter((c) => c.headId === b.headId);
+    const adults = cs.filter((c) => (c.ageCategory || "Adult") === "Adult");
+    const children = cs.filter((c) => c.ageCategory === "Child");
+    const infants = cs.filter((c) => c.ageCategory === "Infant");
     setSelected(b);
     setForm({
       agentId: b.agentId, supplierId: b.supplierId, totalAmount: String(b.totalAmount),
       amountReceived: String(b.amountReceived), totalCost: String(b.totalCost || 0),
       commission: String(b.commission || 0), packageType: b.packageType, status: b.status,
       travelDate: b.travelDate,
-      adults: String(b.members || b.clientIds.length),
-      children: "0",
-      infants: "0",
+      adults: String(adults.length || b.members || 1),
+      children: String(children.length),
+      infants: String(infants.length),
       pricingMode: "total",
-      adultPrice: "", childPrice: "", infantPrice: "",
+      adultPrice: String(adults[0]?.amountDue || 0),
+      childPrice: String(children[0]?.amountDue || 0),
+      infantPrice: String(infants[0]?.amountDue || 0),
       destination: b.destination || "", driveLink: b.driveLink || "",
     });
     setEditOpen(true);
@@ -419,59 +459,8 @@ function BookingsPage() {
     </div>
   ) : null;
 
-  const editFormFields = (
-    <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label className="text-xs">Agent</Label>
-          <SearchableSelect
-            value={form.agentId}
-            onChange={(v) => setForm({ ...form, agentId: v })}
-            placeholder="Select Agent"
-            options={[{ value: "Direct", label: "Direct (No Agent)" }, ...store.agents.map((a) => ({ value: a.id, label: `${a.id} — ${a.name}`, hint: a.phone }))]}
-            className="mt-1"
-          />
-        </div>
-        <div><Label className="text-xs">Supplier</Label>
-          <SearchableSelect
-            value={form.supplierId}
-            onChange={(v) => setForm({ ...form, supplierId: v })}
-            placeholder="Select Supplier"
-            options={store.suppliers.map((s) => ({ value: s.id, label: `${s.id} — ${s.companyName}`, hint: s.serviceType }))}
-            className="mt-1"
-          />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label className="text-xs">Package</Label>
-          <Select value={form.packageType} onValueChange={(v) => setForm({ ...form, packageType: v as Booking["packageType"] })}>
-            <SelectTrigger className="bg-accent/20 border-border mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {PACKAGE_TYPES.map((p) => (<SelectItem key={p} value={p}>{p}</SelectItem>))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div><Label className="text-xs">Status</Label>
-          <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as Booking["status"] })}>
-            <SelectTrigger className="bg-accent/20 border-border mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectItem value="Pending">Pending</SelectItem><SelectItem value="Confirmed">Confirmed</SelectItem><SelectItem value="Cancelled">Cancelled</SelectItem></SelectContent>
-          </Select>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label className="text-xs">Total Amount</Label><Input type="number" value={form.totalAmount} onChange={(e) => setForm({ ...form, totalAmount: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-        <div><Label className="text-xs">Amount Received</Label><Input type="number" value={form.amountReceived} onChange={(e) => setForm({ ...form, amountReceived: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label className="text-xs">Total Cost</Label><Input type="number" value={form.totalCost} onChange={(e) => setForm({ ...form, totalCost: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-        <div><Label className="text-xs">Commission</Label><Input type="number" value={form.commission} onChange={(e) => setForm({ ...form, commission: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label className="text-xs">Travel Date</Label><Input type="date" value={form.travelDate} onChange={(e) => setForm({ ...form, travelDate: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-        <div><Label className="text-xs">Destination</Label><Input value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-      </div>
-      <div><Label className="text-xs">Drive Link</Label><Input value={form.driveLink} onChange={(e) => setForm({ ...form, driveLink: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-    </div>
-  );
+  // Edit reuses the same "Step 1" layout as create so bookings edit exactly like they were entered.
+  const editFormFields = step1Fields;
 
   return (
     <div className="space-y-6">
@@ -571,10 +560,28 @@ function BookingsPage() {
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {clients.map((c) => (
-                <div key={c.id} className="flex items-center justify-between rounded-lg border border-border/50 bg-accent/10 px-4 py-3">
-                  <div><p className="text-sm font-medium">{getClientName(c)}</p><p className="text-xs text-muted-foreground">{c.id} · {c.passport}</p></div>
-                  <div className="text-right"><p className="text-xs text-muted-foreground">{formatCurrency(c.amountPaid)} / {formatCurrency(c.amountDue)}</p><StatusBadge status={c.paymentStatus} /></div>
-                </div>
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => { setMemberEdit({ ...c }); setMemberEditOpen(true); }}
+                  className="flex items-center justify-between rounded-lg border border-border/50 bg-accent/10 px-4 py-3 text-left transition-colors hover:bg-accent/30 hover:border-primary/50"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium truncate">{getClientName(c)}</p>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full uppercase tracking-wide ${
+                        c.ageCategory === "Child" ? "bg-warning/20 text-warning" :
+                        c.ageCategory === "Infant" ? "bg-blue-500/20 text-blue-400" :
+                        "bg-primary/20 text-primary"
+                      }`}>{c.ageCategory || "Adult"}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{c.id} · {c.passport || "—"}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-xs text-muted-foreground">{formatCurrency(c.amountPaid)} / {formatCurrency(c.amountDue)}</p>
+                    <StatusBadge status={c.paymentStatus} />
+                  </div>
+                </button>
               ))}
             </div>
           </motion.div>
@@ -586,6 +593,71 @@ function BookingsPage() {
           <DialogHeader><DialogTitle>Edit Booking — {selected?.headId}</DialogTitle></DialogHeader>
           {editFormFields}
           <Button onClick={handleEdit} className="w-full">Save Changes</Button>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={memberEditOpen} onOpenChange={setMemberEditOpen}>
+        <DialogContent className="bg-card border-border max-w-xl">
+          <DialogHeader>
+            <DialogTitle>
+              Edit Member {memberEdit ? `— ${getClientName(memberEdit)}` : ""}
+              {memberEdit && <span className="ml-2 text-xs text-muted-foreground">{memberEdit.id}</span>}
+            </DialogTitle>
+          </DialogHeader>
+          {memberEdit && (
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label className="text-[10px]">Type</Label>
+                  <Select value={memberEdit.ageCategory || "Adult"} onValueChange={(v) => setMemberEdit({ ...memberEdit, ageCategory: v as Client["ageCategory"] })}>
+                    <SelectTrigger className="bg-accent/20 border-border mt-0.5 h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="Adult">Adult</SelectItem><SelectItem value="Child">Child</SelectItem><SelectItem value="Infant">Infant</SelectItem></SelectContent>
+                  </Select>
+                </div>
+                <div><Label className="text-[10px]">Gender</Label>
+                  <Select value={memberEdit.gender} onValueChange={(v) => setMemberEdit({ ...memberEdit, gender: v as Client["gender"] })}>
+                    <SelectTrigger className="bg-accent/20 border-border mt-0.5 h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="Male">Male</SelectItem><SelectItem value="Female">Female</SelectItem><SelectItem value="Custom">Custom</SelectItem></SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label className="text-[10px]">First Name</Label><Input value={memberEdit.firstName} onChange={(e) => setMemberEdit({ ...memberEdit, firstName: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                <div><Label className="text-[10px]">Last Name</Label><Input value={memberEdit.lastName} onChange={(e) => setMemberEdit({ ...memberEdit, lastName: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label className="text-[10px]">Nationality</Label><Input value={memberEdit.nationality} onChange={(e) => setMemberEdit({ ...memberEdit, nationality: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                <div><Label className="text-[10px]">Date of Birth</Label><Input type="date" value={memberEdit.dateOfBirth || ""} onChange={(e) => setMemberEdit({ ...memberEdit, dateOfBirth: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label className="text-[10px]">Passport</Label><Input value={memberEdit.passport} onChange={(e) => setMemberEdit({ ...memberEdit, passport: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                <div><Label className="text-[10px]">CNIC</Label><Input value={memberEdit.cnic || ""} onChange={(e) => setMemberEdit({ ...memberEdit, cnic: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label className="text-[10px]">Date of Issue</Label><Input type="date" value={memberEdit.dateOfIssue || ""} onChange={(e) => setMemberEdit({ ...memberEdit, dateOfIssue: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                <div><Label className="text-[10px]">Date of Expire</Label><Input type="date" value={memberEdit.dateOfExpire || ""} onChange={(e) => setMemberEdit({ ...memberEdit, dateOfExpire: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label className="text-[10px]">Contact</Label><Input value={memberEdit.phone} onChange={(e) => setMemberEdit({ ...memberEdit, phone: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                <div><Label className="text-[10px]">Email</Label><Input value={memberEdit.email || ""} onChange={(e) => setMemberEdit({ ...memberEdit, email: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label className="text-[10px]">Amount Due</Label><Input type="number" value={memberEdit.amountDue} onChange={(e) => setMemberEdit({ ...memberEdit, amountDue: Number(e.target.value) || 0 })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                <div><Label className="text-[10px]">Amount Paid</Label><Input type="number" value={memberEdit.amountPaid} onChange={(e) => setMemberEdit({ ...memberEdit, amountPaid: Number(e.target.value) || 0 })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input id="vip" type="checkbox" checked={memberEdit.isVip} onChange={(e) => setMemberEdit({ ...memberEdit, isVip: e.target.checked })} />
+                <Label htmlFor="vip" className="text-xs">Mark as VIP</Label>
+              </div>
+            </div>
+          )}
+          <Button onClick={() => {
+            if (!memberEdit) return;
+            const paid = memberEdit.amountPaid;
+            const due = memberEdit.amountDue;
+            const status: "Paid" | "Partial" | "Unpaid" = paid >= due && due > 0 ? "Paid" : paid > 0 ? "Partial" : "Unpaid";
+            store.updateClient(memberEdit.id, { ...memberEdit, paymentStatus: status });
+            setMemberEditOpen(false);
+          }} className="w-full">Save Member</Button>
         </DialogContent>
       </Dialog>
     </div>
