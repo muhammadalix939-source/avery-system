@@ -560,10 +560,28 @@ function BookingsPage() {
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {clients.map((c) => (
-                <div key={c.id} className="flex items-center justify-between rounded-lg border border-border/50 bg-accent/10 px-4 py-3">
-                  <div><p className="text-sm font-medium">{getClientName(c)}</p><p className="text-xs text-muted-foreground">{c.id} · {c.passport}</p></div>
-                  <div className="text-right"><p className="text-xs text-muted-foreground">{formatCurrency(c.amountPaid)} / {formatCurrency(c.amountDue)}</p><StatusBadge status={c.paymentStatus} /></div>
-                </div>
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => { setMemberEdit({ ...c }); setMemberEditOpen(true); }}
+                  className="flex items-center justify-between rounded-lg border border-border/50 bg-accent/10 px-4 py-3 text-left transition-colors hover:bg-accent/30 hover:border-primary/50"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium truncate">{getClientName(c)}</p>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full uppercase tracking-wide ${
+                        c.ageCategory === "Child" ? "bg-warning/20 text-warning" :
+                        c.ageCategory === "Infant" ? "bg-blue-500/20 text-blue-400" :
+                        "bg-primary/20 text-primary"
+                      }`}>{c.ageCategory || "Adult"}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{c.id} · {c.passport || "—"}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-xs text-muted-foreground">{formatCurrency(c.amountPaid)} / {formatCurrency(c.amountDue)}</p>
+                    <StatusBadge status={c.paymentStatus} />
+                  </div>
+                </button>
               ))}
             </div>
           </motion.div>
@@ -575,6 +593,71 @@ function BookingsPage() {
           <DialogHeader><DialogTitle>Edit Booking — {selected?.headId}</DialogTitle></DialogHeader>
           {editFormFields}
           <Button onClick={handleEdit} className="w-full">Save Changes</Button>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={memberEditOpen} onOpenChange={setMemberEditOpen}>
+        <DialogContent className="bg-card border-border max-w-xl">
+          <DialogHeader>
+            <DialogTitle>
+              Edit Member {memberEdit ? `— ${getClientName(memberEdit)}` : ""}
+              {memberEdit && <span className="ml-2 text-xs text-muted-foreground">{memberEdit.id}</span>}
+            </DialogTitle>
+          </DialogHeader>
+          {memberEdit && (
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label className="text-[10px]">Type</Label>
+                  <Select value={memberEdit.ageCategory || "Adult"} onValueChange={(v) => setMemberEdit({ ...memberEdit, ageCategory: v as Client["ageCategory"] })}>
+                    <SelectTrigger className="bg-accent/20 border-border mt-0.5 h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="Adult">Adult</SelectItem><SelectItem value="Child">Child</SelectItem><SelectItem value="Infant">Infant</SelectItem></SelectContent>
+                  </Select>
+                </div>
+                <div><Label className="text-[10px]">Gender</Label>
+                  <Select value={memberEdit.gender} onValueChange={(v) => setMemberEdit({ ...memberEdit, gender: v as Client["gender"] })}>
+                    <SelectTrigger className="bg-accent/20 border-border mt-0.5 h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="Male">Male</SelectItem><SelectItem value="Female">Female</SelectItem><SelectItem value="Custom">Custom</SelectItem></SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label className="text-[10px]">First Name</Label><Input value={memberEdit.firstName} onChange={(e) => setMemberEdit({ ...memberEdit, firstName: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                <div><Label className="text-[10px]">Last Name</Label><Input value={memberEdit.lastName} onChange={(e) => setMemberEdit({ ...memberEdit, lastName: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label className="text-[10px]">Nationality</Label><Input value={memberEdit.nationality} onChange={(e) => setMemberEdit({ ...memberEdit, nationality: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                <div><Label className="text-[10px]">Date of Birth</Label><Input type="date" value={memberEdit.dateOfBirth || ""} onChange={(e) => setMemberEdit({ ...memberEdit, dateOfBirth: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label className="text-[10px]">Passport</Label><Input value={memberEdit.passport} onChange={(e) => setMemberEdit({ ...memberEdit, passport: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                <div><Label className="text-[10px]">CNIC</Label><Input value={memberEdit.cnic || ""} onChange={(e) => setMemberEdit({ ...memberEdit, cnic: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label className="text-[10px]">Date of Issue</Label><Input type="date" value={memberEdit.dateOfIssue || ""} onChange={(e) => setMemberEdit({ ...memberEdit, dateOfIssue: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                <div><Label className="text-[10px]">Date of Expire</Label><Input type="date" value={memberEdit.dateOfExpire || ""} onChange={(e) => setMemberEdit({ ...memberEdit, dateOfExpire: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label className="text-[10px]">Contact</Label><Input value={memberEdit.phone} onChange={(e) => setMemberEdit({ ...memberEdit, phone: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                <div><Label className="text-[10px]">Email</Label><Input value={memberEdit.email || ""} onChange={(e) => setMemberEdit({ ...memberEdit, email: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label className="text-[10px]">Amount Due</Label><Input type="number" value={memberEdit.amountDue} onChange={(e) => setMemberEdit({ ...memberEdit, amountDue: Number(e.target.value) || 0 })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                <div><Label className="text-[10px]">Amount Paid</Label><Input type="number" value={memberEdit.amountPaid} onChange={(e) => setMemberEdit({ ...memberEdit, amountPaid: Number(e.target.value) || 0 })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input id="vip" type="checkbox" checked={memberEdit.isVip} onChange={(e) => setMemberEdit({ ...memberEdit, isVip: e.target.checked })} />
+                <Label htmlFor="vip" className="text-xs">Mark as VIP</Label>
+              </div>
+            </div>
+          )}
+          <Button onClick={() => {
+            if (!memberEdit) return;
+            const paid = memberEdit.amountPaid;
+            const due = memberEdit.amountDue;
+            const status: "Paid" | "Partial" | "Unpaid" = paid >= due && due > 0 ? "Paid" : paid > 0 ? "Partial" : "Unpaid";
+            store.updateClient(memberEdit.id, { ...memberEdit, paymentStatus: status });
+            setMemberEditOpen(false);
+          }} className="w-full">Save Member</Button>
         </DialogContent>
       </Dialog>
     </div>
