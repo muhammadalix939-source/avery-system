@@ -319,7 +319,18 @@ function EntriesPage() {
         <div><Label>Expense Name</Label><Input value={form.referenceName} onChange={(e) => setForm({ ...form, referenceName: e.target.value })} placeholder="Office Rent, Utilities..." className="bg-accent/20 border-border mt-1" /></div>
       )}
 
-      <div><Label>Amount (PKR)</Label><Input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="100000" className="bg-accent/20 border-border mt-1" /></div>
+      <div>
+        <div className="flex items-center justify-between">
+          <Label>Amount (PKR)</Label>
+          {form.type === "purchase" && (serviceCategory === "Flight" || serviceCategory === "Hotel") && (
+            <label className="flex items-center gap-1.5 text-[10px] text-muted-foreground cursor-pointer">
+              <input type="checkbox" checked={autoTotal} onChange={(e) => setAutoTotal(e.target.checked)} className="rounded" />
+              Auto-calc
+            </label>
+          )}
+        </div>
+        <Input type="number" value={form.amount} onChange={(e) => { setAutoTotal(false); setForm({ ...form, amount: e.target.value }); }} placeholder="100000" className="bg-accent/20 border-border mt-1" />
+      </div>
       <div><Label>Note</Label><Input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Payment note..." className="bg-accent/20 border-border mt-1" /></div>
     </div>
   );
