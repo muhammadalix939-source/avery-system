@@ -635,8 +635,9 @@ function BookingsPage() {
         <DialogContent className="bg-card border-border max-w-xl">
           <DialogHeader>
             <DialogTitle>
-              Edit Member {memberEdit ? `— ${getClientName(memberEdit)}` : ""}
-              {memberEdit && <span className="ml-2 text-xs text-muted-foreground">{memberEdit.id}</span>}
+              {memberEdit && !memberEdit.id ? "Add New Member" : "Edit Member"}
+              {memberEdit && memberEdit.id ? ` — ${getClientName(memberEdit)}` : ""}
+              {memberEdit && memberEdit.id && <span className="ml-2 text-xs text-muted-foreground">{memberEdit.id}</span>}
             </DialogTitle>
           </DialogHeader>
           {memberEdit && (
