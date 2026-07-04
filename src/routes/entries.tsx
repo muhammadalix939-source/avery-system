@@ -225,13 +225,66 @@ function EntriesPage() {
           {form.type === "purchase" && (
             <>
               <div><Label>Service Category</Label>
-                <Select value={serviceCategory} onValueChange={setServiceCategory}>
+                <Select value={serviceCategory} onValueChange={(v) => { setServiceCategory(v); const auto = computeAutoAmount(v, details); if (autoTotal && auto !== null) setForm((f) => ({ ...f, amount: String(auto) })); }}>
                   <SelectTrigger className="bg-accent/20 border-border mt-1"><SelectValue placeholder="Hotel / Flight / Visa / Transport / Other" /></SelectTrigger>
                   <SelectContent>
                     {["Hotel","Flight","Visa","Transport","Ziyarah","Insurance","Other"].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
+              {serviceCategory === "Flight" && (
+                <div className="rounded-lg border border-border/60 bg-accent/10 p-3 space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">Flight Details</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div><Label className="text-[10px]">Adults</Label><Input type="number" min="0" value={details.adults} onChange={(e) => setDetailField("adults", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                    <div><Label className="text-[10px]">Children</Label><Input type="number" min="0" value={details.children} onChange={(e) => setDetailField("children", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                    <div><Label className="text-[10px]">Infants</Label><Input type="number" min="0" value={details.infants} onChange={(e) => setDetailField("infants", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div><Label className="text-[10px]">Adult / person</Label><Input type="number" value={details.adultPrice} onChange={(e) => setDetailField("adultPrice", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                    <div><Label className="text-[10px]">Child / person</Label><Input type="number" value={details.childPrice} onChange={(e) => setDetailField("childPrice", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                    <div><Label className="text-[10px]">Infant / person</Label><Input type="number" value={details.infantPrice} onChange={(e) => setDetailField("infantPrice", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                  </div>
+                </div>
+              )}
+              {serviceCategory === "Hotel" && (
+                <div className="rounded-lg border border-border/60 bg-accent/10 p-3 space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">Hotel Details</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><Label className="text-[10px]">Hotel Name</Label><Input value={details.hotelName} onChange={(e) => setDetailField("hotelName", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                    <div><Label className="text-[10px]">City</Label><Input value={details.city} onChange={(e) => setDetailField("city", e.target.value)} placeholder="Makkah / Madinah" className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div><Label className="text-[10px]">Rooms</Label><Input type="number" min="0" value={details.rooms} onChange={(e) => setDetailField("rooms", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                    <div><Label className="text-[10px]">Per Night</Label><Input type="number" value={details.perNight} onChange={(e) => setDetailField("perNight", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                    <div><Label className="text-[10px]">Nights</Label><Input type="number" min="0" value={details.nights} onChange={(e) => setDetailField("nights", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><Label className="text-[10px]">Check-in</Label><Input type="date" value={details.checkIn} onChange={(e) => setDetailField("checkIn", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                    <div><Label className="text-[10px]">Check-out</Label><Input type="date" value={details.checkOut} onChange={(e) => setDetailField("checkOut", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                  </div>
+                </div>
+              )}
+              {serviceCategory === "Visa" && (
+                <div className="rounded-lg border border-border/60 bg-accent/10 p-3 space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">Visa Details</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div><Label className="text-[10px]">Visa Type</Label><Input value={details.visaType} onChange={(e) => setDetailField("visaType", e.target.value)} placeholder="Umrah / Tourist" className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                    <div><Label className="text-[10px]">Country</Label><Input value={details.country} onChange={(e) => setDetailField("country", e.target.value)} placeholder="Saudi Arabia" className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                    <div><Label className="text-[10px]">Reference #</Label><Input value={details.reference} onChange={(e) => setDetailField("reference", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                  </div>
+                </div>
+              )}
+              {serviceCategory === "Transport" && (
+                <div className="rounded-lg border border-border/60 bg-accent/10 p-3 space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">Transport Details</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><Label className="text-[10px]">Route</Label><Input value={details.route} onChange={(e) => setDetailField("route", e.target.value)} placeholder="JED Airport → Makkah" className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                    <div><Label className="text-[10px]">Vehicle</Label><Input value={details.vehicle} onChange={(e) => setDetailField("vehicle", e.target.value)} placeholder="Private Car / Coaster" className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                  </div>
+                  <div><Label className="text-[10px]">Description</Label><Input value={details.description} onChange={(e) => setDetailField("description", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                </div>
+              )}
               <div><Label>Link to Head ID (optional)</Label>
                 <SearchableSelect
                   value={form.headId}
