@@ -556,7 +556,42 @@ function BookingsPage() {
           <motion.div key={b.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-xl p-5">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-sm font-semibold"><span className="text-primary">{b.headId}</span> — Clients ({clients.length})</h3>
-              <span className="text-xs text-muted-foreground">Supplier: {b.supplierId} | Destination: {b.destination || "—"}</span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground">Supplier: {b.supplierId} | Destination: {b.destination || "—"}</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1 text-[11px]"
+                  onClick={() => {
+                    const head = store.clients.find((c) => c.headId === b.headId);
+                    setMemberEdit({
+                      id: "",
+                      headId: b.headId,
+                      firstName: "",
+                      lastName: "",
+                      gender: "Male",
+                      ageCategory: "Adult",
+                      nationality: head?.nationality || "",
+                      passport: "",
+                      cnic: "",
+                      dateOfBirth: "",
+                      dateOfIssue: "",
+                      dateOfExpire: "",
+                      phone: head?.phone || "",
+                      email: head?.email || "",
+                      packageType: b.packageType,
+                      paymentStatus: "Unpaid",
+                      amountDue: 0,
+                      amountPaid: 0,
+                      isVip: false,
+                      destination: b.destination,
+                    } as Client);
+                    setMemberEditOpen(true);
+                  }}
+                >
+                  <Plus className="h-3 w-3" /> Add Member
+                </Button>
+              </div>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {clients.map((c) => (
