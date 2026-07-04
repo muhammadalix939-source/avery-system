@@ -459,59 +459,8 @@ function BookingsPage() {
     </div>
   ) : null;
 
-  const editFormFields = (
-    <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label className="text-xs">Agent</Label>
-          <SearchableSelect
-            value={form.agentId}
-            onChange={(v) => setForm({ ...form, agentId: v })}
-            placeholder="Select Agent"
-            options={[{ value: "Direct", label: "Direct (No Agent)" }, ...store.agents.map((a) => ({ value: a.id, label: `${a.id} — ${a.name}`, hint: a.phone }))]}
-            className="mt-1"
-          />
-        </div>
-        <div><Label className="text-xs">Supplier</Label>
-          <SearchableSelect
-            value={form.supplierId}
-            onChange={(v) => setForm({ ...form, supplierId: v })}
-            placeholder="Select Supplier"
-            options={store.suppliers.map((s) => ({ value: s.id, label: `${s.id} — ${s.companyName}`, hint: s.serviceType }))}
-            className="mt-1"
-          />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label className="text-xs">Package</Label>
-          <Select value={form.packageType} onValueChange={(v) => setForm({ ...form, packageType: v as Booking["packageType"] })}>
-            <SelectTrigger className="bg-accent/20 border-border mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {PACKAGE_TYPES.map((p) => (<SelectItem key={p} value={p}>{p}</SelectItem>))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div><Label className="text-xs">Status</Label>
-          <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as Booking["status"] })}>
-            <SelectTrigger className="bg-accent/20 border-border mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectItem value="Pending">Pending</SelectItem><SelectItem value="Confirmed">Confirmed</SelectItem><SelectItem value="Cancelled">Cancelled</SelectItem></SelectContent>
-          </Select>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label className="text-xs">Total Amount</Label><Input type="number" value={form.totalAmount} onChange={(e) => setForm({ ...form, totalAmount: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-        <div><Label className="text-xs">Amount Received</Label><Input type="number" value={form.amountReceived} onChange={(e) => setForm({ ...form, amountReceived: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label className="text-xs">Total Cost</Label><Input type="number" value={form.totalCost} onChange={(e) => setForm({ ...form, totalCost: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-        <div><Label className="text-xs">Commission</Label><Input type="number" value={form.commission} onChange={(e) => setForm({ ...form, commission: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label className="text-xs">Travel Date</Label><Input type="date" value={form.travelDate} onChange={(e) => setForm({ ...form, travelDate: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-        <div><Label className="text-xs">Destination</Label><Input value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-      </div>
-      <div><Label className="text-xs">Drive Link</Label><Input value={form.driveLink} onChange={(e) => setForm({ ...form, driveLink: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
-    </div>
-  );
+  // Edit reuses the same "Step 1" layout as create so bookings edit exactly like they were entered.
+  const editFormFields = step1Fields;
 
   return (
     <div className="space-y-6">
