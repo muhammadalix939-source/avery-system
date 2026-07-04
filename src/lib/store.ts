@@ -16,6 +16,33 @@ export interface LedgerEntry {
   createdAt: string;
   // For purchase entries: which service was bought (Hotel, Flight, Visa, Transport, Other)
   serviceCategory?: string;
+  // Category-specific breakdown captured on purchase entries
+  purchaseDetails?: {
+    // Flight
+    adults?: number;
+    children?: number;
+    infants?: number;
+    adultPrice?: number;
+    childPrice?: number;
+    infantPrice?: number;
+    // Hotel
+    rooms?: number;
+    perNight?: number;
+    nights?: number;
+    checkIn?: string;
+    checkOut?: string;
+    hotelName?: string;
+    city?: string;
+    // Visa
+    visaType?: string;
+    country?: string;
+    reference?: string;
+    // Transport
+    route?: string;
+    vehicle?: string;
+    // Common
+    description?: string;
+  };
 }
 
 // ---------- Persistence (localStorage) ----------
