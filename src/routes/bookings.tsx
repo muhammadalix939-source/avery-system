@@ -10,7 +10,7 @@ import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import BookingServicesMenu, { VoucherDownloadMenu } from "@/components/BookingServicesMenu";
-import { formatCurrency, getClientName, PACKAGE_TYPES, type Booking } from "@/lib/data";
+import { formatCurrency, getClientName, PACKAGE_TYPES, type Booking, type Client } from "@/lib/data";
 import { useStore } from "@/lib/store";
 import { getPKTDate } from "@/lib/date-utils";
 import { generateInvoice, generatePaymentHistory } from "@/lib/pdf";
@@ -47,6 +47,9 @@ function BookingsPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [selected, setSelected] = useState<Booking | null>(null);
   const [step, setStep] = useState(1);
+
+  const [memberEditOpen, setMemberEditOpen] = useState(false);
+  const [memberEdit, setMemberEdit] = useState<Client | null>(null);
 
   const [form, setForm] = useState({
     agentId: "", supplierId: "", totalAmount: "", amountReceived: "", totalCost: "", commission: "",
