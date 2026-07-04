@@ -35,6 +35,22 @@ const typeColors: Record<LedgerEntry["type"], string> = {
   expense: "text-destructive",
 };
 
+function buildDetailsPayload(cat: string, d: {
+  adults: string; children: string; infants: string;
+  adultPrice: string; childPrice: string; infantPrice: string;
+  rooms: string; perNight: string; nights: string; checkIn: string; checkOut: string; hotelName: string; city: string;
+  visaType: string; country: string; reference: string;
+  route: string; vehicle: string; description: string;
+}): LedgerEntry["purchaseDetails"] {
+  const num = (v: string) => (v === "" || v == null ? undefined : Number(v) || 0);
+  const str = (v: string) => (v ? v : undefined);
+  if (cat === "Flight") return { adults: num(d.adults), children: num(d.children), infants: num(d.infants), adultPrice: num(d.adultPrice), childPrice: num(d.childPrice), infantPrice: num(d.infantPrice), description: str(d.description) };
+  if (cat === "Hotel") return { rooms: num(d.rooms), perNight: num(d.perNight), nights: num(d.nights), checkIn: str(d.checkIn), checkOut: str(d.checkOut), hotelName: str(d.hotelName), city: str(d.city), description: str(d.description) };
+  if (cat === "Visa") return { visaType: str(d.visaType), country: str(d.country), reference: str(d.reference), description: str(d.description) };
+  if (cat === "Transport") return { route: str(d.route), vehicle: str(d.vehicle), description: str(d.description) };
+  return { description: str(d.description) };
+}
+
 function EntriesPage() {
   const store = useStore();
   const [addOpen, setAddOpen] = useState(false);
