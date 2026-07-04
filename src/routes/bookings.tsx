@@ -556,7 +556,42 @@ function BookingsPage() {
           <motion.div key={b.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-xl p-5">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-sm font-semibold"><span className="text-primary">{b.headId}</span> — Clients ({clients.length})</h3>
-              <span className="text-xs text-muted-foreground">Supplier: {b.supplierId} | Destination: {b.destination || "—"}</span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground">Supplier: {b.supplierId} | Destination: {b.destination || "—"}</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1 text-[11px]"
+                  onClick={() => {
+                    const head = store.clients.find((c) => c.headId === b.headId);
+                    setMemberEdit({
+                      id: "",
+                      headId: b.headId,
+                      firstName: "",
+                      lastName: "",
+                      gender: "Male",
+                      ageCategory: "Adult",
+                      nationality: head?.nationality || "",
+                      passport: "",
+                      cnic: "",
+                      dateOfBirth: "",
+                      dateOfIssue: "",
+                      dateOfExpire: "",
+                      phone: head?.phone || "",
+                      email: head?.email || "",
+                      packageType: b.packageType,
+                      paymentStatus: "Unpaid",
+                      amountDue: 0,
+                      amountPaid: 0,
+                      isVip: false,
+                      destination: b.destination,
+                    } as Client);
+                    setMemberEditOpen(true);
+                  }}
+                >
+                  <Plus className="h-3 w-3" /> Add Member
+                </Button>
+              </div>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {clients.map((c) => (
@@ -600,8 +635,9 @@ function BookingsPage() {
         <DialogContent className="bg-card border-border max-w-xl">
           <DialogHeader>
             <DialogTitle>
-              Edit Member {memberEdit ? `— ${getClientName(memberEdit)}` : ""}
-              {memberEdit && <span className="ml-2 text-xs text-muted-foreground">{memberEdit.id}</span>}
+              {memberEdit && !memberEdit.id ? "Add New Member" : "Edit Member"}
+              {memberEdit && memberEdit.id ? ` — ${getClientName(memberEdit)}` : ""}
+              {memberEdit && memberEdit.id && <span className="ml-2 text-xs text-muted-foreground">{memberEdit.id}</span>}
             </DialogTitle>
           </DialogHeader>
           {memberEdit && (
@@ -655,7 +691,21 @@ function BookingsPage() {
             const paid = memberEdit.amountPaid;
             const due = memberEdit.amountDue;
             const status: "Paid" | "Partial" | "Unpaid" = paid >= due && due > 0 ? "Paid" : paid > 0 ? "Partial" : "Unpaid";
-            store.updateClient(memberEdit.id, { ...memberEdit, paymentStatus: status });
+            if (!memberEdit.id) {
+              // New member — create client and attach to booking
+              const { id: _omit, ...rest } = memberEdit;
+              void _omit;
+              const newId = store.addClient({ ...rest, paymentStatus: status });
+              const booking = store.bookings.find((bk) => bk.headId === memberEdit.headId);
+              if (booking) {
+                store.updateBooking(booking.id, {
+                  clientIds: [...booking.clientIds, newId],
+                  members: (booking.members || booking.clientIds.length) + 1,
+                });
+              }
+            } else {
+              store.updateClient(memberEdit.id, { ...memberEdit, paymentStatus: status });
+            }
             setMemberEditOpen(false);
           }} className="w-full">Save Member</Button>
         </DialogContent>

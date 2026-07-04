@@ -30,7 +30,13 @@ const monthOrder = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep
 function Dashboard() {
   const store = useStore();
   const o = store.opening;
-  const liveClientReceived = store.entries.filter((e) => e.type === "client_receive").reduce((s, e) => s + e.amount, 0);
+  // Revenue = booking.amountReceived (authoritative for each head) + non-booking client_receive entries.
+  const bookingHeadSet = new Set(store.bookings.map((b) => b.headId));
+  const bookedReceived = store.bookings.reduce((s, b) => s + (b.amountReceived || 0), 0);
+  const nonBookingReceived = store.entries
+    .filter((e) => e.type === "client_receive" && !bookingHeadSet.has(e.headId))
+    .reduce((s, e) => s + e.amount, 0);
+  const liveClientReceived = bookedReceived + nonBookingReceived;
   const livePurchases = store.entries.filter((e) => e.type === "purchase").reduce((s, e) => s + e.amount, 0);
   const liveSupplierPaid = store.entries.filter((e) => e.type === "supplier_payment").reduce((s, e) => s + e.amount, 0);
   const liveExpenses = store.entries.filter((e) => e.type === "expense").reduce((s, e) => s + e.amount, 0);
