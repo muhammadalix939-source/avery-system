@@ -218,28 +218,65 @@ function BookingsPage() {
 
   function handleEdit() {
     if (!selected) return;
+    const cs = store.clients.filter((c) => c.headId === selected.headId);
+    const adults = cs.filter((c) => (c.ageCategory || "Adult") === "Adult");
+    const children = cs.filter((c) => c.ageCategory === "Child");
+    const infants = cs.filter((c) => c.ageCategory === "Infant");
+    const childPrice = Number(form.childPrice) || 0;
+    const infantPrice = Number(form.infantPrice) || 0;
+    let adultPrice = 0;
+    let computedTotal = 0;
+    if (form.pricingMode === "per_person") {
+      adultPrice = Number(form.adultPrice) || 0;
+      computedTotal = adultPrice * adults.length + childPrice * children.length + infantPrice * infants.length;
+    } else {
+      computedTotal = Number(form.totalAmount) || 0;
+      const rem = Math.max(0, computedTotal - childPrice * children.length - infantPrice * infants.length);
+      adultPrice = adults.length > 0 ? Math.round(rem / adults.length) : 0;
+    }
     store.updateBooking(selected.id, {
       agentId: form.agentId, supplierId: form.supplierId,
-      totalAmount: Number(form.totalAmount) || 0, amountReceived: Number(form.amountReceived) || 0,
+      totalAmount: computedTotal, amountReceived: Number(form.amountReceived) || 0,
       totalCost: Number(form.totalCost) || 0, commission: Number(form.commission) || 0,
       packageType: form.packageType, status: form.status, travelDate: form.travelDate,
       destination: form.destination, driveLink: form.driveLink,
+    });
+    // Override per-category dues and redistribute the payment
+    let remaining = Number(form.amountReceived) || 0;
+    const ordered = [...adults, ...children, ...infants];
+    ordered.forEach((c) => {
+      const due = c.ageCategory === "Child" ? childPrice : c.ageCategory === "Infant" ? infantPrice : adultPrice;
+      let paid = 0;
+      let status: "Paid" | "Partial" | "Unpaid" = "Unpaid";
+      if (due <= 0) { paid = 0; status = "Paid"; }
+      else if (remaining >= due) { paid = due; remaining -= due; status = "Paid"; }
+      else if (remaining > 0) { paid = remaining; remaining = 0; status = "Partial"; }
+      store.updateClient(c.id, {
+        amountDue: due, amountPaid: paid, paymentStatus: status,
+        packageType: form.packageType, destination: form.destination,
+      });
     });
     setEditOpen(false);
   }
 
   function openEdit(b: Booking) {
+    const cs = store.clients.filter((c) => c.headId === b.headId);
+    const adults = cs.filter((c) => (c.ageCategory || "Adult") === "Adult");
+    const children = cs.filter((c) => c.ageCategory === "Child");
+    const infants = cs.filter((c) => c.ageCategory === "Infant");
     setSelected(b);
     setForm({
       agentId: b.agentId, supplierId: b.supplierId, totalAmount: String(b.totalAmount),
       amountReceived: String(b.amountReceived), totalCost: String(b.totalCost || 0),
       commission: String(b.commission || 0), packageType: b.packageType, status: b.status,
       travelDate: b.travelDate,
-      adults: String(b.members || b.clientIds.length),
-      children: "0",
-      infants: "0",
+      adults: String(adults.length || b.members || 1),
+      children: String(children.length),
+      infants: String(infants.length),
       pricingMode: "total",
-      adultPrice: "", childPrice: "", infantPrice: "",
+      adultPrice: String(adults[0]?.amountDue || 0),
+      childPrice: String(children[0]?.amountDue || 0),
+      infantPrice: String(infants[0]?.amountDue || 0),
       destination: b.destination || "", driveLink: b.driveLink || "",
     });
     setEditOpen(true);
