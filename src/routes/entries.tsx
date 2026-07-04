@@ -43,20 +43,64 @@ function EntriesPage() {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [form, setForm] = useState({ date: "", type: "client_receive" as LedgerEntry["type"], headId: "", referenceId: "", referenceName: "", amount: "", note: "" });
   const [serviceCategory, setServiceCategory] = useState<string>("");
+  const emptyDetails = {
+    adults: "", children: "", infants: "",
+    adultPrice: "", childPrice: "", infantPrice: "",
+    rooms: "", perNight: "", nights: "", checkIn: "", checkOut: "", hotelName: "", city: "",
+    visaType: "", country: "", reference: "",
+    route: "", vehicle: "", description: "",
+  };
+  const [details, setDetails] = useState<typeof emptyDetails>(emptyDetails);
+  const [autoTotal, setAutoTotal] = useState(true);
+
+  // Auto-compute purchase amount when details change (Flight / Hotel)
+  function computeAutoAmount(cat: string, d: typeof emptyDetails): number | null {
+    if (cat === "Flight") {
+      const a = Number(d.adults) || 0, c = Number(d.children) || 0, i = Number(d.infants) || 0;
+      const ap = Number(d.adultPrice) || 0, cp = Number(d.childPrice) || 0, ip = Number(d.infantPrice) || 0;
+      return a * ap + c * cp + i * ip;
+    }
+    if (cat === "Hotel") {
+      const r = Number(d.rooms) || 0, pn = Number(d.perNight) || 0, n = Number(d.nights) || 0;
+      return r * pn * n;
+    }
+    return null;
+  }
+  function setDetailField<K extends keyof typeof emptyDetails>(k: K, v: string) {
+    const next = { ...details, [k]: v };
+    setDetails(next);
+    if (autoTotal && form.type === "purchase") {
+      const auto = computeAutoAmount(serviceCategory, next);
+      if (auto !== null) setForm((f) => ({ ...f, amount: String(auto) }));
+    }
+  }
 
   const sorted = [...store.entries].sort((a, b) => b.date.localeCompare(a.date));
   const filtered = typeFilter === "all" ? sorted : sorted.filter((e) => e.type === typeFilter);
 
   function handleAdd() {
-    store.addEntry({ date: form.date || getPKTDate(), type: form.type, headId: form.headId, referenceId: form.referenceId, referenceName: form.referenceName, amount: Number(form.amount) || 0, note: form.note, serviceCategory: serviceCategory || undefined });
+    store.addEntry({
+      date: form.date || getPKTDate(), type: form.type, headId: form.headId,
+      referenceId: form.referenceId, referenceName: form.referenceName,
+      amount: Number(form.amount) || 0, note: form.note,
+      serviceCategory: serviceCategory || undefined,
+      purchaseDetails: form.type === "purchase" ? buildDetailsPayload(serviceCategory, details) : undefined,
+    });
     setForm({ date: "", type: "client_receive", headId: "", referenceId: "", referenceName: "", amount: "", note: "" });
     setServiceCategory("");
+    setDetails(emptyDetails);
     setAddOpen(false);
   }
 
   function handleEdit() {
     if (!selected) return;
-    store.updateEntry(selected.id, { date: form.date, type: form.type, headId: form.headId, referenceId: form.referenceId, referenceName: form.referenceName, amount: Number(form.amount) || 0, note: form.note });
+    store.updateEntry(selected.id, {
+      date: form.date, type: form.type, headId: form.headId,
+      referenceId: form.referenceId, referenceName: form.referenceName,
+      amount: Number(form.amount) || 0, note: form.note,
+      serviceCategory: serviceCategory || undefined,
+      purchaseDetails: form.type === "purchase" ? buildDetailsPayload(serviceCategory, details) : undefined,
+    });
     setEditOpen(false);
   }
 
@@ -64,6 +108,23 @@ function EntriesPage() {
     setSelected(e);
     setForm({ date: e.date, type: e.type, headId: e.headId, referenceId: e.referenceId, referenceName: e.referenceName, amount: String(e.amount), note: e.note });
     setServiceCategory(e.serviceCategory || "");
+    const d = e.purchaseDetails || {};
+    setDetails({
+      adults: d.adults != null ? String(d.adults) : "",
+      children: d.children != null ? String(d.children) : "",
+      infants: d.infants != null ? String(d.infants) : "",
+      adultPrice: d.adultPrice != null ? String(d.adultPrice) : "",
+      childPrice: d.childPrice != null ? String(d.childPrice) : "",
+      infantPrice: d.infantPrice != null ? String(d.infantPrice) : "",
+      rooms: d.rooms != null ? String(d.rooms) : "",
+      perNight: d.perNight != null ? String(d.perNight) : "",
+      nights: d.nights != null ? String(d.nights) : "",
+      checkIn: d.checkIn || "", checkOut: d.checkOut || "",
+      hotelName: d.hotelName || "", city: d.city || "",
+      visaType: d.visaType || "", country: d.country || "", reference: d.reference || "",
+      route: d.route || "", vehicle: d.vehicle || "", description: d.description || "",
+    });
+    setAutoTotal(false);
     setEditOpen(true);
   }
 
