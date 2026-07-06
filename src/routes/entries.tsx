@@ -44,11 +44,16 @@ function buildDetailsPayload(cat: string, d: {
 }): LedgerEntry["purchaseDetails"] {
   const num = (v: string) => (v === "" || v == null ? undefined : Number(v) || 0);
   const str = (v: string) => (v ? v : undefined);
-  if (cat === "Flight") return { adults: num(d.adults), children: num(d.children), infants: num(d.infants), adultPrice: num(d.adultPrice), childPrice: num(d.childPrice), infantPrice: num(d.infantPrice), description: str(d.description) };
+  const pax = {
+    adults: num(d.adults), children: num(d.children), infants: num(d.infants),
+    adultPrice: num(d.adultPrice), childPrice: num(d.childPrice), infantPrice: num(d.infantPrice),
+  };
+  if (cat === "Flight") return { ...pax, description: str(d.description) };
   if (cat === "Hotel") return { rooms: num(d.rooms), perNight: num(d.perNight), nights: num(d.nights), checkIn: str(d.checkIn), checkOut: str(d.checkOut), hotelName: str(d.hotelName), city: str(d.city), description: str(d.description) };
-  if (cat === "Visa") return { visaType: str(d.visaType), country: str(d.country), reference: str(d.reference), description: str(d.description) };
-  if (cat === "Transport") return { route: str(d.route), vehicle: str(d.vehicle), description: str(d.description) };
-  return { description: str(d.description) };
+  if (cat === "Visa") return { ...pax, visaType: str(d.visaType), country: str(d.country), reference: str(d.reference), description: str(d.description) };
+  if (cat === "Transport") return { ...pax, route: str(d.route), vehicle: str(d.vehicle), description: str(d.description) };
+  // Ziyarah / Insurance / Other — also carry pax breakdown
+  return { ...pax, description: str(d.description) };
 }
 
 function EntriesPage() {
@@ -71,16 +76,16 @@ function EntriesPage() {
 
   // Auto-compute purchase amount when details change (Flight / Hotel)
   function computeAutoAmount(cat: string, d: typeof emptyDetails): number | null {
-    if (cat === "Flight") {
-      const a = Number(d.adults) || 0, c = Number(d.children) || 0, i = Number(d.infants) || 0;
-      const ap = Number(d.adultPrice) || 0, cp = Number(d.childPrice) || 0, ip = Number(d.infantPrice) || 0;
-      return a * ap + c * cp + i * ip;
-    }
     if (cat === "Hotel") {
       const r = Number(d.rooms) || 0, pn = Number(d.perNight) || 0, n = Number(d.nights) || 0;
       return r * pn * n;
     }
-    return null;
+    // All other categories (Flight/Visa/Transport/Ziyarah/Insurance/Other) use pax pricing
+    if (!cat) return null;
+    const a = Number(d.adults) || 0, c = Number(d.children) || 0, i = Number(d.infants) || 0;
+    const ap = Number(d.adultPrice) || 0, cp = Number(d.childPrice) || 0, ip = Number(d.infantPrice) || 0;
+    if (a + c + i + ap + cp + ip === 0) return null;
+    return a * ap + c * cp + i * ip;
   }
   function setDetailField<K extends keyof typeof emptyDetails>(k: K, v: string) {
     const next = { ...details, [k]: v };
