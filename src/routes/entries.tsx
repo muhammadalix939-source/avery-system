@@ -44,11 +44,16 @@ function buildDetailsPayload(cat: string, d: {
 }): LedgerEntry["purchaseDetails"] {
   const num = (v: string) => (v === "" || v == null ? undefined : Number(v) || 0);
   const str = (v: string) => (v ? v : undefined);
-  if (cat === "Flight") return { adults: num(d.adults), children: num(d.children), infants: num(d.infants), adultPrice: num(d.adultPrice), childPrice: num(d.childPrice), infantPrice: num(d.infantPrice), description: str(d.description) };
+  const pax = {
+    adults: num(d.adults), children: num(d.children), infants: num(d.infants),
+    adultPrice: num(d.adultPrice), childPrice: num(d.childPrice), infantPrice: num(d.infantPrice),
+  };
+  if (cat === "Flight") return { ...pax, description: str(d.description) };
   if (cat === "Hotel") return { rooms: num(d.rooms), perNight: num(d.perNight), nights: num(d.nights), checkIn: str(d.checkIn), checkOut: str(d.checkOut), hotelName: str(d.hotelName), city: str(d.city), description: str(d.description) };
-  if (cat === "Visa") return { visaType: str(d.visaType), country: str(d.country), reference: str(d.reference), description: str(d.description) };
-  if (cat === "Transport") return { route: str(d.route), vehicle: str(d.vehicle), description: str(d.description) };
-  return { description: str(d.description) };
+  if (cat === "Visa") return { ...pax, visaType: str(d.visaType), country: str(d.country), reference: str(d.reference), description: str(d.description) };
+  if (cat === "Transport") return { ...pax, route: str(d.route), vehicle: str(d.vehicle), description: str(d.description) };
+  // Ziyarah / Insurance / Other — also carry pax breakdown
+  return { ...pax, description: str(d.description) };
 }
 
 function EntriesPage() {
@@ -71,16 +76,16 @@ function EntriesPage() {
 
   // Auto-compute purchase amount when details change (Flight / Hotel)
   function computeAutoAmount(cat: string, d: typeof emptyDetails): number | null {
-    if (cat === "Flight") {
-      const a = Number(d.adults) || 0, c = Number(d.children) || 0, i = Number(d.infants) || 0;
-      const ap = Number(d.adultPrice) || 0, cp = Number(d.childPrice) || 0, ip = Number(d.infantPrice) || 0;
-      return a * ap + c * cp + i * ip;
-    }
     if (cat === "Hotel") {
       const r = Number(d.rooms) || 0, pn = Number(d.perNight) || 0, n = Number(d.nights) || 0;
       return r * pn * n;
     }
-    return null;
+    // All other categories (Flight/Visa/Transport/Ziyarah/Insurance/Other) use pax pricing
+    if (!cat) return null;
+    const a = Number(d.adults) || 0, c = Number(d.children) || 0, i = Number(d.infants) || 0;
+    const ap = Number(d.adultPrice) || 0, cp = Number(d.childPrice) || 0, ip = Number(d.infantPrice) || 0;
+    if (a + c + i + ap + cp + ip === 0) return null;
+    return a * ap + c * cp + i * ip;
   }
   function setDetailField<K extends keyof typeof emptyDetails>(k: K, v: string) {
     const next = { ...details, [k]: v };
@@ -285,6 +290,27 @@ function EntriesPage() {
                   <div><Label className="text-[10px]">Description</Label><Input value={details.description} onChange={(e) => setDetailField("description", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
                 </div>
               )}
+              {(serviceCategory === "Ziyarah" || serviceCategory === "Insurance" || serviceCategory === "Other") && (
+                <div className="rounded-lg border border-border/60 bg-accent/10 p-3 space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">{serviceCategory} Details</p>
+                  <div><Label className="text-[10px]">Description</Label><Input value={details.description} onChange={(e) => setDetailField("description", e.target.value)} placeholder={serviceCategory === "Ziyarah" ? "Makkah Ziyarat tour, Madinah Ziyarat..." : ""} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                </div>
+              )}
+              {serviceCategory && serviceCategory !== "Hotel" && serviceCategory !== "Flight" && (
+                <div className="rounded-lg border border-border/60 bg-accent/10 p-3 space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">Passenger Breakdown</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div><Label className="text-[10px]">Adults</Label><Input type="number" min="0" value={details.adults} onChange={(e) => setDetailField("adults", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                    <div><Label className="text-[10px]">Children</Label><Input type="number" min="0" value={details.children} onChange={(e) => setDetailField("children", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                    <div><Label className="text-[10px]">Infants</Label><Input type="number" min="0" value={details.infants} onChange={(e) => setDetailField("infants", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div><Label className="text-[10px]">Adult / person</Label><Input type="number" value={details.adultPrice} onChange={(e) => setDetailField("adultPrice", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                    <div><Label className="text-[10px]">Child / person</Label><Input type="number" value={details.childPrice} onChange={(e) => setDetailField("childPrice", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                    <div><Label className="text-[10px]">Infant / person</Label><Input type="number" value={details.infantPrice} onChange={(e) => setDetailField("infantPrice", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                  </div>
+                </div>
+              )}
               <div><Label>Link to Head ID (optional)</Label>
                 <SearchableSelect
                   value={form.headId}
@@ -322,7 +348,7 @@ function EntriesPage() {
       <div>
         <div className="flex items-center justify-between">
           <Label>Amount (PKR)</Label>
-          {form.type === "purchase" && (serviceCategory === "Flight" || serviceCategory === "Hotel") && (
+          {form.type === "purchase" && serviceCategory && (
             <label className="flex items-center gap-1.5 text-[10px] text-muted-foreground cursor-pointer">
               <input type="checkbox" checked={autoTotal} onChange={(e) => setAutoTotal(e.target.checked)} className="rounded" />
               Auto-calc
