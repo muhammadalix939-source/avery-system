@@ -290,6 +290,27 @@ function EntriesPage() {
                   <div><Label className="text-[10px]">Description</Label><Input value={details.description} onChange={(e) => setDetailField("description", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
                 </div>
               )}
+              {(serviceCategory === "Ziyarah" || serviceCategory === "Insurance" || serviceCategory === "Other") && (
+                <div className="rounded-lg border border-border/60 bg-accent/10 p-3 space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">{serviceCategory} Details</p>
+                  <div><Label className="text-[10px]">Description</Label><Input value={details.description} onChange={(e) => setDetailField("description", e.target.value)} placeholder={serviceCategory === "Ziyarah" ? "Makkah Ziyarat tour, Madinah Ziyarat..." : ""} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                </div>
+              )}
+              {serviceCategory && serviceCategory !== "Hotel" && serviceCategory !== "Flight" && (
+                <div className="rounded-lg border border-border/60 bg-accent/10 p-3 space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">Passenger Breakdown</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div><Label className="text-[10px]">Adults</Label><Input type="number" min="0" value={details.adults} onChange={(e) => setDetailField("adults", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                    <div><Label className="text-[10px]">Children</Label><Input type="number" min="0" value={details.children} onChange={(e) => setDetailField("children", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                    <div><Label className="text-[10px]">Infants</Label><Input type="number" min="0" value={details.infants} onChange={(e) => setDetailField("infants", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div><Label className="text-[10px]">Adult / person</Label><Input type="number" value={details.adultPrice} onChange={(e) => setDetailField("adultPrice", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                    <div><Label className="text-[10px]">Child / person</Label><Input type="number" value={details.childPrice} onChange={(e) => setDetailField("childPrice", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                    <div><Label className="text-[10px]">Infant / person</Label><Input type="number" value={details.infantPrice} onChange={(e) => setDetailField("infantPrice", e.target.value)} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                  </div>
+                </div>
+              )}
               <div><Label>Link to Head ID (optional)</Label>
                 <SearchableSelect
                   value={form.headId}
@@ -327,7 +348,7 @@ function EntriesPage() {
       <div>
         <div className="flex items-center justify-between">
           <Label>Amount (PKR)</Label>
-          {form.type === "purchase" && (serviceCategory === "Flight" || serviceCategory === "Hotel") && (
+          {form.type === "purchase" && serviceCategory && (
             <label className="flex items-center gap-1.5 text-[10px] text-muted-foreground cursor-pointer">
               <input type="checkbox" checked={autoTotal} onChange={(e) => setAutoTotal(e.target.checked)} className="rounded" />
               Auto-calc
