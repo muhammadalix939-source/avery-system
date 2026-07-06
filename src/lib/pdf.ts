@@ -404,14 +404,18 @@ export function generateSupplierLedger(supplier: Supplier, entries: LedgerEntry[
     let running = openingPayable - openingPaid;
     brandTable(doc, {
       startY: y + 1,
-      head: [["Date", "Receipt", "Reference", "Note", "Amount", "Balance"]],
+      head: [["Date", "Receipt", "Type", "Note", "Amount", "Balance"]],
       body: [
         [{ content: "Brought Forward (B/F)", colSpan: 4, styles: { fontStyle: "bold" as const, fillColor: ROW_ALT } }, { content: formatCurrency(openingPayable - openingPaid), styles: { halign: "right" as const, fillColor: ROW_ALT } }, { content: formatCurrency(running), styles: { halign: "right" as const, fillColor: ROW_ALT, textColor: NAVY } }],
         ...filtered.map((e) => {
-          running -= e.amount;
+          const isPurchase = e.type === "purchase";
+          const signed = isPurchase ? e.amount : -e.amount;
+          running += signed;
+          const label = isPurchase ? "Purchase" : "Payment";
+          const amountText = `${isPurchase ? "+" : "-"} ${formatCurrency(e.amount)}`;
           return [
-            fmtDate(e.date), e.id, e.headId || "—", e.note,
-            { content: `- ${formatCurrency(e.amount)}`, styles: { halign: "right" as const, textColor: SUCCESS } },
+            fmtDate(e.date), e.id, label, e.note,
+            { content: amountText, styles: { halign: "right" as const, textColor: isPurchase ? DANGER : SUCCESS } },
             { content: formatCurrency(running), styles: { halign: "right" as const, textColor: NAVY } },
           ];
         }),
