@@ -347,7 +347,7 @@ function EntriesPage() {
                 <Plus className="h-4 w-4" /> New Entry
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-card border-border">
+            <DialogContent className="bg-card border-border max-h-[90vh] overflow-y-auto">
               <DialogHeader><DialogTitle>Add New Entry</DialogTitle></DialogHeader>
               {formFields}
               <Button onClick={handleAdd} className="w-full">Submit Entry</Button>
@@ -430,7 +430,7 @@ function EntriesPage() {
       </motion.div>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="bg-card border-border">
+        <DialogContent className="bg-card border-border max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Edit Entry — {selected?.id}</DialogTitle></DialogHeader>
           {formFields}
           <Button onClick={handleEdit} className="w-full">Save Changes</Button>
