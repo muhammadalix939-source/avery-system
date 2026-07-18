@@ -1,6 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Download, ChevronRight, ArrowLeft, Users, DollarSign } from "lucide-react";
+import { Download, ChevronRight, ArrowLeft, Users, DollarSign, FileText } from "lucide-react";
 import StatusBadge from "@/components/StatusBadge";
 import { formatCurrency, getClientName } from "@/lib/data";
 import type { Client, Booking, Agent, Supplier } from "@/lib/data";
@@ -20,8 +20,9 @@ interface DetailDialogProps {
 }
 
 export default function DetailDialog({ open, onOpenChange, type, data, entries = [], allClients = [], allBookings = [] }: DetailDialogProps) {
-  const [subView, setSubView] = useState<"main" | "clients" | "client-detail" | "bookings">("main");
+  const [subView, setSubView] = useState<"main" | "clients" | "client-detail" | "bookings" | "statement">("main");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [includeOpening, setIncludeOpening] = useState(true);
 
   if (!data) return null;
 
@@ -95,7 +96,8 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
               </Button>
             )}
             <DialogTitle className="text-primary text-sm flex-1">
-              {subView === "client-detail" && selectedClient ? `${getClientName(selectedClient)}` :
+              {subView === "statement" ? `Statement — ${type === "supplier" ? (data as Supplier).companyName : type === "agent" ? (data as Agent).name : getClientName(data as Client)}` :
+               subView === "client-detail" && selectedClient ? `${getClientName(selectedClient)}` :
                subView === "clients" && type === "agent" ? `Clients of ${(data as Agent).name}` :
                subView === "bookings" && type === "supplier" ? `Bookings — ${(data as Supplier).companyName}` :
                type === "client" ? `Client: ${getClientName(data as Client)}` :
@@ -105,6 +107,9 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
             </DialogTitle>
             {type !== "booking" && subView === "main" && (
               <div className="flex gap-1">
+                <Button size="sm" variant="outline" onClick={() => setSubView("statement")} className="gap-1.5 text-xs">
+                  <FileText className="h-3.5 w-3.5" /> View
+                </Button>
                 <Button size="sm" variant="outline" onClick={handleDownload} className="gap-1.5 text-xs">
                   <Download className="h-3.5 w-3.5" /> Statement
                 </Button>
@@ -230,6 +235,18 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
 
           {/* CLIENT DETAIL (from agent/supplier drill-down) */}
           {subView === "client-detail" && selectedClient && renderClient(selectedClient)}
+
+          {/* STATEMENT VIEW — mirrors PDF layout */}
+          {subView === "statement" && (
+            <StatementView
+              type={type as "client" | "agent" | "supplier"}
+              data={data as Client | Agent | Supplier}
+              entries={entries}
+              includeOpening={includeOpening}
+              onToggleOpening={setIncludeOpening}
+              onDownload={handleDownload}
+            />
+          )}
         </div>
       </DialogContent>
     </Dialog>
