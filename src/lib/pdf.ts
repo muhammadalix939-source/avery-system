@@ -140,11 +140,12 @@ function sectionTitle(doc: jsPDF, text: string, y: number) {
 function brandTable(doc: jsPDF, opts: Parameters<typeof autoTable>[1]) {
   autoTable(doc, {
     theme: "grid",
-    headStyles: { fillColor: NAVY, textColor: WHITE, fontSize: 8.5, fontStyle: "bold", halign: "left", cellPadding: 2.5 },
-    bodyStyles: { fontSize: 8.5, textColor: INK, cellPadding: 2.5, font: "helvetica" },
+    headStyles: { fillColor: NAVY, textColor: WHITE, fontSize: 8.5, fontStyle: "bold", halign: "left", cellPadding: 2.5, overflow: "linebreak", valign: "middle" },
+    bodyStyles: { fontSize: 8.5, textColor: INK, cellPadding: 2.5, font: "helvetica", overflow: "linebreak", valign: "top" },
     alternateRowStyles: { fillColor: ROW_ALT },
-    styles: { lineColor: GOLD_LT, lineWidth: 0.15 },
+    styles: { lineColor: GOLD_LT, lineWidth: 0.15, overflow: "linebreak", cellWidth: "wrap" },
     margin: { left: 14, right: 14 },
+    tableWidth: "auto",
     ...opts,
   });
 }
