@@ -266,6 +266,8 @@ export interface StatementOptions {
   toDate?: string;
   /** Bookings used to render Hotel/Flight/Visa/Transport/Other sections. */
   bookings?: Booking[];
+  /** Include opening balance (brought-forward) in totals & opening row. Default true. */
+  includeOpening?: boolean;
 }
 
 function inRange(date: string, from?: string, to?: string) {
