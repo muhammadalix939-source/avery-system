@@ -82,10 +82,9 @@ function SuppliersPage() {
   }
 
   function openStmt(s: Supplier) { setStmtSupplier(s); setStmtOpen(true); }
-  function downloadLedger(s: Supplier, range: { fromDate?: string; toDate?: string }) {
-    const entries = store.entries.filter((e) => e.referenceId === s.id);
-    const supplierBookings = store.bookings.filter((b) => b.supplierId === s.id);
-    generateSupplierLedger(s, entries, { ...range, bookings: supplierBookings });
+  function downloadLedger(s: Supplier, range: { fromDate?: string; toDate?: string; includeOpening?: boolean }) {
+    const supplierEntries = store.entries.filter((e) => e.referenceId === s.id);
+    generateSupplierLedger(s, supplierEntries, range);
   }
 
   const relatedEntries = selected ? store.entries.filter((e) => e.referenceId === selected.id) : [];
