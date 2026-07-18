@@ -266,6 +266,8 @@ export interface StatementOptions {
   toDate?: string;
   /** Bookings used to render Hotel/Flight/Visa/Transport/Other sections. */
   bookings?: Booking[];
+  /** Include opening balance (brought-forward) in totals & opening row. Default true. */
+  includeOpening?: boolean;
 }
 
 function inRange(date: string, from?: string, to?: string) {
@@ -380,54 +382,187 @@ export function generateSupplierLedger(supplier: Supplier, entries: LedgerEntry[
   doc.setTextColor(...INK);
   y += 11;
 
-  const openingPayable = supplier.openingPayable || 0;
-  const openingPaid = supplier.openingPaid || 0;
-  const totalPayable = supplier.totalPayable + openingPayable;
-  const totalPaid = supplier.totalPaid + openingPaid;
-  const remaining = totalPayable - totalPaid;
+  const includeOpening = opts.includeOpening !== false;
+  const openingPayable = includeOpening ? (supplier.openingPayable || 0) : 0;
+  const openingPaid = includeOpening ? (supplier.openingPaid || 0) : 0;
+  const openingBF = openingPayable - openingPaid;
 
-  y = summaryCards(doc, y, [
-    ["Brought Forward (B/F)", formatCurrency(openingPayable - openingPaid), "ink"],
-    ["Total Payable", formatCurrency(totalPayable), "navy" as any],
-    ["Total Paid", formatCurrency(totalPaid), "success"],
-    ["Remaining", formatCurrency(remaining), "danger"],
-  ]);
+  // Split entries: purchases (grouped by serviceCategory) and payments
+  const purchases = filtered.filter((e) => e.type === "purchase");
+  const payments = filtered.filter((e) => e.type === "supplier_payment");
+
+  const totalPurchases = purchases.reduce((s, e) => s + e.amount, 0);
+  const totalPaid = payments.reduce((s, e) => s + e.amount, 0);
+  const grandPayable = openingPayable + totalPurchases;
+  const grandPaid = openingPaid + totalPaid;
+  const remaining = grandPayable - grandPaid;
+
+  // Overview cards
+  const cards: Array<[string, string, string]> = [];
+  if (includeOpening) cards.push(["Brought Forward (B/F)", formatCurrency(openingBF), "ink"]);
+  cards.push(["Total Purchases", formatCurrency(grandPayable), "navy"]);
+  cards.push(["Total Paid", formatCurrency(grandPaid), "success"]);
+  cards.push(["Remaining", formatCurrency(remaining), "danger"]);
+  y = summaryCards(doc, y, cards as any);
   y += 2;
 
-  // Service sections
-  if (opts.bookings && opts.bookings.length) {
-    y = renderServiceSections(doc, y, opts.bookings);
+  // Group purchases by serviceCategory
+  const groups = new Map<string, LedgerEntry[]>();
+  for (const p of purchases) {
+    const key = p.serviceCategory || "Other";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(p);
   }
 
-  if (filtered.length) {
-    sectionTitle(doc, "Payment History", y); y += 4;
-    let running = openingPayable - openingPaid;
+  // Preferred rendering order
+  const order = ["Flight", "Hotel", "Visa", "Transport", "Ziyarah", "Insurance", "Other"];
+  const sortedKeys = [
+    ...order.filter((k) => groups.has(k)),
+    ...Array.from(groups.keys()).filter((k) => !order.includes(k)),
+  ];
+
+  for (const key of sortedKeys) {
+    const rows = groups.get(key)!;
+    const catTotal = rows.reduce((s, e) => s + e.amount, 0);
+    sectionTitle(doc, `${key} Purchases (${rows.length})`, y); y += 4;
+
+    const { head, body } = buildPurchaseTable(key, rows);
+    const colSpanForTotal = head[0].length - 1;
     brandTable(doc, {
       startY: y + 1,
-      head: [["Date", "Receipt", "Type", "Note", "Amount", "Balance"]],
-      body: [
-        [{ content: "Brought Forward (B/F)", colSpan: 4, styles: { fontStyle: "bold" as const, fillColor: ROW_ALT } }, { content: formatCurrency(openingPayable - openingPaid), styles: { halign: "right" as const, fillColor: ROW_ALT } }, { content: formatCurrency(running), styles: { halign: "right" as const, fillColor: ROW_ALT, textColor: NAVY } }],
-        ...filtered.map((e) => {
-          const isPurchase = e.type === "purchase";
-          const signed = isPurchase ? e.amount : -e.amount;
-          running += signed;
-          const label = isPurchase ? "Purchase" : "Payment";
-          const amountText = `${isPurchase ? "+" : "-"} ${formatCurrency(e.amount)}`;
-          return [
-            fmtDate(e.date), e.id, label, e.note,
-            { content: amountText, styles: { halign: "right" as const, textColor: isPurchase ? DANGER : SUCCESS } },
-            { content: formatCurrency(running), styles: { halign: "right" as const, textColor: NAVY } },
-          ];
-        }),
-      ],
+      head,
+      body,
+      foot: [[
+        { content: `Total ${key}`, colSpan: colSpanForTotal, styles: { halign: "right" as const, fontStyle: "bold" as const, fillColor: ROW_ALT, textColor: NAVY } },
+        { content: formatCurrency(catTotal), styles: { halign: "right" as const, fontStyle: "bold" as const, fillColor: ROW_ALT, textColor: NAVY } },
+      ]],
     });
-    y = (doc as any).lastAutoTable.finalY + 4;
+    y = (doc as any).lastAutoTable.finalY + 6;
   }
 
-  totalsBand(doc, y, "Closing Balance", formatCurrency(remaining));
+  // Payments section — only if any payments exist
+  if (payments.length || (includeOpening && openingPaid > 0)) {
+    sectionTitle(doc, `Payments (${payments.length})`, y); y += 4;
+    const body: any[] = [];
+    if (includeOpening && openingPaid > 0) {
+      body.push([
+        { content: "Opening Paid (B/F)", colSpan: 3, styles: { fontStyle: "bold" as const, fillColor: ROW_ALT } },
+        { content: formatCurrency(openingPaid), styles: { halign: "right" as const, fontStyle: "bold" as const, fillColor: ROW_ALT, textColor: NAVY } },
+      ]);
+    }
+    for (const p of payments) {
+      body.push([
+        fmtDate(p.date), p.id, p.note || "—",
+        { content: formatCurrency(p.amount), styles: { halign: "right" as const, textColor: SUCCESS } },
+      ]);
+    }
+    brandTable(doc, {
+      startY: y + 1,
+      head: [["Date", "Receipt", "Note", "Amount"]],
+      body,
+      foot: [[
+        { content: "Total Paid", colSpan: 3, styles: { halign: "right" as const, fontStyle: "bold" as const, fillColor: ROW_ALT, textColor: NAVY } },
+        { content: formatCurrency(grandPaid), styles: { halign: "right" as const, fontStyle: "bold" as const, fillColor: ROW_ALT, textColor: NAVY } },
+      ]],
+    });
+    y = (doc as any).lastAutoTable.finalY + 6;
+  }
+
+  // Final Overview band
+  sectionTitle(doc, "Overview", y); y += 4;
+  brandTable(doc, {
+    startY: y + 1,
+    head: [["", "Amount"]],
+    body: [
+      ...(includeOpening ? [["Opening Payable (B/F)", { content: formatCurrency(openingPayable), styles: { halign: "right" as const } }]] : []),
+      ["Total New Purchases", { content: formatCurrency(totalPurchases), styles: { halign: "right" as const } }],
+      [{ content: "Grand Total Payable", styles: { fontStyle: "bold" as const } }, { content: formatCurrency(grandPayable), styles: { halign: "right" as const, fontStyle: "bold" as const, textColor: NAVY } }],
+      ...(includeOpening ? [["Opening Paid (B/F)", { content: formatCurrency(openingPaid), styles: { halign: "right" as const } }]] : []),
+      ["Total New Payments", { content: formatCurrency(totalPaid), styles: { halign: "right" as const } }],
+      [{ content: "Grand Total Paid", styles: { fontStyle: "bold" as const } }, { content: formatCurrency(grandPaid), styles: { halign: "right" as const, fontStyle: "bold" as const, textColor: SUCCESS } }],
+    ] as any,
+  });
+  y = (doc as any).lastAutoTable.finalY + 4;
+
+  totalsBand(doc, y, "Closing Balance (Remaining Payable)", formatCurrency(remaining));
 
   footer(doc);
   save(doc, `Avery_Supplier_Statement_${supplier.id}.pdf`);
+}
+
+// Build category-specific purchase table
+function buildPurchaseTable(category: string, rows: LedgerEntry[]): { head: any[][]; body: any[][] } {
+  const cur = (n?: number) => formatCurrency(n || 0);
+  if (category === "Hotel") {
+    return {
+      head: [["Date", "Receipt", "Hotel", "City", "Rooms", "Nights", "Per Night", "Amount"]],
+      body: rows.map((e) => {
+        const d = e.purchaseDetails || {};
+        return [
+          fmtDate(e.date), e.id, d.hotelName || e.note || "—", d.city || "—",
+          String(d.rooms || "—"), String(d.nights || "—"),
+          { content: d.perNight ? cur(d.perNight) : "—", styles: { halign: "right" as const } },
+          { content: cur(e.amount), styles: { halign: "right" as const, textColor: NAVY } },
+        ];
+      }),
+    };
+  }
+  if (category === "Flight") {
+    return {
+      head: [["Date", "Receipt", "Description", "Adults", "Children", "Infants", "Amount"]],
+      body: rows.map((e) => {
+        const d = e.purchaseDetails || {};
+        return [
+          fmtDate(e.date), e.id, d.description || e.note || "—",
+          `${d.adults || 0} × ${cur(d.adultPrice)}`,
+          `${d.children || 0} × ${cur(d.childPrice)}`,
+          `${d.infants || 0} × ${cur(d.infantPrice)}`,
+          { content: cur(e.amount), styles: { halign: "right" as const, textColor: NAVY } },
+        ];
+      }),
+    };
+  }
+  if (category === "Visa") {
+    return {
+      head: [["Date", "Receipt", "Type", "Country", "Reference", "Pax", "Amount"]],
+      body: rows.map((e) => {
+        const d = e.purchaseDetails || {};
+        const pax = (d.adults || 0) + (d.children || 0) + (d.infants || 0);
+        return [
+          fmtDate(e.date), e.id, d.visaType || "—", d.country || "—",
+          d.reference || e.note || "—", String(pax || "—"),
+          { content: cur(e.amount), styles: { halign: "right" as const, textColor: NAVY } },
+        ];
+      }),
+    };
+  }
+  if (category === "Transport") {
+    return {
+      head: [["Date", "Receipt", "Route", "Vehicle", "Pax", "Amount"]],
+      body: rows.map((e) => {
+        const d = e.purchaseDetails || {};
+        const pax = (d.adults || 0) + (d.children || 0) + (d.infants || 0);
+        return [
+          fmtDate(e.date), e.id, d.route || e.note || "—", d.vehicle || "—",
+          String(pax || "—"),
+          { content: cur(e.amount), styles: { halign: "right" as const, textColor: NAVY } },
+        ];
+      }),
+    };
+  }
+  // Ziyarah, Insurance, Other, and any custom category
+  return {
+    head: [["Date", "Receipt", "Description", "Pax", "Amount"]],
+    body: rows.map((e) => {
+      const d = e.purchaseDetails || {};
+      const pax = (d.adults || 0) + (d.children || 0) + (d.infants || 0);
+      return [
+        fmtDate(e.date), e.id, d.description || e.note || "—",
+        String(pax || "—"),
+        { content: cur(e.amount), styles: { halign: "right" as const, textColor: NAVY } },
+      ];
+    }),
+  };
 }
 
 // =========================================================================

@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Download } from "lucide-react";
 
 interface Props {
@@ -10,15 +11,18 @@ interface Props {
   onOpenChange: (o: boolean) => void;
   title: string;
   subtitle?: string;
-  onDownload: (range: { fromDate?: string; toDate?: string }) => void;
+  onDownload: (range: { fromDate?: string; toDate?: string; includeOpening?: boolean }) => void;
 }
 
 export default function StatementDialog({ open, onOpenChange, title, subtitle, onDownload }: Props) {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [includeOpening, setIncludeOpening] = useState(true);
 
   function handle(allTime = false) {
-    onDownload(allTime ? {} : { fromDate: fromDate || undefined, toDate: toDate || undefined });
+    onDownload(allTime
+      ? { includeOpening }
+      : { fromDate: fromDate || undefined, toDate: toDate || undefined, includeOpening });
     onOpenChange(false);
   }
 
@@ -56,6 +60,10 @@ export default function StatementDialog({ open, onOpenChange, title, subtitle, o
             <Button variant="outline" size="sm" onClick={() => preset(6)} className="text-xs">Last 6 months</Button>
             <Button variant="outline" size="sm" onClick={() => preset(12)} className="text-xs">Last year</Button>
           </div>
+          <label className="flex items-center gap-2 rounded-lg border border-border/50 bg-accent/10 p-2 text-xs">
+            <Checkbox checked={includeOpening} onCheckedChange={(v) => setIncludeOpening(!!v)} />
+            <span>Include opening balance (brought-forward) in totals</span>
+          </label>
           <div className="flex gap-2 pt-2">
             <Button onClick={() => handle(true)} variant="outline" className="flex-1 gap-2">
               <Download className="h-4 w-4" /> All-time
