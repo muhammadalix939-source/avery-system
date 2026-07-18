@@ -498,7 +498,7 @@ function StatementView({
     const earned = a.commission || 0;
     const paid = commissions.reduce((s, e) => s + e.amount, 0);
     const opening = includeOpening ? (a.openingCommission || 0) : 0;
-    const openingPaid = includeOpening ? (a.openingCommissionPaid || 0) : 0;
+    const openingPaid = includeOpening ? (a.openingPaidCommission || 0) : 0;
     const totalEarned = earned + opening;
     const totalPaid = paid + openingPaid;
     const balance = totalEarned - totalPaid;
@@ -511,7 +511,7 @@ function StatementView({
           includeOpening={includeOpening}
           onToggle={onToggleOpening}
           onDownload={onDownload}
-          hasOpening={(a.openingCommission || 0) > 0 || (a.openingCommissionPaid || 0) > 0}
+          hasOpening={(a.openingCommission || 0) > 0 || (a.openingPaidCommission || 0) > 0}
         />
 
         <SectionCard title="Commissions Earned" rightLabel={formatCurrency(earned)}>
