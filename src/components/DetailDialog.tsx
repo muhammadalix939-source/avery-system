@@ -1,6 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Download, ChevronRight, ArrowLeft, Users, DollarSign } from "lucide-react";
+import { Download, ChevronRight, ArrowLeft, Users, DollarSign, FileText } from "lucide-react";
 import StatusBadge from "@/components/StatusBadge";
 import { formatCurrency, getClientName } from "@/lib/data";
 import type { Client, Booking, Agent, Supplier } from "@/lib/data";
@@ -20,8 +20,9 @@ interface DetailDialogProps {
 }
 
 export default function DetailDialog({ open, onOpenChange, type, data, entries = [], allClients = [], allBookings = [] }: DetailDialogProps) {
-  const [subView, setSubView] = useState<"main" | "clients" | "client-detail" | "bookings">("main");
+  const [subView, setSubView] = useState<"main" | "clients" | "client-detail" | "bookings" | "statement">("main");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [includeOpening, setIncludeOpening] = useState(true);
 
   if (!data) return null;
 
@@ -95,7 +96,8 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
               </Button>
             )}
             <DialogTitle className="text-primary text-sm flex-1">
-              {subView === "client-detail" && selectedClient ? `${getClientName(selectedClient)}` :
+              {subView === "statement" ? `Statement — ${type === "supplier" ? (data as Supplier).companyName : type === "agent" ? (data as Agent).name : getClientName(data as Client)}` :
+               subView === "client-detail" && selectedClient ? `${getClientName(selectedClient)}` :
                subView === "clients" && type === "agent" ? `Clients of ${(data as Agent).name}` :
                subView === "bookings" && type === "supplier" ? `Bookings — ${(data as Supplier).companyName}` :
                type === "client" ? `Client: ${getClientName(data as Client)}` :
@@ -105,6 +107,9 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
             </DialogTitle>
             {type !== "booking" && subView === "main" && (
               <div className="flex gap-1">
+                <Button size="sm" variant="outline" onClick={() => setSubView("statement")} className="gap-1.5 text-xs">
+                  <FileText className="h-3.5 w-3.5" /> View
+                </Button>
                 <Button size="sm" variant="outline" onClick={handleDownload} className="gap-1.5 text-xs">
                   <Download className="h-3.5 w-3.5" /> Statement
                 </Button>
@@ -230,6 +235,18 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
 
           {/* CLIENT DETAIL (from agent/supplier drill-down) */}
           {subView === "client-detail" && selectedClient && renderClient(selectedClient)}
+
+          {/* STATEMENT VIEW — mirrors PDF layout */}
+          {subView === "statement" && (
+            <StatementView
+              type={type as "client" | "agent" | "supplier"}
+              data={data as Client | Agent | Supplier}
+              entries={entries}
+              includeOpening={includeOpening}
+              onToggleOpening={setIncludeOpening}
+              onDownload={handleDownload}
+            />
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -365,5 +382,307 @@ function renderBooking(b: Booking) {
       <Row label="Created" value={b.createdAt} />
       {b.driveLink && <Row label="Drive Link" value={b.driveLink} />}
     </>
+  );
+}
+
+// ============================================================
+// STATEMENT VIEW — professional grouped layout mirroring PDF
+// ============================================================
+
+const CATEGORY_LABELS: Record<string, string> = {
+  flight: "Flight / Tickets",
+  ticket: "Flight / Tickets",
+  hotel: "Hotel Accommodation",
+  visa: "Visa Services",
+  transport: "Transportation",
+  ziyarah: "Ziyarah",
+  insurance: "Insurance",
+  other: "Other Services",
+};
+
+function StatementView({
+  type, data, entries, includeOpening, onToggleOpening, onDownload,
+}: {
+  type: "client" | "agent" | "supplier";
+  data: Client | Agent | Supplier;
+  entries: LedgerEntry[];
+  includeOpening: boolean;
+  onToggleOpening: (v: boolean) => void;
+  onDownload: () => void;
+}) {
+  // ---------- SUPPLIER ----------
+  if (type === "supplier") {
+    const s = data as Supplier;
+    const purchases = entries.filter((e) => e.type === "purchase");
+    const payments = entries.filter((e) => e.type === "supplier_payment");
+    const grouped = new Map<string, LedgerEntry[]>();
+    purchases.forEach((e) => {
+      const cat = (e.serviceCategory || "other").toLowerCase();
+      const key = CATEGORY_LABELS[cat] || CATEGORY_LABELS.other;
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key)!.push(e);
+    });
+    const purchaseTotal = purchases.reduce((sum, e) => sum + e.amount, 0);
+    const paidTotal = payments.reduce((sum, e) => sum + e.amount, 0);
+    const opening = includeOpening ? (s.openingPayable || 0) : 0;
+    const openingPaid = includeOpening ? (s.openingPaid || 0) : 0;
+    const grandPayable = opening + purchaseTotal;
+    const grandPaid = openingPaid + paidTotal;
+    const balance = grandPayable - grandPaid;
+
+    return (
+      <div className="space-y-4">
+        <StatementHeader
+          title="Supplier Ledger Statement"
+          rows={[["Supplier", s.companyName], ["Contact", s.contactPerson], ["Phone", s.phone]]}
+          includeOpening={includeOpening}
+          onToggle={onToggleOpening}
+          onDownload={onDownload}
+          hasOpening={(s.openingPayable || 0) > 0 || (s.openingPaid || 0) > 0}
+        />
+
+        {includeOpening && (s.openingPayable || s.openingPaid) ? (
+          <SectionCard title="Brought Forward (B/F)">
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <MiniStat label="Opening Payable" value={formatCurrency(s.openingPayable || 0)} />
+              <MiniStat label="Opening Paid" value={formatCurrency(s.openingPaid || 0)} tone="success" />
+            </div>
+          </SectionCard>
+        ) : null}
+
+        {grouped.size === 0 && payments.length === 0 && (
+          <p className="text-xs text-muted-foreground text-center py-6">No transactions recorded yet.</p>
+        )}
+
+        {Array.from(grouped.entries()).map(([label, items]) => {
+          const subtotal = items.reduce((s, e) => s + e.amount, 0);
+          return (
+            <SectionCard key={label} title={label} rightLabel={formatCurrency(subtotal)}>
+              <StatementTable
+                columns={["Date", "Description", "Amount"]}
+                rows={items.map((e) => [e.date, e.note || "—", formatCurrency(e.amount)])}
+              />
+            </SectionCard>
+          );
+        })}
+
+        {payments.length > 0 && (
+          <SectionCard title="Payments Made" rightLabel={formatCurrency(paidTotal)} tone="success">
+            <StatementTable
+              columns={["Date", "Method / Note", "Amount"]}
+              rows={payments.map((e) => [e.date, e.note || "Payment", formatCurrency(e.amount)])}
+            />
+          </SectionCard>
+        )}
+
+        <SectionCard title="Overview" highlight>
+          <div className="space-y-1.5 text-xs">
+            {includeOpening && (s.openingPayable || 0) > 0 && <OverviewRow label="Opening Payable" value={formatCurrency(s.openingPayable || 0)} />}
+            <OverviewRow label="Total Purchases" value={formatCurrency(purchaseTotal)} />
+            <OverviewRow label="Grand Total Payable" value={formatCurrency(grandPayable)} bold />
+            {includeOpening && (s.openingPaid || 0) > 0 && <OverviewRow label="Opening Paid" value={formatCurrency(s.openingPaid || 0)} tone="success" />}
+            <OverviewRow label="Payments Made" value={formatCurrency(paidTotal)} tone="success" />
+            <OverviewRow label="Grand Total Paid" value={formatCurrency(grandPaid)} bold tone="success" />
+            <div className="border-t border-primary/30 pt-1.5 mt-1.5" />
+            <OverviewRow label="Closing Balance" value={formatCurrency(balance)} bold tone={balance > 0 ? "destructive" : "success"} />
+          </div>
+        </SectionCard>
+      </div>
+    );
+  }
+
+  // ---------- AGENT ----------
+  if (type === "agent") {
+    const a = data as Agent;
+    const commissions = entries.filter((e) => e.type === "agent_commission");
+    const earned = a.commission || 0;
+    const paid = commissions.reduce((s, e) => s + e.amount, 0);
+    const opening = includeOpening ? (a.openingCommission || 0) : 0;
+    const openingPaid = includeOpening ? (a.openingPaidCommission || 0) : 0;
+    const totalEarned = earned + opening;
+    const totalPaid = paid + openingPaid;
+    const balance = totalEarned - totalPaid;
+
+    return (
+      <div className="space-y-4">
+        <StatementHeader
+          title="Agent Commission Statement"
+          rows={[["Agent", a.name], ["Phone", a.phone], ["Email", a.email]]}
+          includeOpening={includeOpening}
+          onToggle={onToggleOpening}
+          onDownload={onDownload}
+          hasOpening={(a.openingCommission || 0) > 0 || (a.openingPaidCommission || 0) > 0}
+        />
+
+        <SectionCard title="Commissions Earned" rightLabel={formatCurrency(earned)}>
+          {includeOpening && (a.openingCommission || 0) > 0 && (
+            <div className="text-[11px] text-muted-foreground pb-2 border-b border-border/30 mb-2">
+              B/F Opening Commission: <span className="text-foreground font-medium">{formatCurrency(a.openingCommission || 0)}</span>
+            </div>
+          )}
+          {earned === 0 && commissions.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-2">No commission activity yet.</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">Total commission accrued from bookings.</p>
+          )}
+        </SectionCard>
+
+        {commissions.length > 0 && (
+          <SectionCard title="Commission Payments" rightLabel={formatCurrency(paid)} tone="success">
+            <StatementTable
+              columns={["Date", "Description", "Amount"]}
+              rows={commissions.map((e) => [e.date, e.note || "Payment", formatCurrency(e.amount)])}
+            />
+          </SectionCard>
+        )}
+
+        <SectionCard title="Overview" highlight>
+          <div className="space-y-1.5 text-xs">
+            <OverviewRow label="Total Commission" value={formatCurrency(totalEarned)} bold />
+            <OverviewRow label="Total Paid" value={formatCurrency(totalPaid)} bold tone="success" />
+            <div className="border-t border-primary/30 pt-1.5 mt-1.5" />
+            <OverviewRow label="Payable Balance" value={formatCurrency(balance)} bold tone={balance > 0 ? "destructive" : "success"} />
+          </div>
+        </SectionCard>
+      </div>
+    );
+  }
+
+  // ---------- CLIENT ----------
+  const c = data as Client;
+  const receipts = entries.filter((e) => e.type === "client_receive");
+  const paid = receipts.reduce((s, e) => s + e.amount, 0);
+  const remaining = c.amountDue - c.amountPaid;
+
+  return (
+    <div className="space-y-4">
+      <StatementHeader
+        title="Client Account Statement"
+        rows={[["Client", getClientName(c)], ["Head ID", c.headId], ["Phone", c.phone]]}
+        includeOpening={includeOpening}
+        onToggle={onToggleOpening}
+        onDownload={onDownload}
+        hasOpening={false}
+      />
+
+      <SectionCard title="Booking Charges" rightLabel={formatCurrency(c.amountDue)}>
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <MiniStat label="Package" value={c.packageType} />
+          <MiniStat label="Destination" value={c.destination || "—"} />
+          <MiniStat label="Total Due" value={formatCurrency(c.amountDue)} />
+          <MiniStat label="Amount Paid" value={formatCurrency(c.amountPaid)} tone="success" />
+        </div>
+      </SectionCard>
+
+      {receipts.length > 0 && (
+        <SectionCard title="Payments Received" rightLabel={formatCurrency(paid)} tone="success">
+          <StatementTable
+            columns={["Date", "Description", "Amount"]}
+            rows={receipts.map((e) => [e.date, e.note || "Receipt", formatCurrency(e.amount)])}
+          />
+        </SectionCard>
+      )}
+
+      <SectionCard title="Overview" highlight>
+        <div className="space-y-1.5 text-xs">
+          <OverviewRow label="Total Due" value={formatCurrency(c.amountDue)} bold />
+          <OverviewRow label="Total Paid" value={formatCurrency(c.amountPaid)} bold tone="success" />
+          <div className="border-t border-primary/30 pt-1.5 mt-1.5" />
+          <OverviewRow label="Remaining Balance" value={formatCurrency(remaining)} bold tone={remaining > 0 ? "destructive" : "success"} />
+        </div>
+      </SectionCard>
+    </div>
+  );
+}
+
+function StatementHeader({ title, rows, includeOpening, onToggle, onDownload, hasOpening }: {
+  title: string; rows: [string, string][]; includeOpening: boolean; onToggle: (v: boolean) => void; onDownload: () => void; hasOpening: boolean;
+}) {
+  return (
+    <div className="rounded-lg border border-primary/30 bg-gradient-to-br from-primary/5 to-transparent p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-primary/70">Avery Group of Travel</p>
+          <p className="text-sm font-semibold text-primary font-serif">{title}</p>
+        </div>
+        <Button size="sm" variant="outline" onClick={onDownload} className="gap-1.5 text-xs">
+          <Download className="h-3.5 w-3.5" /> PDF
+        </Button>
+      </div>
+      <div className="grid grid-cols-3 gap-2 text-[11px] pt-1 border-t border-border/30">
+        {rows.map(([k, v]) => (
+          <div key={k}>
+            <p className="text-muted-foreground text-[9px] uppercase">{k}</p>
+            <p className="font-medium truncate">{v}</p>
+          </div>
+        ))}
+      </div>
+      {hasOpening && (
+        <label className="flex items-center gap-2 text-[11px] pt-1 cursor-pointer">
+          <input type="checkbox" checked={includeOpening} onChange={(e) => onToggle(e.target.checked)} className="accent-primary" />
+          <span className="text-muted-foreground">Include opening balance (B/F)</span>
+        </label>
+      )}
+    </div>
+  );
+}
+
+function SectionCard({ title, rightLabel, tone, highlight, children }: {
+  title: string; rightLabel?: string; tone?: "success" | "destructive"; highlight?: boolean; children: React.ReactNode;
+}) {
+  const toneClass = tone === "success" ? "text-success" : tone === "destructive" ? "text-destructive" : "text-primary";
+  return (
+    <div className={`rounded-lg border ${highlight ? "border-primary/40 bg-primary/5" : "border-border/50 bg-accent/10"} overflow-hidden`}>
+      <div className={`flex items-center justify-between px-3 py-2 border-b ${highlight ? "border-primary/30 bg-primary/10" : "border-border/40 bg-accent/20"}`}>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-primary font-serif">{title}</p>
+        {rightLabel && <p className={`text-xs font-bold ${toneClass}`}>{rightLabel}</p>}
+      </div>
+      <div className="p-3">{children}</div>
+    </div>
+  );
+}
+
+function StatementTable({ columns, rows }: { columns: string[]; rows: (string | number)[][] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-[11px]">
+        <thead>
+          <tr className="border-b border-border/40">
+            {columns.map((c, i) => (
+              <th key={c} className={`py-1.5 px-2 text-[10px] uppercase text-muted-foreground font-medium ${i === columns.length - 1 ? "text-right" : "text-left"}`}>{c}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-b border-border/20 last:border-0">
+              {r.map((cell, j) => (
+                <td key={j} className={`py-1.5 px-2 ${j === r.length - 1 ? "text-right font-medium" : "text-left"}`}>{cell}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function MiniStat({ label, value, tone }: { label: string; value: string; tone?: "success" | "destructive" }) {
+  const c = tone === "success" ? "text-success" : tone === "destructive" ? "text-destructive" : "";
+  return (
+    <div>
+      <p className="text-[9px] uppercase text-muted-foreground">{label}</p>
+      <p className={`text-xs font-semibold ${c}`}>{value}</p>
+    </div>
+  );
+}
+
+function OverviewRow({ label, value, bold, tone }: { label: string; value: string; bold?: boolean; tone?: "success" | "destructive" }) {
+  const c = tone === "success" ? "text-success" : tone === "destructive" ? "text-destructive" : "";
+  return (
+    <div className="flex justify-between items-center">
+      <span className={`text-muted-foreground ${bold ? "font-semibold text-foreground" : ""}`}>{label}</span>
+      <span className={`${bold ? "font-bold" : "font-medium"} ${c}`}>{value}</span>
+    </div>
   );
 }
