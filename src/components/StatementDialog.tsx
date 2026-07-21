@@ -6,23 +6,28 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Download } from "lucide-react";
 
+export interface StatementGroupOption { id: string; label: string; hint?: string; }
+
 interface Props {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   title: string;
   subtitle?: string;
-  onDownload: (range: { fromDate?: string; toDate?: string; includeOpening?: boolean }) => void;
+  groups?: StatementGroupOption[];
+  onDownload: (range: { fromDate?: string; toDate?: string; includeOpening?: boolean; groupId?: string; groupLabel?: string }) => void;
 }
 
-export default function StatementDialog({ open, onOpenChange, title, subtitle, onDownload }: Props) {
+export default function StatementDialog({ open, onOpenChange, title, subtitle, groups, onDownload }: Props) {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [includeOpening, setIncludeOpening] = useState(true);
+  const [groupId, setGroupId] = useState<string>("");
 
   function handle(allTime = false) {
+    const g = groups?.find((x) => x.id === groupId);
     onDownload(allTime
-      ? { includeOpening }
-      : { fromDate: fromDate || undefined, toDate: toDate || undefined, includeOpening });
+      ? { includeOpening, groupId: groupId || undefined, groupLabel: g?.label }
+      : { fromDate: fromDate || undefined, toDate: toDate || undefined, includeOpening, groupId: groupId || undefined, groupLabel: g?.label });
     onOpenChange(false);
   }
 
@@ -60,6 +65,19 @@ export default function StatementDialog({ open, onOpenChange, title, subtitle, o
             <Button variant="outline" size="sm" onClick={() => preset(6)} className="text-xs">Last 6 months</Button>
             <Button variant="outline" size="sm" onClick={() => preset(12)} className="text-xs">Last year</Button>
           </div>
+          {groups && groups.length > 0 && (
+            <div>
+              <Label className="text-xs">Filter by Group (optional)</Label>
+              <select value={groupId} onChange={(e) => setGroupId(e.target.value)}
+                className="mt-1 w-full rounded-md border border-border bg-accent/20 px-2 py-2 text-xs">
+                <option value="">All groups (no filter)</option>
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>{g.label}{g.hint ? ` — ${g.hint}` : ""}</option>
+                ))}
+              </select>
+              {groupId && <p className="mt-1 text-[10px] text-muted-foreground">Only purchases tagged to this group will be included. Opening balance is disabled for group-filtered statements.</p>}
+            </div>
+          )}
           <label className="flex items-center gap-2 rounded-lg border border-border/50 bg-accent/10 p-2 text-xs">
             <Checkbox checked={includeOpening} onCheckedChange={(v) => setIncludeOpening(!!v)} />
             <span>Include opening balance (brought-forward) in totals</span>
