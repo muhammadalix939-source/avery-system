@@ -12,7 +12,7 @@ import { formatCurrency, getClientName } from "@/lib/data";
 import { useStore, type LedgerEntry } from "@/lib/store";
 import { getPKTDate } from "@/lib/date-utils";
 import { generatePaymentReceipt } from "@/lib/pdf";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 export const Route = createFileRoute("/entries")({
   component: EntriesPage,
@@ -64,6 +64,10 @@ function EntriesPage() {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [form, setForm] = useState({ date: "", type: "client_receive" as LedgerEntry["type"], headId: "", referenceId: "", referenceName: "", amount: "", note: "" });
   const [serviceCategory, setServiceCategory] = useState<string>("");
+  // Group management (PNR / batch) — for purchase entries
+  const [groupMode, setGroupMode] = useState<"none" | "existing" | "new">("none");
+  const [groupId, setGroupId] = useState<string>("");
+  const [newGroup, setNewGroup] = useState({ name: "", pnr: "", flightNumber: "", date: "", description: "" });
   const emptyDetails = {
     adults: "", children: "", infants: "",
     adultPrice: "", childPrice: "", infantPrice: "",
@@ -73,6 +77,11 @@ function EntriesPage() {
   };
   const [details, setDetails] = useState<typeof emptyDetails>(emptyDetails);
   const [autoTotal, setAutoTotal] = useState(true);
+
+  const supplierGroups = useMemo(() => {
+    if (!form.referenceId) return store.groups;
+    return store.groups.filter((g) => !g.supplierId || g.supplierId === form.referenceId);
+  }, [store.groups, form.referenceId]);
 
   // Auto-compute purchase amount when details change (Flight / Hotel)
   function computeAutoAmount(cat: string, d: typeof emptyDetails): number | null {
@@ -100,27 +109,54 @@ function EntriesPage() {
   const filtered = typeFilter === "all" ? sorted : sorted.filter((e) => e.type === typeFilter);
 
   function handleAdd() {
+    let finalGroupId = groupMode === "existing" ? groupId : undefined;
+    if (groupMode === "new" && newGroup.name.trim()) {
+      finalGroupId = store.addGroup({
+        name: newGroup.name.trim(),
+        category: serviceCategory || "Other",
+        supplierId: form.referenceId || undefined,
+        pnr: newGroup.pnr || undefined,
+        flightNumber: newGroup.flightNumber || undefined,
+        date: newGroup.date || undefined,
+        description: newGroup.description || undefined,
+      });
+    }
     store.addEntry({
       date: form.date || getPKTDate(), type: form.type, headId: form.headId,
       referenceId: form.referenceId, referenceName: form.referenceName,
       amount: Number(form.amount) || 0, note: form.note,
       serviceCategory: serviceCategory || undefined,
       purchaseDetails: form.type === "purchase" ? buildDetailsPayload(serviceCategory, details) : undefined,
+      groupId: form.type === "purchase" ? finalGroupId : undefined,
     });
     setForm({ date: "", type: "client_receive", headId: "", referenceId: "", referenceName: "", amount: "", note: "" });
     setServiceCategory("");
     setDetails(emptyDetails);
+    setGroupMode("none"); setGroupId(""); setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "" });
     setAddOpen(false);
   }
 
   function handleEdit() {
     if (!selected) return;
+    let finalGroupId: string | undefined = groupMode === "existing" ? groupId : groupMode === "none" ? undefined : selected.groupId;
+    if (groupMode === "new" && newGroup.name.trim()) {
+      finalGroupId = store.addGroup({
+        name: newGroup.name.trim(),
+        category: serviceCategory || "Other",
+        supplierId: form.referenceId || undefined,
+        pnr: newGroup.pnr || undefined,
+        flightNumber: newGroup.flightNumber || undefined,
+        date: newGroup.date || undefined,
+        description: newGroup.description || undefined,
+      });
+    }
     store.updateEntry(selected.id, {
       date: form.date, type: form.type, headId: form.headId,
       referenceId: form.referenceId, referenceName: form.referenceName,
       amount: Number(form.amount) || 0, note: form.note,
       serviceCategory: serviceCategory || undefined,
       purchaseDetails: form.type === "purchase" ? buildDetailsPayload(serviceCategory, details) : undefined,
+      groupId: form.type === "purchase" ? finalGroupId : undefined,
     });
     setEditOpen(false);
   }
@@ -129,6 +165,8 @@ function EntriesPage() {
     setSelected(e);
     setForm({ date: e.date, type: e.type, headId: e.headId, referenceId: e.referenceId, referenceName: e.referenceName, amount: String(e.amount), note: e.note });
     setServiceCategory(e.serviceCategory || "");
+    if (e.groupId) { setGroupMode("existing"); setGroupId(e.groupId); } else { setGroupMode("none"); setGroupId(""); }
+    setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "" });
     const d = e.purchaseDetails || {};
     setDetails({
       adults: d.adults != null ? String(d.adults) : "",
@@ -319,6 +357,44 @@ function EntriesPage() {
                   options={store.bookings.map((b) => ({ value: b.headId, label: `${b.headId} — ${b.packageType}`, hint: b.travelDate }))}
                   className="mt-1"
                 />
+              </div>
+              {/* --- Group / PNR management --- */}
+              <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">Group / PNR</p>
+                  <div className="flex gap-1 text-[10px]">
+                    {(["none","existing","new"] as const).map((m) => (
+                      <button key={m} type="button" onClick={() => setGroupMode(m)}
+                        className={`rounded px-2 py-1 font-medium transition ${groupMode === m ? "bg-primary text-primary-foreground" : "bg-accent/40 text-muted-foreground hover:bg-accent/60"}`}>
+                        {m === "none" ? "Custom (No group)" : m === "existing" ? "Add to Group" : "+ New Group"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {groupMode === "existing" && (
+                  <SearchableSelect
+                    value={groupId}
+                    onChange={setGroupId}
+                    placeholder="Select existing group..."
+                    options={supplierGroups.map((g) => ({
+                      value: g.id,
+                      label: `${g.id} — ${g.name}`,
+                      hint: [g.category, g.pnr && `PNR ${g.pnr}`, g.flightNumber, g.date].filter(Boolean).join(" · "),
+                    }))}
+                    className="mt-1"
+                  />
+                )}
+                {groupMode === "new" && (
+                  <div className="space-y-2">
+                    <div><Label className="text-[10px]">Group Name</Label><Input value={newGroup.name} onChange={(e) => setNewGroup({ ...newGroup, name: e.target.value })} placeholder="Umrah Group Feb-26 / PK-234 Batch" className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div><Label className="text-[10px]">PNR</Label><Input value={newGroup.pnr} onChange={(e) => setNewGroup({ ...newGroup, pnr: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                      <div><Label className="text-[10px]">Flight / Ref #</Label><Input value={newGroup.flightNumber} onChange={(e) => setNewGroup({ ...newGroup, flightNumber: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                      <div><Label className="text-[10px]">Date</Label><Input type="date" value={newGroup.date} onChange={(e) => setNewGroup({ ...newGroup, date: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                    </div>
+                    <div><Label className="text-[10px]">Description</Label><Input value={newGroup.description} onChange={(e) => setNewGroup({ ...newGroup, description: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                  </div>
+                )}
               </div>
             </>
           )}

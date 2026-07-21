@@ -82,10 +82,20 @@ function SuppliersPage() {
   }
 
   function openStmt(s: Supplier) { setStmtSupplier(s); setStmtOpen(true); }
-  function downloadLedger(s: Supplier, range: { fromDate?: string; toDate?: string; includeOpening?: boolean }) {
+  function downloadLedger(s: Supplier, range: { fromDate?: string; toDate?: string; includeOpening?: boolean; groupId?: string; groupLabel?: string }) {
     const supplierEntries = store.entries.filter((e) => e.referenceId === s.id);
     generateSupplierLedger(s, supplierEntries, range);
   }
+
+  const stmtGroups = stmtSupplier
+    ? store.groups
+        .filter((g) => !g.supplierId || g.supplierId === stmtSupplier.id)
+        .map((g) => ({
+          id: g.id,
+          label: `${g.id} — ${g.name}`,
+          hint: [g.category, g.pnr && `PNR ${g.pnr}`, g.flightNumber, g.date].filter(Boolean).join(" · "),
+        }))
+    : [];
 
   const relatedEntries = selected ? store.entries.filter((e) => e.referenceId === selected.id) : [];
 
@@ -220,7 +230,8 @@ function SuppliersPage() {
       <StatementDialog
         open={stmtOpen} onOpenChange={setStmtOpen}
         title={`Supplier Statement — ${stmtSupplier?.companyName || ""}`}
-        subtitle="Choose a date range or all-time. Includes hotel/flight/visa/transport sections."
+        subtitle="Choose date range, all-time, or filter by group. Includes hotel/flight/visa/transport sections."
+        groups={stmtGroups}
         onDownload={(range) => stmtSupplier && downloadLedger(stmtSupplier, range)}
       />
     </div>
