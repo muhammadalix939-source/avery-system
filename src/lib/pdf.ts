@@ -269,6 +269,10 @@ export interface StatementOptions {
   bookings?: Booking[];
   /** Include opening balance (brought-forward) in totals & opening row. Default true. */
   includeOpening?: boolean;
+  /** Optional purchase-group filter (only entries with matching groupId are included). */
+  groupId?: string;
+  /** Human-readable group label for the header banner when groupId is set. */
+  groupLabel?: string;
 }
 
 function inRange(date: string, from?: string, to?: string) {
@@ -359,7 +363,9 @@ export function generateSupplierLedger(supplier: Supplier, entries: LedgerEntry[
   const doc = new jsPDF();
   header(doc, "Supplier Statement");
 
-  const filtered = entries.filter((e) => inRange(e.date, opts.fromDate, opts.toDate));
+  const filtered = entries
+    .filter((e) => inRange(e.date, opts.fromDate, opts.toDate))
+    .filter((e) => !opts.groupId || e.groupId === opts.groupId);
   const periodLabel = opts.fromDate || opts.toDate
     ? `${fmtDate(opts.fromDate)} — ${fmtDate(opts.toDate)}`
     : "All-time";
@@ -374,16 +380,23 @@ export function generateSupplierLedger(supplier: Supplier, entries: LedgerEntry[
 
   // Period strip
   doc.setFillColor(...NAVY);
-  doc.rect(14, y, 182, 7, "F");
+  doc.rect(14, y, 182, opts.groupId ? 12 : 7, "F");
   doc.setFont("times", "bold");
   doc.setFontSize(9);
   doc.setTextColor(...WHITE);
   doc.text(`Statement Period: ${periodLabel}`, 18, y + 5);
   doc.text(`Phone: ${supplier.phone}   ·   Email: ${supplier.email}`, 192, y + 5, { align: "right" });
+  if (opts.groupId) {
+    doc.setFont("times", "italic");
+    doc.setFontSize(8);
+    doc.setTextColor(...GOLD_LT);
+    doc.text(`Filtered by Group: ${opts.groupLabel || opts.groupId}`, 18, y + 10);
+  }
   doc.setTextColor(...INK);
-  y += 11;
+  y += opts.groupId ? 16 : 11;
 
-  const includeOpening = opts.includeOpening !== false;
+  // When filtering by a specific group, opening balances are not relevant to that group.
+  const includeOpening = opts.includeOpening !== false && !opts.groupId;
   const openingPayable = includeOpening ? (supplier.openingPayable || 0) : 0;
   const openingPaid = includeOpening ? (supplier.openingPaid || 0) : 0;
   const openingBF = openingPayable - openingPaid;
