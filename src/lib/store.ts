@@ -133,6 +133,53 @@ function persist() {
 const listeners = new Set<() => void>();
 function notify() { persist(); listeners.forEach((l) => l()); }
 
+// ---------- Source-of-truth resync ----------
+// Recompute derived totals on suppliers / agents / bookings from the entries array.
+// Call after ANY entry add / update / delete so views and PDFs stay consistent.
+function resyncFromEntries(refIds: { supplierIds?: string[]; agentIds?: string[]; headIds?: string[] }) {
+  const supplierIds = new Set(refIds.supplierIds || []);
+  const agentIds = new Set(refIds.agentIds || []);
+  const headIds = new Set(refIds.headIds || []);
+
+  // Suppliers: totalPayable = sum(purchase entries), totalPaid = sum(supplier_payment entries)
+  if (supplierIds.size) {
+    suppliers = suppliers.map((s) => {
+      if (!supplierIds.has(s.id)) return s;
+      const purchases = entries.filter((e) => e.type === "purchase" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
+      const payments  = entries.filter((e) => e.type === "supplier_payment" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
+      // Also honour any legacy totalCost coming from bookings for this supplier
+      const bookingCost = bookings.filter((b) => b.supplierId === s.id).reduce((sum, b) => sum + (b.totalCost || 0), 0);
+      return { ...s, totalPayable: Math.max(purchases, bookingCost), totalPaid: payments };
+    });
+  }
+
+  // Agents: paidCommission = sum(agent_commission entries)
+  if (agentIds.size) {
+    agents = agents.map((a) => {
+      if (!agentIds.has(a.id)) return a;
+      const paid = entries.filter((e) => e.type === "agent_commission" && e.referenceId === a.id).reduce((sum, e) => sum + e.amount, 0);
+      return { ...a, paidCommission: paid };
+    });
+  }
+
+  // Bookings / clients: amountReceived = sum(client_receive entries for that head), redistribute to clients
+  if (headIds.size) {
+    headIds.forEach((headId) => {
+      const totalReceived = entries.filter((e) => e.type === "client_receive" && e.headId === headId).reduce((s, e) => s + e.amount, 0);
+      bookings = bookings.map((b) => b.headId === headId ? { ...b, amountReceived: totalReceived } : b);
+      const headClients = clients.filter((c) => c.headId === headId);
+      let remaining = totalReceived;
+      clients = clients.map((c) => {
+        if (c.headId !== headId) return c;
+        if (remaining <= 0) return { ...c, amountPaid: 0, paymentStatus: "Unpaid" as const };
+        if (remaining >= c.amountDue) { remaining -= c.amountDue; return { ...c, amountPaid: c.amountDue, paymentStatus: "Paid" as const }; }
+        const paid = remaining; remaining = 0;
+        return { ...c, amountPaid: paid, paymentStatus: "Partial" as const };
+      });
+    });
+  }
+}
+
 export function useStore() {
   const [, setTick] = useState(0);
   const rerender = useCallback(() => setTick((t) => t + 1), []);
