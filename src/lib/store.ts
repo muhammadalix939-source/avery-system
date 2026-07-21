@@ -14,6 +14,8 @@ export interface LedgerEntry {
   amount: number;
   note: string;
   createdAt: string;
+  /** Optional PNR / batch group linking multiple purchases (typically flights or hotel rooming) */
+  groupId?: string;
   // For purchase entries: which service was bought (Hotel, Flight, Visa, Transport, Other)
   serviceCategory?: string;
   // Category-specific breakdown captured on purchase entries
@@ -45,6 +47,19 @@ export interface LedgerEntry {
   };
 }
 
+// ---------- Purchase Groups (PNR / batch) ----------
+export interface PurchaseGroup {
+  id: string;
+  name: string;
+  category: string; // Flight / Hotel / Visa / Transport / Other
+  supplierId?: string;
+  date?: string;         // scheduled / travel date
+  pnr?: string;
+  flightNumber?: string; // or schedule reference
+  description?: string;
+  createdAt: string;
+}
+
 // ---------- Persistence (localStorage) ----------
 const STORAGE_KEY = "av-crm-store-v1";
 
@@ -69,8 +84,9 @@ interface PersistedState {
   suppliers: Supplier[];
   monthlyData: typeof defaultMonthlyData;
   entries: LedgerEntry[];
-  counters: { client: number; agent: number; supplier: number; booking: number; head: number; entry: number };
+  counters: { client: number; agent: number; supplier: number; booking: number; head: number; entry: number; group?: number };
   opening?: OpeningBalances;
+  groups?: PurchaseGroup[];
 }
 
 const defaultEntries: LedgerEntry[] = [
@@ -109,12 +125,14 @@ let suppliers = initial.suppliers;
 let monthlyData = initial.monthlyData;
 let entries: LedgerEntry[] = initial.entries;
 let opening: OpeningBalances = initial.opening || { ...defaultOpening };
+let groups: PurchaseGroup[] = initial.groups || [];
 let nextClientNum = initial.counters.client;
 let nextAgentNum = initial.counters.agent;
 let nextSupplierNum = initial.counters.supplier;
 let nextBookingNum = initial.counters.booking;
 let nextHeadNum = initial.counters.head;
 let nextEntryNum = initial.counters.entry;
+let nextGroupNum = initial.counters.group || 1;
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 function persist() {
@@ -123,8 +141,8 @@ function persist() {
   saveTimer = setTimeout(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        clients, bookings, agents, suppliers, monthlyData, entries, opening,
-        counters: { client: nextClientNum, agent: nextAgentNum, supplier: nextSupplierNum, booking: nextBookingNum, head: nextHeadNum, entry: nextEntryNum },
+        clients, bookings, agents, suppliers, monthlyData, entries, opening, groups,
+        counters: { client: nextClientNum, agent: nextAgentNum, supplier: nextSupplierNum, booking: nextBookingNum, head: nextHeadNum, entry: nextEntryNum, group: nextGroupNum },
       }));
     } catch {}
   }, 150);
