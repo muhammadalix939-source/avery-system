@@ -12,7 +12,7 @@ import { formatCurrency, getClientName } from "@/lib/data";
 import { useStore, type LedgerEntry } from "@/lib/store";
 import { getPKTDate } from "@/lib/date-utils";
 import { generatePaymentReceipt } from "@/lib/pdf";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 export const Route = createFileRoute("/entries")({
   component: EntriesPage,
@@ -64,6 +64,10 @@ function EntriesPage() {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [form, setForm] = useState({ date: "", type: "client_receive" as LedgerEntry["type"], headId: "", referenceId: "", referenceName: "", amount: "", note: "" });
   const [serviceCategory, setServiceCategory] = useState<string>("");
+  // Group management (PNR / batch) — for purchase entries
+  const [groupMode, setGroupMode] = useState<"none" | "existing" | "new">("none");
+  const [groupId, setGroupId] = useState<string>("");
+  const [newGroup, setNewGroup] = useState({ name: "", pnr: "", flightNumber: "", date: "", description: "" });
   const emptyDetails = {
     adults: "", children: "", infants: "",
     adultPrice: "", childPrice: "", infantPrice: "",
@@ -73,6 +77,11 @@ function EntriesPage() {
   };
   const [details, setDetails] = useState<typeof emptyDetails>(emptyDetails);
   const [autoTotal, setAutoTotal] = useState(true);
+
+  const supplierGroups = useMemo(() => {
+    if (!form.referenceId) return store.groups;
+    return store.groups.filter((g) => !g.supplierId || g.supplierId === form.referenceId);
+  }, [store.groups, form.referenceId]);
 
   // Auto-compute purchase amount when details change (Flight / Hotel)
   function computeAutoAmount(cat: string, d: typeof emptyDetails): number | null {
@@ -100,27 +109,54 @@ function EntriesPage() {
   const filtered = typeFilter === "all" ? sorted : sorted.filter((e) => e.type === typeFilter);
 
   function handleAdd() {
+    let finalGroupId = groupMode === "existing" ? groupId : undefined;
+    if (groupMode === "new" && newGroup.name.trim()) {
+      finalGroupId = store.addGroup({
+        name: newGroup.name.trim(),
+        category: serviceCategory || "Other",
+        supplierId: form.referenceId || undefined,
+        pnr: newGroup.pnr || undefined,
+        flightNumber: newGroup.flightNumber || undefined,
+        date: newGroup.date || undefined,
+        description: newGroup.description || undefined,
+      });
+    }
     store.addEntry({
       date: form.date || getPKTDate(), type: form.type, headId: form.headId,
       referenceId: form.referenceId, referenceName: form.referenceName,
       amount: Number(form.amount) || 0, note: form.note,
       serviceCategory: serviceCategory || undefined,
       purchaseDetails: form.type === "purchase" ? buildDetailsPayload(serviceCategory, details) : undefined,
+      groupId: form.type === "purchase" ? finalGroupId : undefined,
     });
     setForm({ date: "", type: "client_receive", headId: "", referenceId: "", referenceName: "", amount: "", note: "" });
     setServiceCategory("");
     setDetails(emptyDetails);
+    setGroupMode("none"); setGroupId(""); setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "" });
     setAddOpen(false);
   }
 
   function handleEdit() {
     if (!selected) return;
+    let finalGroupId: string | undefined = groupMode === "existing" ? groupId : groupMode === "none" ? undefined : selected.groupId;
+    if (groupMode === "new" && newGroup.name.trim()) {
+      finalGroupId = store.addGroup({
+        name: newGroup.name.trim(),
+        category: serviceCategory || "Other",
+        supplierId: form.referenceId || undefined,
+        pnr: newGroup.pnr || undefined,
+        flightNumber: newGroup.flightNumber || undefined,
+        date: newGroup.date || undefined,
+        description: newGroup.description || undefined,
+      });
+    }
     store.updateEntry(selected.id, {
       date: form.date, type: form.type, headId: form.headId,
       referenceId: form.referenceId, referenceName: form.referenceName,
       amount: Number(form.amount) || 0, note: form.note,
       serviceCategory: serviceCategory || undefined,
       purchaseDetails: form.type === "purchase" ? buildDetailsPayload(serviceCategory, details) : undefined,
+      groupId: form.type === "purchase" ? finalGroupId : undefined,
     });
     setEditOpen(false);
   }
@@ -129,6 +165,8 @@ function EntriesPage() {
     setSelected(e);
     setForm({ date: e.date, type: e.type, headId: e.headId, referenceId: e.referenceId, referenceName: e.referenceName, amount: String(e.amount), note: e.note });
     setServiceCategory(e.serviceCategory || "");
+    if (e.groupId) { setGroupMode("existing"); setGroupId(e.groupId); } else { setGroupMode("none"); setGroupId(""); }
+    setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "" });
     const d = e.purchaseDetails || {};
     setDetails({
       adults: d.adults != null ? String(d.adults) : "",
