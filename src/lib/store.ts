@@ -215,6 +215,25 @@ export function useStore() {
     monthlyData,
     entries,
     opening,
+    groups,
+
+    // Purchase Groups CRUD
+    addGroup: (data: Omit<PurchaseGroup, "id" | "createdAt">) => {
+      const id = `AV-G-${String(nextGroupNum++).padStart(3, "0")}`;
+      const g: PurchaseGroup = { ...data, id, createdAt: new Date().toISOString() };
+      groups = [...groups, g];
+      notify();
+      return id;
+    },
+    updateGroup: (id: string, data: Partial<PurchaseGroup>) => {
+      groups = groups.map((g) => (g.id === id ? { ...g, ...data } : g));
+      notify();
+    },
+    deleteGroup: (id: string) => {
+      groups = groups.filter((g) => g.id !== id);
+      entries = entries.map((e) => (e.groupId === id ? { ...e, groupId: undefined } : e));
+      notify();
+    },
 
     // Client CRUD
     addClient: (data: Omit<Client, "id">) => {
@@ -484,9 +503,10 @@ export function useStore() {
       suppliers = [];
       entries = [];
       monthlyData = [];
+      groups = [];
       if (!opts?.keepOpening) opening = { ...defaultOpening };
       nextClientNum = 1; nextAgentNum = 1; nextSupplierNum = 1;
-      nextBookingNum = 1; nextHeadNum = 1; nextEntryNum = 1;
+      nextBookingNum = 1; nextHeadNum = 1; nextEntryNum = 1; nextGroupNum = 1;
       notify();
     },
   };
