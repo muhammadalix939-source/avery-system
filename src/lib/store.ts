@@ -357,74 +357,40 @@ export function useStore() {
       const id = `E${String(nextEntryNum++).padStart(3, "0")}`;
       const entry = { ...data, id, createdAt: new Date().toLocaleString("en-PK", { timeZone: "Asia/Karachi" }) };
       entries = [...entries, entry];
-
-      // Auto-sync: update related records based on entry type
-      if (data.type === "client_receive" && data.headId) {
-        // Update booking amountReceived
-        const booking = bookings.find((b) => b.headId === data.headId);
-        if (booking) {
-          const totalReceived = entries.filter((e) => e.type === "client_receive" && e.headId === data.headId).reduce((s, e) => s + e.amount, 0);
-          bookings = bookings.map((b) => b.headId === data.headId ? { ...b, amountReceived: totalReceived } : b);
-          // Distribute payment to clients under this head
-          const headClients = clients.filter((c) => c.headId === data.headId);
-          let remaining = totalReceived;
-          clients = clients.map((c) => {
-            if (c.headId !== data.headId) return c;
-            if (remaining <= 0) return { ...c, amountPaid: 0, paymentStatus: "Unpaid" as const };
-            if (remaining >= c.amountDue) { remaining -= c.amountDue; return { ...c, amountPaid: c.amountDue, paymentStatus: "Paid" as const }; }
-            const paid = remaining; remaining = 0;
-            return { ...c, amountPaid: paid, paymentStatus: "Partial" as const };
-          });
-        }
-      }
-
-      if (data.type === "supplier_payment" && data.referenceId) {
-        // Update supplier totalPaid
-        const totalPaid = entries.filter((e) => e.type === "supplier_payment" && e.referenceId === data.referenceId).reduce((s, e) => s + e.amount, 0);
-        suppliers = suppliers.map((s) => s.id === data.referenceId ? { ...s, totalPaid } : s);
-      }
-
-      if (data.type === "purchase" && data.referenceId) {
-        // Purchase: increase supplier totalPayable (we owe them more)
-        const totalPurchases = entries.filter((e) => e.type === "purchase" && e.referenceId === data.referenceId).reduce((s, e) => s + e.amount, 0);
-        const sup = suppliers.find((s) => s.id === data.referenceId);
-        if (sup) {
-          // Recompute payable = (sum of all purchases for this supplier) + opening, leaving paid alone
-          // But other bookings may also contribute totalCost to totalPayable in legacy data,
-          // so we treat purchase entries as the canonical source: add the new amount only.
-          suppliers = suppliers.map((s) => s.id === data.referenceId ? { ...s, totalPayable: s.totalPayable + (data.amount || 0) } : s);
-        }
-      }
-
-      if (data.type === "agent_commission" && data.referenceId) {
-        // Update agent paidCommission
-        const totalPaid = entries.filter((e) => e.type === "agent_commission" && e.referenceId === data.referenceId).reduce((s, e) => s + e.amount, 0);
-        agents = agents.map((a) => a.id === data.referenceId ? { ...a, paidCommission: totalPaid } : a);
-      }
-
+      resyncFromEntries({
+        supplierIds: (data.type === "purchase" || data.type === "supplier_payment") ? [data.referenceId] : [],
+        agentIds: data.type === "agent_commission" ? [data.referenceId] : [],
+        headIds: data.type === "client_receive" && data.headId ? [data.headId] : [],
+      });
       notify();
       return id;
     },
     updateEntry: (id: string, data: Partial<LedgerEntry>) => {
+      const before = entries.find((e) => e.id === id);
       entries = entries.map((e) => (e.id === id ? { ...e, ...data } : e));
+      const after = entries.find((e) => e.id === id);
+      // Collect every ref possibly affected (old + new — reference or type may have changed)
+      const supplierIds = new Set<string>();
+      const agentIds = new Set<string>();
+      const headIds = new Set<string>();
+      [before, after].forEach((e) => {
+        if (!e) return;
+        if (e.type === "purchase" || e.type === "supplier_payment") { if (e.referenceId) supplierIds.add(e.referenceId); }
+        if (e.type === "agent_commission") { if (e.referenceId) agentIds.add(e.referenceId); }
+        if (e.type === "client_receive") { if (e.headId) headIds.add(e.headId); }
+      });
+      resyncFromEntries({ supplierIds: [...supplierIds], agentIds: [...agentIds], headIds: [...headIds] });
       notify();
     },
     deleteEntry: (id: string) => {
       const e = entries.find((x) => x.id === id);
-      entries = entries.filter((e) => e.id !== id);
-      // Reverse side effects
+      entries = entries.filter((x) => x.id !== id);
       if (e) {
-        if (e.type === "purchase" && e.referenceId) {
-          suppliers = suppliers.map((s) => s.id === e.referenceId ? { ...s, totalPayable: Math.max(0, s.totalPayable - e.amount) } : s);
-        }
-        if (e.type === "supplier_payment" && e.referenceId) {
-          const totalPaid = entries.filter((x) => x.type === "supplier_payment" && x.referenceId === e.referenceId).reduce((s, x) => s + x.amount, 0);
-          suppliers = suppliers.map((s) => s.id === e.referenceId ? { ...s, totalPaid } : s);
-        }
-        if (e.type === "agent_commission" && e.referenceId) {
-          const totalPaid = entries.filter((x) => x.type === "agent_commission" && x.referenceId === e.referenceId).reduce((s, x) => s + x.amount, 0);
-          agents = agents.map((a) => a.id === e.referenceId ? { ...a, paidCommission: totalPaid } : a);
-        }
+        resyncFromEntries({
+          supplierIds: (e.type === "purchase" || e.type === "supplier_payment") && e.referenceId ? [e.referenceId] : [],
+          agentIds: e.type === "agent_commission" && e.referenceId ? [e.referenceId] : [],
+          headIds: e.type === "client_receive" && e.headId ? [e.headId] : [],
+        });
       }
       notify();
     },
