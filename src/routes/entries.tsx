@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import PageHeader from "@/components/PageHeader";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { formatCurrency, getClientName } from "@/lib/data";
-import { useStore, type LedgerEntry } from "@/lib/store";
+import { useStore, computeGroupUsedPax, type LedgerEntry } from "@/lib/store";
 import { getPKTDate } from "@/lib/date-utils";
 import { generatePaymentReceipt } from "@/lib/pdf";
 import { useMemo, useState } from "react";
@@ -67,7 +67,7 @@ function EntriesPage() {
   // Group management (PNR / batch) — for purchase entries
   const [groupMode, setGroupMode] = useState<"none" | "existing" | "new">("none");
   const [groupId, setGroupId] = useState<string>("");
-  const [newGroup, setNewGroup] = useState({ name: "", pnr: "", flightNumber: "", date: "", description: "" });
+  const [newGroup, setNewGroup] = useState({ name: "", pnr: "", flightNumber: "", date: "", description: "", totalPax: "" });
   const emptyDetails = {
     adults: "", children: "", infants: "",
     adultPrice: "", childPrice: "", infantPrice: "",
@@ -119,6 +119,7 @@ function EntriesPage() {
         flightNumber: newGroup.flightNumber || undefined,
         date: newGroup.date || undefined,
         description: newGroup.description || undefined,
+        totalPax: newGroup.totalPax ? Number(newGroup.totalPax) : undefined,
       });
     }
     store.addEntry({
@@ -132,7 +133,7 @@ function EntriesPage() {
     setForm({ date: "", type: "client_receive", headId: "", referenceId: "", referenceName: "", amount: "", note: "" });
     setServiceCategory("");
     setDetails(emptyDetails);
-    setGroupMode("none"); setGroupId(""); setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "" });
+    setGroupMode("none"); setGroupId(""); setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "", totalPax: "" });
     setAddOpen(false);
   }
 
@@ -148,6 +149,7 @@ function EntriesPage() {
         flightNumber: newGroup.flightNumber || undefined,
         date: newGroup.date || undefined,
         description: newGroup.description || undefined,
+        totalPax: newGroup.totalPax ? Number(newGroup.totalPax) : undefined,
       });
     }
     store.updateEntry(selected.id, {
@@ -166,7 +168,7 @@ function EntriesPage() {
     setForm({ date: e.date, type: e.type, headId: e.headId, referenceId: e.referenceId, referenceName: e.referenceName, amount: String(e.amount), note: e.note });
     setServiceCategory(e.serviceCategory || "");
     if (e.groupId) { setGroupMode("existing"); setGroupId(e.groupId); } else { setGroupMode("none"); setGroupId(""); }
-    setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "" });
+    setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "", totalPax: "" });
     const d = e.purchaseDetails || {};
     setDetails({
       adults: d.adults != null ? String(d.adults) : "",
@@ -372,21 +374,47 @@ function EntriesPage() {
                   </div>
                 </div>
                 {groupMode === "existing" && (
-                  <SearchableSelect
-                    value={groupId}
-                    onChange={setGroupId}
-                    placeholder="Select existing group..."
-                    options={supplierGroups.map((g) => ({
-                      value: g.id,
-                      label: `${g.id} — ${g.name}`,
-                      hint: [g.category, g.pnr && `PNR ${g.pnr}`, g.flightNumber, g.date].filter(Boolean).join(" · "),
-                    }))}
-                    className="mt-1"
-                  />
+                  <div className="space-y-2">
+                    <SearchableSelect
+                      value={groupId}
+                      onChange={setGroupId}
+                      placeholder={supplierGroups.length ? "Select existing group..." : "No groups yet — create a new one"}
+                      options={supplierGroups.map((g) => {
+                        const u = computeGroupUsedPax(g.id);
+                        const cap = g.totalPax != null ? ` · ${u}/${g.totalPax} used` : ` · ${u} used`;
+                        return {
+                          value: g.id,
+                          label: `${g.id} — ${g.name}`,
+                          hint: [g.category, g.pnr && `PNR ${g.pnr}`, g.flightNumber, g.date].filter(Boolean).join(" · ") + cap,
+                        };
+                      })}
+                      className="mt-1"
+                    />
+                    {(() => {
+                      const sel = supplierGroups.find((g) => g.id === groupId);
+                      if (!sel) return null;
+                      const used = computeGroupUsedPax(sel.id);
+                      const req = (Number(details.adults) || 0) + (Number(details.children) || 0) + (Number(details.infants) || 0);
+                      const remaining = sel.totalPax != null ? Math.max(0, sel.totalPax - used) : null;
+                      const overflow = sel.totalPax != null && (used + req) > sel.totalPax;
+                      return (
+                        <div className={`flex flex-wrap items-center gap-3 rounded-md px-3 py-2 text-[11px] ${overflow ? "bg-destructive/15 text-destructive" : "bg-accent/20 text-foreground"}`}>
+                          <span>Capacity:</span>
+                          <span className="font-semibold">{sel.totalPax ?? "∞"}</span>
+                          <span className="text-muted-foreground">Used: <b className="text-foreground">{used}</b></span>
+                          {remaining !== null && <span className="text-muted-foreground">Remaining: <b className={overflow ? "text-destructive" : "text-success"}>{remaining}</b></span>}
+                          <span className="ml-auto text-muted-foreground">This entry: <b className="text-foreground">{req}</b></span>
+                        </div>
+                      );
+                    })()}
+                  </div>
                 )}
                 {groupMode === "new" && (
                   <div className="space-y-2">
-                    <div><Label className="text-[10px]">Group Name</Label><Input value={newGroup.name} onChange={(e) => setNewGroup({ ...newGroup, name: e.target.value })} placeholder="Umrah Group Feb-26 / PK-234 Batch" className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div><Label className="text-[10px]">Group Name</Label><Input value={newGroup.name} onChange={(e) => setNewGroup({ ...newGroup, name: e.target.value })} placeholder="Umrah Group Feb-26 / PK-234 Batch" className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                      <div><Label className="text-[10px]">Total Persons (capacity)</Label><Input type="number" min="0" value={newGroup.totalPax} onChange={(e) => setNewGroup({ ...newGroup, totalPax: e.target.value })} placeholder="e.g. 30" className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+                    </div>
                     <div className="grid grid-cols-3 gap-2">
                       <div><Label className="text-[10px]">PNR</Label><Input value={newGroup.pnr} onChange={(e) => setNewGroup({ ...newGroup, pnr: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
                       <div><Label className="text-[10px]">Flight / Ref #</Label><Input value={newGroup.flightNumber} onChange={(e) => setNewGroup({ ...newGroup, flightNumber: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>

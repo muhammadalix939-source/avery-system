@@ -57,6 +57,7 @@ export interface PurchaseGroup {
   pnr?: string;
   flightNumber?: string; // or schedule reference
   description?: string;
+  totalPax?: number;     // optional capacity for the group (seats / rooms)
   createdAt: string;
 }
 
@@ -150,6 +151,21 @@ function persist() {
 
 const listeners = new Set<() => void>();
 function notify() { persist(); listeners.forEach((l) => l()); }
+
+// ---------- Group capacity helper ----------
+/** How many pax are already consumed by a given group across bookings + purchase entries. */
+export function computeGroupUsedPax(groupId: string): number {
+  const bookingPax = bookings
+    .filter((b) => b.groupId === groupId)
+    .reduce((sum, b) => sum + (b.members || 0), 0);
+  const entryPax = entries
+    .filter((e) => e.groupId === groupId)
+    .reduce((sum, e) => {
+      const d = e.purchaseDetails || {};
+      return sum + (d.adults || 0) + (d.children || 0) + (d.infants || 0);
+    }, 0);
+  return bookingPax + entryPax;
+}
 
 // ---------- Source-of-truth resync ----------
 // Recompute derived totals on suppliers / agents / bookings from the entries array.
