@@ -57,6 +57,7 @@ export interface PurchaseGroup {
   pnr?: string;
   flightNumber?: string; // or schedule reference
   description?: string;
+  totalPax?: number;     // optional capacity for the group (seats / rooms)
   createdAt: string;
 }
 

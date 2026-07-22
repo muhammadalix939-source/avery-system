@@ -89,6 +89,8 @@ export interface Booking {
   transports?: TransportService[];
   visas?: VisaService[];
   others?: OtherService[];
+  /** Optional PNR / batch group linking this booking to a shared purchase group */
+  groupId?: string;
 }
 
 export interface HotelService {
