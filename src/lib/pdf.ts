@@ -723,17 +723,19 @@ function categoryHeading(doc: jsPDF, y: number, label: string, count: number, to
   doc.setFontSize(11);
   doc.setTextColor(...NAVY);
   doc.text(label, 19, y + 6);
+  // measure label in its own font BEFORE switching
+  const labelW = doc.getTextWidth(label);
 
-  // count pill
+  // count pill (in pill font)
   const pillTxt = `${count} ${count === 1 ? "item" : "items"}`;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7);
   const pillW = doc.getTextWidth(pillTxt) + 5;
-  const labelW = doc.getTextWidth(label);
+  const pillX = 19 + labelW + 4;
   doc.setFillColor(...NAVY);
-  doc.roundedRect(19 + labelW + 4, y + 2.2, pillW, 4.4, 1.2, 1.2, "F");
+  doc.roundedRect(pillX, y + 2.2, pillW, 4.4, 1.2, 1.2, "F");
   doc.setTextColor(...GOLD_LT);
-  doc.text(pillTxt, 19 + labelW + 4 + pillW / 2, y + 5.3, { align: "center" });
+  doc.text(pillTxt, pillX + pillW / 2, y + 5.3, { align: "center" });
 
   // right total
   doc.setFont("helvetica", "bold");
