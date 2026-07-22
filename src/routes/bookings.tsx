@@ -427,6 +427,75 @@ function BookingsPage() {
       </div>
       <div><Label className="text-xs">Destination</Label><Input value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} placeholder="Makkah / Madinah" className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
       <div><Label className="text-xs">Google Drive Link (optional)</Label><Input value={form.driveLink} onChange={(e) => setForm({ ...form, driveLink: e.target.value })} placeholder="https://drive.google.com/..." className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+
+      {/* --- Group / PNR (supplier-linked batch) --- */}
+      <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">Group / PNR</p>
+            <p className="text-[10px] text-muted-foreground">Link this booking to a shared supplier batch (flight PNR, hotel rooming, etc.)</p>
+          </div>
+          <div className="flex gap-1 text-[10px]">
+            {(["none","existing","new"] as const).map((m) => (
+              <button key={m} type="button" onClick={() => setGroupMode(m)}
+                className={`rounded px-2 py-1 font-medium transition ${groupMode === m ? "bg-primary text-primary-foreground" : "bg-accent/40 text-muted-foreground hover:bg-accent/60"}`}>
+                {m === "none" ? "No Group" : m === "existing" ? "Add to Group" : "+ New Group"}
+              </button>
+            ))}
+          </div>
+        </div>
+        {groupMode === "existing" && (() => {
+          const list = form.supplierId ? store.groups.filter((g) => !g.supplierId || g.supplierId === form.supplierId) : store.groups;
+          const requested = Math.max(1, (Number(form.adults) || 0) + (Number(form.children) || 0) + (Number(form.infants) || 0));
+          const selected = list.find((g) => g.id === groupId);
+          const used = selected ? computeGroupUsedPax(selected.id) : 0;
+          const remaining = selected?.totalPax != null ? Math.max(0, selected.totalPax - used) : null;
+          const overflow = selected?.totalPax != null && (used + requested) > selected.totalPax;
+          return (
+            <div className="space-y-2">
+              <SearchableSelect
+                value={groupId}
+                onChange={setGroupId}
+                placeholder={list.length ? "Select existing group..." : "No groups yet — create a new one"}
+                options={list.map((g) => {
+                  const u = computeGroupUsedPax(g.id);
+                  const cap = g.totalPax != null ? ` · ${u}/${g.totalPax} used` : ` · ${u} used`;
+                  return {
+                    value: g.id,
+                    label: `${g.id} — ${g.name}`,
+                    hint: [g.category, g.pnr && `PNR ${g.pnr}`, g.flightNumber, g.date].filter(Boolean).join(" · ") + cap,
+                  };
+                })}
+                className="mt-1"
+              />
+              {selected && (
+                <div className={`flex flex-wrap items-center gap-3 rounded-md px-3 py-2 text-[11px] ${overflow ? "bg-destructive/15 text-destructive" : "bg-accent/20 text-foreground"}`}>
+                  <span>Capacity:</span>
+                  <span className="font-semibold">{selected.totalPax ?? "∞"}</span>
+                  <span className="text-muted-foreground">Used: <b className="text-foreground">{used}</b></span>
+                  {remaining !== null && <span className="text-muted-foreground">Remaining: <b className={overflow ? "text-destructive" : "text-success"}>{remaining}</b></span>}
+                  <span className="ml-auto text-muted-foreground">This booking: <b className="text-foreground">{requested}</b></span>
+                  {overflow && <span className="w-full font-semibold">⚠ Exceeds group capacity</span>}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+        {groupMode === "new" && (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <div><Label className="text-[10px]">Group Name</Label><Input value={newGroup.name} onChange={(e) => setNewGroup({ ...newGroup, name: e.target.value })} placeholder="Umrah Group Feb-26 / PK-234" className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+              <div><Label className="text-[10px]">Total Persons (capacity)</Label><Input type="number" min="0" value={newGroup.totalPax} onChange={(e) => setNewGroup({ ...newGroup, totalPax: e.target.value })} placeholder="e.g. 30" className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div><Label className="text-[10px]">PNR</Label><Input value={newGroup.pnr} onChange={(e) => setNewGroup({ ...newGroup, pnr: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+              <div><Label className="text-[10px]">Flight / Ref #</Label><Input value={newGroup.flightNumber} onChange={(e) => setNewGroup({ ...newGroup, flightNumber: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+              <div><Label className="text-[10px]">Date</Label><Input type="date" value={newGroup.date} onChange={(e) => setNewGroup({ ...newGroup, date: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+            </div>
+            <div><Label className="text-[10px]">Description</Label><Input value={newGroup.description} onChange={(e) => setNewGroup({ ...newGroup, description: e.target.value })} className="bg-accent/20 border-border mt-0.5 h-8 text-xs" /></div>
+          </div>
+        )}
+      </div>
     </div>
   );
 
