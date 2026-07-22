@@ -12,6 +12,7 @@ import { SearchableSelect } from "@/components/SearchableSelect";
 import BookingServicesMenu, { VoucherDownloadMenu } from "@/components/BookingServicesMenu";
 import { formatCurrency, getClientName, PACKAGE_TYPES, type Booking, type Client } from "@/lib/data";
 import { useStore } from "@/lib/store";
+import { computeGroupUsedPax } from "@/lib/store";
 import { getPKTDate } from "@/lib/date-utils";
 import { generateInvoice, generatePaymentHistory } from "@/lib/pdf";
 import { useState } from "react";
@@ -62,11 +63,17 @@ function BookingsPage() {
   const [memberForms, setMemberForms] = useState<MemberForm[]>([]);
   const [memberIndex, setMemberIndex] = useState(0);
 
+  // Group / PNR selection for the booking (linked to supplier)
+  const [groupMode, setGroupMode] = useState<"none" | "existing" | "new">("none");
+  const [groupId, setGroupId] = useState<string>("");
+  const [newGroup, setNewGroup] = useState({ name: "", pnr: "", flightNumber: "", date: "", description: "", totalPax: "" });
+
   function resetForm() {
     setForm({ agentId: "", supplierId: "", totalAmount: "", amountReceived: "", totalCost: "", commission: "", packageType: "Umrah", status: "Pending", travelDate: "", adults: "1", children: "0", infants: "0", destination: "", driveLink: "", pricingMode: "total", adultPrice: "", childPrice: "", infantPrice: "" });
     setMemberForms([]);
     setMemberIndex(0);
     setStep(1);
+    setGroupMode("none"); setGroupId(""); setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "", totalPax: "" });
   }
 
   function goToStep2() {
@@ -128,6 +135,21 @@ function BookingsPage() {
       computedTotal = totalEntered;
     }
 
+    // Resolve group linkage (create new if requested)
+    let finalGroupId: string | undefined = groupMode === "existing" ? (groupId || undefined) : undefined;
+    if (groupMode === "new" && newGroup.name.trim()) {
+      finalGroupId = store.addGroup({
+        name: newGroup.name.trim(),
+        category: "Booking",
+        supplierId: form.supplierId || undefined,
+        pnr: newGroup.pnr || undefined,
+        flightNumber: newGroup.flightNumber || undefined,
+        date: newGroup.date || form.travelDate || undefined,
+        description: newGroup.description || undefined,
+        totalPax: newGroup.totalPax ? Number(newGroup.totalPax) : undefined,
+      });
+    }
+
     const bookingId = store.addBooking({
       headId, agentId: form.agentId, supplierId: form.supplierId,
       totalAmount: computedTotal, amountReceived: Number(form.amountReceived) || 0,
@@ -135,6 +157,7 @@ function BookingsPage() {
       clientIds: [], status: form.status, packageType: form.packageType, travelDate: form.travelDate,
       createdAt: today, members: memberForms.length,
       destination: form.destination, driveLink: form.driveLink,
+      groupId: finalGroupId,
     });
 
     const clientIds: string[] = [];

@@ -67,7 +67,7 @@ function EntriesPage() {
   // Group management (PNR / batch) — for purchase entries
   const [groupMode, setGroupMode] = useState<"none" | "existing" | "new">("none");
   const [groupId, setGroupId] = useState<string>("");
-  const [newGroup, setNewGroup] = useState({ name: "", pnr: "", flightNumber: "", date: "", description: "" });
+  const [newGroup, setNewGroup] = useState({ name: "", pnr: "", flightNumber: "", date: "", description: "", totalPax: "" });
   const emptyDetails = {
     adults: "", children: "", infants: "",
     adultPrice: "", childPrice: "", infantPrice: "",
@@ -119,6 +119,7 @@ function EntriesPage() {
         flightNumber: newGroup.flightNumber || undefined,
         date: newGroup.date || undefined,
         description: newGroup.description || undefined,
+        totalPax: newGroup.totalPax ? Number(newGroup.totalPax) : undefined,
       });
     }
     store.addEntry({
@@ -132,7 +133,7 @@ function EntriesPage() {
     setForm({ date: "", type: "client_receive", headId: "", referenceId: "", referenceName: "", amount: "", note: "" });
     setServiceCategory("");
     setDetails(emptyDetails);
-    setGroupMode("none"); setGroupId(""); setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "" });
+    setGroupMode("none"); setGroupId(""); setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "", totalPax: "" });
     setAddOpen(false);
   }
 
@@ -148,6 +149,7 @@ function EntriesPage() {
         flightNumber: newGroup.flightNumber || undefined,
         date: newGroup.date || undefined,
         description: newGroup.description || undefined,
+        totalPax: newGroup.totalPax ? Number(newGroup.totalPax) : undefined,
       });
     }
     store.updateEntry(selected.id, {
@@ -166,7 +168,7 @@ function EntriesPage() {
     setForm({ date: e.date, type: e.type, headId: e.headId, referenceId: e.referenceId, referenceName: e.referenceName, amount: String(e.amount), note: e.note });
     setServiceCategory(e.serviceCategory || "");
     if (e.groupId) { setGroupMode("existing"); setGroupId(e.groupId); } else { setGroupMode("none"); setGroupId(""); }
-    setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "" });
+    setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "", totalPax: "" });
     const d = e.purchaseDetails || {};
     setDetails({
       adults: d.adults != null ? String(d.adults) : "",
