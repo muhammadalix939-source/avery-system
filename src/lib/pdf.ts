@@ -361,7 +361,7 @@ function renderServiceSections(doc: jsPDF, y: number, bookings: Booking[]): numb
 // =========================================================================
 export function generateSupplierLedger(supplier: Supplier, entries: LedgerEntry[], opts: StatementOptions = {}) {
   const doc = new jsPDF();
-  header(doc, "Supplier Statement");
+  supplierHeader(doc);
 
   const filtered = entries
     .filter((e) => inRange(e.date, opts.fromDate, opts.toDate))
@@ -370,38 +370,11 @@ export function generateSupplierLedger(supplier: Supplier, entries: LedgerEntry[
     ? `${fmtDate(opts.fromDate)} — ${fmtDate(opts.toDate)}`
     : "All-time";
 
-  let y = 44;
-  y = fromAndTo(doc, y, "Supplier", [
-    ["ID", supplier.id],
-    ["Company", supplier.companyName],
-    ["Contact", supplier.contactPerson],
-    ["Service", supplier.serviceType],
-  ]);
-
-  // Period strip
-  doc.setFillColor(...NAVY);
-  doc.rect(14, y, 182, opts.groupId ? 12 : 7, "F");
-  doc.setFont("times", "bold");
-  doc.setFontSize(9);
-  doc.setTextColor(...WHITE);
-  doc.text(`Statement Period: ${periodLabel}`, 18, y + 5);
-  doc.text(`Phone: ${supplier.phone}   ·   Email: ${supplier.email}`, 192, y + 5, { align: "right" });
-  if (opts.groupId) {
-    doc.setFont("times", "italic");
-    doc.setFontSize(8);
-    doc.setTextColor(...GOLD_LT);
-    doc.text(`Filtered by Group: ${opts.groupLabel || opts.groupId}`, 18, y + 10);
-  }
-  doc.setTextColor(...INK);
-  y += opts.groupId ? 16 : 11;
-
-  // When filtering by a specific group, opening balances are not relevant to that group.
   const includeOpening = opts.includeOpening !== false && !opts.groupId;
   const openingPayable = includeOpening ? (supplier.openingPayable || 0) : 0;
   const openingPaid = includeOpening ? (supplier.openingPaid || 0) : 0;
   const openingBF = openingPayable - openingPaid;
 
-  // Split entries: purchases (grouped by serviceCategory) and payments
   const purchases = filtered.filter((e) => e.type === "purchase");
   const payments = filtered.filter((e) => e.type === "supplier_payment");
 
@@ -411,14 +384,20 @@ export function generateSupplierLedger(supplier: Supplier, entries: LedgerEntry[
   const grandPaid = openingPaid + totalPaid;
   const remaining = grandPayable - grandPaid;
 
-  // Overview cards
-  const cards: Array<[string, string, string]> = [];
-  if (includeOpening) cards.push(["Brought Forward (B/F)", formatCurrency(openingBF), "ink"]);
-  cards.push(["Total Purchases", formatCurrency(grandPayable), "navy"]);
-  cards.push(["Total Paid", formatCurrency(grandPaid), "success"]);
-  cards.push(["Remaining", formatCurrency(remaining), "danger"]);
-  y = summaryCards(doc, y, cards as any);
-  y += 2;
+  let y = 66;
+  y = supplierMetaBar(doc, y, {
+    stmtNo: `AV-SS-${supplier.id.replace(/[^0-9A-Z]/gi, "")}-${new Date().getFullYear()}`,
+    period: periodLabel,
+    groupLabel: opts.groupId ? (opts.groupLabel || opts.groupId) : undefined,
+  });
+  y = supplierIdentityCard(doc, y, supplier);
+  const pctPaid = grandPayable > 0 ? Math.max(0, Math.min(100, (grandPaid / grandPayable) * 100)) : 0;
+  y = executiveSnapshot(doc, y, {
+    payable: grandPayable, paid: grandPaid, remaining,
+    bf: includeOpening ? openingBF : undefined,
+    purchases: purchases.length, payments: payments.length,
+    pctPaid,
+  });
 
   // Group purchases by serviceCategory
   const groups = new Map<string, LedgerEntry[]>();
@@ -427,8 +406,6 @@ export function generateSupplierLedger(supplier: Supplier, entries: LedgerEntry[
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(p);
   }
-
-  // Preferred rendering order
   const order = ["Flight", "Hotel", "Visa", "Transport", "Ziyarah", "Insurance", "Other"];
   const sortedKeys = [
     ...order.filter((k) => groups.has(k)),
@@ -438,7 +415,7 @@ export function generateSupplierLedger(supplier: Supplier, entries: LedgerEntry[
   for (const key of sortedKeys) {
     const rows = groups.get(key)!;
     const catTotal = rows.reduce((s, e) => s + e.amount, 0);
-    sectionTitle(doc, `${key} Purchases (${rows.length})`, y); y += 4;
+    y = categoryHeading(doc, y, key, rows.length, catTotal, "navy");
 
     const { head, body } = buildPurchaseTable(key, rows);
     const colSpanForTotal = head[0].length - 1;
@@ -451,12 +428,11 @@ export function generateSupplierLedger(supplier: Supplier, entries: LedgerEntry[
         { content: formatCurrency(catTotal), styles: { halign: "right" as const, fontStyle: "bold" as const, fillColor: ROW_ALT, textColor: NAVY } },
       ]],
     });
-    y = (doc as any).lastAutoTable.finalY + 6;
+    y = (doc as any).lastAutoTable.finalY + 7;
   }
 
-  // Payments section — only if any payments exist
   if (payments.length || (includeOpening && openingPaid > 0)) {
-    sectionTitle(doc, `Payments (${payments.length})`, y); y += 4;
+    y = categoryHeading(doc, y, "Payments Received", payments.length, grandPaid, "success");
     const body: any[] = [];
     if (includeOpening && openingPaid > 0) {
       body.push([
@@ -476,32 +452,421 @@ export function generateSupplierLedger(supplier: Supplier, entries: LedgerEntry[
       body,
       foot: [[
         { content: "Total Paid", colSpan: 3, styles: { halign: "right" as const, fontStyle: "bold" as const, fillColor: ROW_ALT, textColor: NAVY } },
-        { content: formatCurrency(grandPaid), styles: { halign: "right" as const, fontStyle: "bold" as const, fillColor: ROW_ALT, textColor: NAVY } },
+        { content: formatCurrency(grandPaid), styles: { halign: "right" as const, fontStyle: "bold" as const, fillColor: ROW_ALT, textColor: SUCCESS } },
       ]],
     });
-    y = (doc as any).lastAutoTable.finalY + 6;
+    y = (doc as any).lastAutoTable.finalY + 7;
   }
 
-  // Final Overview band
-  sectionTitle(doc, "Overview", y); y += 4;
-  brandTable(doc, {
-    startY: y + 1,
-    head: [["", "Amount"]],
-    body: [
-      ...(includeOpening ? [["Opening Payable (B/F)", { content: formatCurrency(openingPayable), styles: { halign: "right" as const } }]] : []),
-      ["Total New Purchases", { content: formatCurrency(totalPurchases), styles: { halign: "right" as const } }],
-      [{ content: "Grand Total Payable", styles: { fontStyle: "bold" as const } }, { content: formatCurrency(grandPayable), styles: { halign: "right" as const, fontStyle: "bold" as const, textColor: NAVY } }],
-      ...(includeOpening ? [["Opening Paid (B/F)", { content: formatCurrency(openingPaid), styles: { halign: "right" as const } }]] : []),
-      ["Total New Payments", { content: formatCurrency(totalPaid), styles: { halign: "right" as const } }],
-      [{ content: "Grand Total Paid", styles: { fontStyle: "bold" as const } }, { content: formatCurrency(grandPaid), styles: { halign: "right" as const, fontStyle: "bold" as const, textColor: SUCCESS } }],
-    ] as any,
+  y = reconciliationBlock(doc, y, {
+    openingPayable: includeOpening ? openingPayable : undefined,
+    openingPaid: includeOpening ? openingPaid : undefined,
+    totalPurchases, totalPaid, grandPayable, grandPaid,
   });
-  y = (doc as any).lastAutoTable.finalY + 4;
 
-  totalsBand(doc, y, "Closing Balance (Remaining Payable)", formatCurrency(remaining));
+  closingHero(doc, y, remaining);
 
   footer(doc);
   save(doc, `Avery_Supplier_Statement_${supplier.id}.pdf`);
+}
+
+// ---- Supplier statement — premium helpers ----
+function supplierHeader(doc: jsPDF) {
+  // Ivory base
+  doc.setFillColor(...IVORY);
+  doc.rect(0, 0, 210, 297, "F");
+
+  // Full-bleed navy cover band (taller, editorial)
+  doc.setFillColor(...NAVY);
+  doc.rect(0, 0, 210, 54, "F");
+
+  // Subtle gold hairlines top & bottom of cover
+  doc.setDrawColor(...GOLD);
+  doc.setLineWidth(0.4);
+  doc.line(0, 3, 210, 3);
+  doc.setLineWidth(0.25);
+  doc.line(0, 51, 210, 51);
+  doc.setLineWidth(0.6);
+  doc.line(0, 53, 210, 53);
+
+  // Logo circle (gold ring)
+  try {
+    doc.setDrawColor(...GOLD);
+    doc.setLineWidth(0.4);
+    doc.circle(24, 27, 13);
+    doc.addImage(AVERY_LOGO_PNG, "PNG", 13, 16, 22, 22, undefined, "FAST");
+  } catch {}
+
+  // Wordmark
+  doc.setFont("times", "bold");
+  doc.setFontSize(20);
+  doc.setTextColor(...GOLD_LT);
+  doc.text("AVERY", 42, 24);
+  doc.setFont("times", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(...WHITE);
+  doc.text("GROUP OF TRAVEL", 42, 30);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  doc.setTextColor(...GOLD_LT);
+  doc.text("Umrah · Hajj · Ziyarah · International & Domestic Tours · Visas · Transport", 42, 36);
+  doc.setFont("times", "italic");
+  doc.setFontSize(7);
+  doc.setTextColor(...WHITE);
+  doc.text("Curated journeys. Trusted service. Worldwide reach.", 42, 41.5);
+
+  // Right side: document title, big serif
+  doc.setFont("times", "bold");
+  doc.setFontSize(22);
+  doc.setTextColor(...WHITE);
+  doc.text("SUPPLIER", 196, 24, { align: "right" });
+  doc.setTextColor(...GOLD_LT);
+  doc.text("STATEMENT", 196, 33, { align: "right" });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(...WHITE);
+  const now = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
+  doc.text(`Issued ${now}`, 196, 40, { align: "right" });
+
+  doc.setTextColor(...INK);
+}
+
+function supplierMetaBar(doc: jsPDF, y: number, meta: { stmtNo: string; period: string; groupLabel?: string }): number {
+  const h = meta.groupLabel ? 13 : 9;
+  doc.setFillColor(...IVORY);
+  doc.setDrawColor(...GOLD);
+  doc.setLineWidth(0.25);
+  doc.rect(14, y, 182, h, "FD");
+  // Left gold bar
+  doc.setFillColor(...GOLD);
+  doc.rect(14, y, 1.4, h, "F");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7);
+  doc.setTextColor(...GOLD);
+  doc.text("STATEMENT NO.", 19, y + 4);
+  doc.text("PERIOD", 92, y + 4);
+  doc.setFont("times", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(...NAVY);
+  doc.text(meta.stmtNo, 19, y + 8);
+  doc.text(meta.period, 92, y + 8);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7);
+  doc.setTextColor(...GOLD);
+  doc.text("CURRENCY", 168, y + 4);
+  doc.setFont("times", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(...NAVY);
+  doc.text("PKR", 168, y + 8);
+
+  if (meta.groupLabel) {
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(7.5);
+    doc.setTextColor(...GOLD);
+    doc.text(`Filtered by Group  ·  ${meta.groupLabel}`, 19, y + 11.5);
+  }
+  doc.setTextColor(...INK);
+  return y + h + 3;
+}
+
+function supplierIdentityCard(doc: jsPDF, y: number, s: Supplier): number {
+  const h = 26;
+  // Card
+  doc.setFillColor(...WHITE);
+  doc.setDrawColor(...GOLD_LT);
+  doc.setLineWidth(0.2);
+  doc.rect(14, y, 182, h, "FD");
+
+  // Left navy plate
+  doc.setFillColor(...NAVY);
+  doc.rect(14, y, 62, h, "F");
+  doc.setFillColor(...GOLD);
+  doc.rect(14, y, 1.2, h, "F");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(6.8);
+  doc.setTextColor(...GOLD_LT);
+  doc.text("STATEMENT ISSUED TO", 20, y + 5.5);
+
+  doc.setFont("times", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor(...WHITE);
+  doc.text(s.companyName || "—", 20, y + 12.5);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(...GOLD_LT);
+  doc.text(s.id, 20, y + 17.5);
+  doc.setTextColor(...WHITE);
+  doc.text(s.serviceType || "—", 20, y + 22);
+
+  // Right details grid
+  const col1 = 82;
+  const col2 = 140;
+  const labelStyle = () => { doc.setFont("helvetica", "bold"); doc.setFontSize(6.8); doc.setTextColor(...GOLD); };
+  const valStyle = () => { doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(...INK); };
+
+  labelStyle(); doc.text("CONTACT PERSON", col1, y + 5.5);
+  valStyle(); doc.text(s.contactPerson || "—", col1, y + 10);
+
+  labelStyle(); doc.text("PHONE", col1, y + 15);
+  valStyle(); doc.text(s.phone || "—", col1, y + 19.5);
+
+  labelStyle(); doc.text("EMAIL", col2, y + 5.5);
+  valStyle(); doc.text(s.email || "—", col2, y + 10);
+
+  labelStyle(); doc.text("ACCOUNT STATUS", col2, y + 15);
+  valStyle();
+  const status = "Active";
+  doc.text(status, col2, y + 19.5);
+
+  doc.setTextColor(...INK);
+  return y + h + 5;
+}
+
+function executiveSnapshot(
+  doc: jsPDF, y: number,
+  data: { payable: number; paid: number; remaining: number; bf?: number; purchases: number; payments: number; pctPaid: number }
+): number {
+  // Section title
+  doc.setFont("times", "italic");
+  doc.setFontSize(9);
+  doc.setTextColor(...GOLD);
+  doc.text("Executive Snapshot", 14, y);
+  doc.setDrawColor(...GOLD);
+  doc.setLineWidth(0.3);
+  doc.line(14, y + 1.5, 60, y + 1.5);
+  doc.setLineWidth(0.1);
+  doc.setDrawColor(...GOLD_LT);
+  doc.line(60, y + 1.5, 196, y + 1.5);
+
+  y += 5;
+
+  // 4 KPI tiles
+  const tiles: Array<{ label: string; value: string; tone: "navy" | "gold" | "success" | "danger" }> = [
+    { label: "Total Payable", value: formatCurrency(data.payable), tone: "navy" },
+    { label: "Total Paid", value: formatCurrency(data.paid), tone: "success" },
+    { label: "Outstanding", value: formatCurrency(data.remaining), tone: data.remaining > 0 ? "danger" : "success" },
+    { label: data.bf !== undefined ? "Brought Forward" : "Transactions", value: data.bf !== undefined ? formatCurrency(data.bf) : `${data.purchases} PUR · ${data.payments} PMT`, tone: "gold" },
+  ];
+  const totalW = 182;
+  const gap = 3;
+  const w = (totalW - gap * 3) / 4;
+  const h = 22;
+  tiles.forEach((t, i) => {
+    const x = 14 + i * (w + gap);
+    // ivory card
+    doc.setFillColor(...WHITE);
+    doc.setDrawColor(...GOLD_LT);
+    doc.setLineWidth(0.2);
+    doc.rect(x, y, w, h, "FD");
+    // top gold hairline
+    doc.setDrawColor(...GOLD);
+    doc.setLineWidth(0.6);
+    doc.line(x, y, x + w, y);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.8);
+    doc.setTextColor(...MUTED);
+    doc.text(t.label.toUpperCase(), x + 3.5, y + 5.5);
+
+    doc.setFont("times", "bold");
+    doc.setFontSize(t.value.length > 14 ? 10 : 12);
+    if (t.tone === "navy") doc.setTextColor(...NAVY);
+    else if (t.tone === "success") doc.setTextColor(...SUCCESS);
+    else if (t.tone === "danger") doc.setTextColor(...DANGER);
+    else doc.setTextColor(...GOLD);
+    doc.text(t.value, x + 3.5, y + 15);
+  });
+  y += h + 4;
+
+  // Settlement progress bar
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7);
+  doc.setTextColor(...NAVY);
+  doc.text("SETTLEMENT PROGRESS", 14, y);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(...MUTED);
+  doc.text(`${data.pctPaid.toFixed(1)}% of payable settled`, 196, y, { align: "right" });
+
+  const barY = y + 2;
+  const barW = 182;
+  // track
+  doc.setFillColor(230, 224, 208);
+  doc.rect(14, barY, barW, 4, "F");
+  // fill
+  const fillW = Math.max(0.6, (data.pctPaid / 100) * barW);
+  doc.setFillColor(...GOLD);
+  doc.rect(14, barY, fillW, 4, "F");
+  // end tick
+  doc.setDrawColor(...NAVY);
+  doc.setLineWidth(0.3);
+  doc.line(14 + fillW, barY - 0.6, 14 + fillW, barY + 4.6);
+
+  return y + 10;
+}
+
+function categoryHeading(doc: jsPDF, y: number, label: string, count: number, total: number, tone: "navy" | "success" = "navy"): number {
+  // Elegant heading strip: gold vertical bar + serif category + count pill + right-aligned total
+  const h = 8.5;
+  doc.setFillColor(...GOLD);
+  doc.rect(14, y, 1.6, h, "F");
+  doc.setFillColor(...IVORY);
+  doc.rect(15.6, y, 180.4, h, "F");
+  doc.setDrawColor(...GOLD_LT);
+  doc.setLineWidth(0.15);
+  doc.line(14, y + h, 196, y + h);
+
+  doc.setFont("times", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(...NAVY);
+  doc.text(label, 19, y + 6);
+
+  // count pill
+  const pillTxt = `${count} ${count === 1 ? "item" : "items"}`;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7);
+  const pillW = doc.getTextWidth(pillTxt) + 5;
+  const labelW = doc.getTextWidth(label);
+  doc.setFillColor(...NAVY);
+  doc.roundedRect(19 + labelW + 4, y + 2.2, pillW, 4.4, 1.2, 1.2, "F");
+  doc.setTextColor(...GOLD_LT);
+  doc.text(pillTxt, 19 + labelW + 4 + pillW / 2, y + 5.3, { align: "center" });
+
+  // right total
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7);
+  doc.setTextColor(...MUTED);
+  doc.text("SECTION TOTAL", 165, y + 3.6, { align: "right" });
+  doc.setFont("times", "bold");
+  doc.setFontSize(10);
+  if (tone === "success") doc.setTextColor(...SUCCESS);
+  else doc.setTextColor(...NAVY);
+  doc.text(formatCurrency(total), 194, y + 6.2, { align: "right" });
+
+  doc.setTextColor(...INK);
+  return y + h + 2;
+}
+
+function reconciliationBlock(
+  doc: jsPDF, y: number,
+  d: { openingPayable?: number; openingPaid?: number; totalPurchases: number; totalPaid: number; grandPayable: number; grandPaid: number }
+): number {
+  doc.setFont("times", "italic");
+  doc.setFontSize(9);
+  doc.setTextColor(...GOLD);
+  doc.text("Ledger Reconciliation", 14, y);
+  doc.setDrawColor(...GOLD);
+  doc.setLineWidth(0.3);
+  doc.line(14, y + 1.5, 60, y + 1.5);
+  doc.setLineWidth(0.1);
+  doc.setDrawColor(...GOLD_LT);
+  doc.line(60, y + 1.5, 196, y + 1.5);
+  y += 5;
+
+  const colW = 89;
+  const gap = 4;
+  const leftRows: Array<[string, number, boolean?]> = [];
+  if (d.openingPayable !== undefined) leftRows.push(["Opening Payable (B/F)", d.openingPayable]);
+  leftRows.push(["New Purchases (Period)", d.totalPurchases]);
+  leftRows.push(["Grand Total Payable", d.grandPayable, true]);
+
+  const rightRows: Array<[string, number, boolean?]> = [];
+  if (d.openingPaid !== undefined) rightRows.push(["Opening Paid (B/F)", d.openingPaid]);
+  rightRows.push(["Payments (Period)", d.totalPaid]);
+  rightRows.push(["Grand Total Paid", d.grandPaid, true]);
+
+  const rows = Math.max(leftRows.length, rightRows.length);
+  const rowH = 6.5;
+  const h = 6 + rows * rowH + 3;
+
+  // Left card (payable)
+  drawReconCard(doc, 14, y, colW, h, "Payable Side", NAVY, leftRows);
+  // Right card (paid)
+  drawReconCard(doc, 14 + colW + gap, y, colW, h, "Settlement Side", SUCCESS, rightRows);
+
+  return y + h + 6;
+}
+
+function drawReconCard(
+  doc: jsPDF, x: number, y: number, w: number, h: number,
+  title: string, accent: [number, number, number], rows: Array<[string, number, boolean?]>
+) {
+  doc.setFillColor(...WHITE);
+  doc.setDrawColor(...GOLD_LT);
+  doc.setLineWidth(0.2);
+  doc.rect(x, y, w, h, "FD");
+  // header strip
+  doc.setFillColor(...accent);
+  doc.rect(x, y, w, 6, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.2);
+  doc.setTextColor(...WHITE);
+  doc.text(title.toUpperCase(), x + 3, y + 4.2);
+
+  doc.setTextColor(...INK);
+  rows.forEach(([label, val, bold], i) => {
+    const ry = y + 6 + 5 + i * 6.5;
+    if (bold) {
+      doc.setFillColor(...IVORY);
+      doc.rect(x + 0.4, ry - 4, w - 0.8, 6, "F");
+    }
+    doc.setFont(bold ? "times" : "helvetica", bold ? "bold" : "normal");
+    doc.setFontSize(bold ? 9 : 8);
+    doc.setTextColor(...(bold ? NAVY : INK));
+    doc.text(label, x + 3, ry);
+    doc.setFont("times", "bold");
+    doc.setFontSize(bold ? 9.5 : 8.5);
+    doc.setTextColor(...(bold ? accent : INK));
+    doc.text(formatCurrency(val), x + w - 3, ry, { align: "right" });
+  });
+  doc.setTextColor(...INK);
+}
+
+function closingHero(doc: jsPDF, y: number, remaining: number) {
+  // If not enough room, add a page
+  if (y > 240) { doc.addPage(); y = 30; }
+  const h = 30;
+  // Navy panel
+  doc.setFillColor(...NAVY);
+  doc.rect(14, y, 182, h, "F");
+  // Gold double frame
+  doc.setDrawColor(...GOLD);
+  doc.setLineWidth(0.5);
+  doc.rect(14, y, 182, h);
+  doc.setLineWidth(0.15);
+  doc.rect(16, y + 2, 178, h - 4);
+  // Left gold plate
+  doc.setFillColor(...GOLD);
+  doc.rect(14, y, 2, h, "F");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(...GOLD_LT);
+  doc.text("CLOSING BALANCE", 22, y + 9);
+  doc.setFont("times", "italic");
+  doc.setFontSize(8);
+  doc.setTextColor(...WHITE);
+  doc.text("Net amount payable to supplier as of statement date.", 22, y + 15);
+
+  doc.setFont("times", "bold");
+  doc.setFontSize(20);
+  const tone: [number, number, number] = remaining > 0 ? GOLD_LT : [180, 220, 190];
+  doc.setTextColor(...tone);
+  doc.text(formatCurrency(remaining), 192, y + 15, { align: "right" });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  doc.setTextColor(...GOLD_LT);
+  doc.text(remaining > 0 ? "Outstanding — Payment Due" : remaining < 0 ? "Overpayment / Advance" : "Fully Settled", 192, y + 22, { align: "right" });
+
+  // Auth line
+  doc.setFont("times", "italic");
+  doc.setFontSize(7);
+  doc.setTextColor(...GOLD_LT);
+  doc.text("Computer-generated statement · Avery Group of Travel · This document does not require a signature.", 105, y + 27, { align: "center" });
+  doc.setTextColor(...INK);
 }
 
 // Build category-specific purchase table
