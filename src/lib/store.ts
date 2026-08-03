@@ -129,6 +129,7 @@ let nextGroupNum = initial.counters.group || 1;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 function persist() {
   if (typeof window === "undefined") return;
+  if (!hydrated) return;
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     try {
@@ -142,6 +143,33 @@ function persist() {
 
 const listeners = new Set<() => void>();
 function notify() { persist(); listeners.forEach((l) => l()); }
+
+// ---------- Hydration (client-only, runs once after mount) ----------
+let hydrated = false;
+function hydrateFromStorage() {
+  if (hydrated || typeof window === "undefined") return;
+  hydrated = true;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const s = JSON.parse(raw) as PersistedState;
+    clients = s.clients || clients;
+    bookings = s.bookings || bookings;
+    agents = s.agents || agents;
+    suppliers = s.suppliers || suppliers;
+    monthlyData = s.monthlyData || monthlyData;
+    entries = s.entries || entries;
+    opening = s.opening || opening;
+    groups = s.groups || groups;
+    if (s.counters) {
+      nextClientNum = s.counters.client; nextAgentNum = s.counters.agent;
+      nextSupplierNum = s.counters.supplier; nextBookingNum = s.counters.booking;
+      nextHeadNum = s.counters.head; nextEntryNum = s.counters.entry;
+      nextGroupNum = s.counters.group || nextGroupNum;
+    }
+  } catch {}
+  listeners.forEach((l) => l());
+}
 
 // ---------- Group capacity helper ----------
 /** How many pax are already consumed by a given group across bookings + purchase entries. */
@@ -211,6 +239,7 @@ export function useStore() {
 
   useEffect(() => {
     listeners.add(rerender);
+    hydrateFromStorage();
     return () => { listeners.delete(rerender); };
   }, [rerender]);
 
