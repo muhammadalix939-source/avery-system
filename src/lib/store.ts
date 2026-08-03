@@ -100,17 +100,8 @@ const defaultEntries: LedgerEntry[] = [
 ];
 
 function loadState(): PersistedState {
-  if (typeof window === "undefined") {
-    return {
-      clients: [...mockClients], bookings: [...mockBookings], agents: [...mockAgents],
-      suppliers: [...mockSuppliers], monthlyData: [...defaultMonthlyData], entries: defaultEntries,
-      counters: { client: 11, agent: 4, supplier: 5, booking: 4, head: 4, entry: 7 },
-    };
-  }
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as PersistedState;
-  } catch {}
+  // Always start from the SSR-safe defaults so server and first client render match.
+  // Persisted data is merged in after hydration via hydrateFromStorage().
   return {
     clients: [...mockClients], bookings: [...mockBookings], agents: [...mockAgents],
     suppliers: [...mockSuppliers], monthlyData: [...defaultMonthlyData], entries: defaultEntries,
