@@ -30,7 +30,7 @@ function ExpensesPage() {
   const [selected, setSelected] = useState<LedgerEntry | null>(null);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
-  const [form, setForm] = useState({ date: "", category: "Office Rent", referenceName: "", amount: "", note: "" });
+  const [form, setForm] = useState({ date: "", category: "Office Rent", referenceName: "", amount: "", note: "", groupId: "" });
 
   const expenses = useMemo(
     () => store.entries.filter((e) => e.type === "expense").sort((a, b) => b.date.localeCompare(a.date)),
@@ -61,8 +61,9 @@ function ExpensesPage() {
       referenceName: form.referenceName || form.category,
       amount: Number(form.amount) || 0,
       note: form.note,
+      groupId: form.groupId || undefined,
     });
-    setForm({ date: "", category: "Office Rent", referenceName: "", amount: "", note: "" });
+    setForm({ date: "", category: "Office Rent", referenceName: "", amount: "", note: "", groupId: "" });
     setAddOpen(false);
   }
 
@@ -74,13 +75,14 @@ function ExpensesPage() {
       referenceName: form.referenceName,
       amount: Number(form.amount) || 0,
       note: form.note,
+      groupId: form.groupId || undefined,
     });
     setEditOpen(false);
   }
 
   function openEdit(e: LedgerEntry) {
     setSelected(e);
-    setForm({ date: e.date, category: e.headId || "Other", referenceName: e.referenceName, amount: String(e.amount), note: e.note });
+    setForm({ date: e.date, category: e.headId || "Other", referenceName: e.referenceName, amount: String(e.amount), note: e.note, groupId: e.groupId || "" });
     setEditOpen(true);
   }
 
@@ -98,6 +100,16 @@ function ExpensesPage() {
       <div><Label className="text-xs">Description</Label><Input value={form.referenceName} onChange={(e) => setForm({ ...form, referenceName: e.target.value })} placeholder="e.g. April Office Rent" className="bg-accent/20 border-border mt-1 h-9" /></div>
       <div><Label className="text-xs">Amount (PKR)</Label><Input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="bg-accent/20 border-border mt-1 h-9" /></div>
       <div><Label className="text-xs">Note</Label><Input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} className="bg-accent/20 border-border mt-1 h-9" /></div>
+      <div><Label className="text-xs">Tag to Group (optional)</Label>
+        <Select value={form.groupId || "none"} onValueChange={(v) => setForm({ ...form, groupId: v === "none" ? "" : v })}>
+          <SelectTrigger className="bg-accent/20 border-border mt-1 h-9 text-xs"><SelectValue placeholder="No group" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">No group (general expense)</SelectItem>
+            {store.groups.map((g) => (<SelectItem key={g.id} value={g.id}>{g.id} — {g.name}</SelectItem>))}
+          </SelectContent>
+        </Select>
+        <p className="mt-1 text-[10px] text-muted-foreground">Group-tagged expenses (gifts, kits, hospitality) reduce that group's net profit.</p>
+      </div>
     </div>
   );
 
@@ -109,7 +121,7 @@ function ExpensesPage() {
         actions={
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2" onClick={() => setForm({ date: getPKTDate(), category: "Office Rent", referenceName: "", amount: "", note: "" })}>
+              <Button className="gap-2" onClick={() => setForm({ date: getPKTDate(), category: "Office Rent", referenceName: "", amount: "", note: "", groupId: "" })}>
                 <Plus className="h-4 w-4" /> New Expense
               </Button>
             </DialogTrigger>

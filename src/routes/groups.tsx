@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
-import { formatCurrency, SERVICE_TYPES } from "@/lib/data";
+import { formatCurrency } from "@/lib/data";
 import { useStore, type PurchaseGroup } from "@/lib/store";
 import { computeGroupStats, type GroupStats } from "@/lib/groups";
 import { getPKTDate } from "@/lib/date-utils";
