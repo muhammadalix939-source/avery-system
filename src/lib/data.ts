@@ -56,6 +56,10 @@ export interface Client {
   paymentStatus: "Paid" | "Partial" | "Unpaid";
   amountDue: number;
   amountPaid: number;
+  /** Package due before any extra charges (embassy fees, etc.). Managed by the store. */
+  baseDue?: number;
+  /** Sum of extra charges billed to this member via the ledger. */
+  extraCharges?: number;
   /** Carry-forward balance from before this system (added to amountPaid baseline). */
   openingPaid?: number;
   isVip: boolean;
@@ -76,6 +80,12 @@ export interface Booking {
   amountReceived: number;
   totalCost: number;
   commission: number;
+  /** Package amount before extra charges. Managed by the store. */
+  baseAmount?: number;
+  /** Extra charges (embassy / service fees) billed to this head via the ledger. */
+  extraCharges?: number;
+  /** Amount refunded back to the client(s) of this head. */
+  refunded?: number;
   clientIds: string[];
   status: "Confirmed" | "Pending" | "Cancelled";
   packageType: PackageType;

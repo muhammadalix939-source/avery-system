@@ -35,14 +35,17 @@ export interface FinancialTotals {
 
 export function computeTotals(input: ReportInput): FinancialTotals {
   const { bookings, clients, suppliers, entries, opening } = input;
-  const liveReceived = entries.filter(e => e.type === "client_receive").reduce((s, e) => s + e.amount, 0);
+  const grossReceived = entries.filter(e => e.type === "client_receive").reduce((s, e) => s + e.amount, 0);
+  const clientRefunds = entries.filter(e => e.type === "client_refund").reduce((s, e) => s + e.amount, 0);
+  const supplierRefunds = entries.filter(e => e.type === "supplier_refund").reduce((s, e) => s + e.amount, 0);
+  const liveReceived = Math.max(0, grossReceived - clientRefunds);
   const livePurchases = entries.filter(e => e.type === "purchase").reduce((s, e) => s + e.amount, 0);
   const supplierPaid = entries.filter(e => e.type === "supplier_payment").reduce((s, e) => s + e.amount, 0);
   const expenses = entries.filter(e => e.type === "expense").reduce((s, e) => s + e.amount, 0);
   const commissionPaid = entries.filter(e => e.type === "agent_commission").reduce((s, e) => s + e.amount, 0);
   const purchaseHeads = new Set(entries.filter(e => e.type === "purchase" && e.headId).map(e => e.headId));
   const bookingCostFallback = bookings.filter(b => !purchaseHeads.has(b.headId)).reduce((s, b) => s + (b.totalCost || 0), 0);
-  const totalCost = livePurchases + bookingCostFallback;
+  const totalCost = Math.max(0, livePurchases + bookingCostFallback - supplierRefunds);
   const commissionEarned = bookings.reduce((s, b) => s + (b.commission || 0), 0);
   const bookedSales = bookings.reduce((s, b) => s + b.totalAmount, 0);
   const totalRevenue = liveReceived + (opening.revenue || 0);

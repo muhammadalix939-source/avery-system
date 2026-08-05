@@ -25,6 +25,9 @@ const typeLabels: Record<LedgerEntry["type"], string> = {
   supplier_payment: "Supplier Payment",
   agent_commission: "Agent Commission",
   expense: "Expense",
+  client_charge: "Extra Charge to Client",
+  client_refund: "Refund to Client",
+  supplier_refund: "Refund from Supplier",
 };
 
 const typeColors: Record<LedgerEntry["type"], string> = {
@@ -33,7 +36,26 @@ const typeColors: Record<LedgerEntry["type"], string> = {
   supplier_payment: "text-destructive",
   agent_commission: "text-warning",
   expense: "text-destructive",
+  client_charge: "text-primary",
+  client_refund: "text-destructive",
+  supplier_refund: "text-success",
 };
+
+/** Money that flows INTO the business (shown with a + sign). */
+const INFLOW_TYPES: LedgerEntry["type"][] = ["client_receive", "supplier_refund"];
+
+export const CHARGE_CATEGORIES = [
+  "Embassy / Send-to-Embassy Fee",
+  "Visa Fee",
+  "Ticket Change / Reissue",
+  "Excess Baggage",
+  "Hotel Upgrade",
+  "Transport Extra",
+  "Insurance",
+  "Service / Processing Charge",
+  "Late Payment Charge",
+  "Other Charge",
+];
 
 function buildDetailsPayload(cat: string, d: {
   adults: string; children: string; infants: string;
@@ -64,6 +86,8 @@ function EntriesPage() {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [form, setForm] = useState({ date: "", type: "client_receive" as LedgerEntry["type"], headId: "", referenceId: "", referenceName: "", amount: "", note: "" });
   const [serviceCategory, setServiceCategory] = useState<string>("");
+  // Extra charge / refund metadata
+  const [extra, setExtra] = useState({ clientId: "", chargeCategory: "", refundOf: "", refundReason: "" });
   // Group management (PNR / batch) — for purchase entries
   const [groupMode, setGroupMode] = useState<"none" | "existing" | "new">("none");
   const [groupId, setGroupId] = useState<string>("");
@@ -129,10 +153,15 @@ function EntriesPage() {
       serviceCategory: serviceCategory || undefined,
       purchaseDetails: form.type === "purchase" ? buildDetailsPayload(serviceCategory, details) : undefined,
       groupId: form.type === "purchase" ? finalGroupId : undefined,
+      clientId: extra.clientId || undefined,
+      chargeCategory: form.type === "client_charge" ? (extra.chargeCategory || undefined) : undefined,
+      refundOf: extra.refundOf || undefined,
+      refundReason: extra.refundReason || undefined,
     });
     setForm({ date: "", type: "client_receive", headId: "", referenceId: "", referenceName: "", amount: "", note: "" });
     setServiceCategory("");
     setDetails(emptyDetails);
+    setExtra({ clientId: "", chargeCategory: "", refundOf: "", refundReason: "" });
     setGroupMode("none"); setGroupId(""); setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "", totalPax: "" });
     setAddOpen(false);
   }
@@ -159,6 +188,10 @@ function EntriesPage() {
       serviceCategory: serviceCategory || undefined,
       purchaseDetails: form.type === "purchase" ? buildDetailsPayload(serviceCategory, details) : undefined,
       groupId: form.type === "purchase" ? finalGroupId : undefined,
+      clientId: extra.clientId || undefined,
+      chargeCategory: form.type === "client_charge" ? (extra.chargeCategory || undefined) : undefined,
+      refundOf: extra.refundOf || undefined,
+      refundReason: extra.refundReason || undefined,
     });
     setEditOpen(false);
   }
@@ -167,6 +200,7 @@ function EntriesPage() {
     setSelected(e);
     setForm({ date: e.date, type: e.type, headId: e.headId, referenceId: e.referenceId, referenceName: e.referenceName, amount: String(e.amount), note: e.note });
     setServiceCategory(e.serviceCategory || "");
+    setExtra({ clientId: e.clientId || "", chargeCategory: e.chargeCategory || "", refundOf: e.refundOf || "", refundReason: e.refundReason || "" });
     if (e.groupId) { setGroupMode("existing"); setGroupId(e.groupId); } else { setGroupMode("none"); setGroupId(""); }
     setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "", totalPax: "" });
     const d = e.purchaseDetails || {};
@@ -189,25 +223,29 @@ function EntriesPage() {
     setEditOpen(true);
   }
 
-  const totalReceived = store.entries.filter((e) => e.type === "client_receive").reduce((s, e) => s + e.amount, 0);
-  const totalPaid = store.entries.filter((e) => e.type === "supplier_payment" || e.type === "agent_commission" || e.type === "expense").reduce((s, e) => s + e.amount, 0);
+  const totalReceived = store.entries.filter((e) => e.type === "client_receive").reduce((s, e) => s + e.amount, 0)
+    - store.entries.filter((e) => e.type === "client_refund").reduce((s, e) => s + e.amount, 0);
+  const totalPaid = store.entries.filter((e) => e.type === "supplier_payment" || e.type === "agent_commission" || e.type === "expense").reduce((s, e) => s + e.amount, 0)
+    - store.entries.filter((e) => e.type === "supplier_refund").reduce((s, e) => s + e.amount, 0);
   const totalPurchases = store.entries.filter((e) => e.type === "purchase").reduce((s, e) => s + e.amount, 0);
 
   // Auto-populate reference name when type or referenceId changes
   function updateFormType(type: LedgerEntry["type"]) {
     setForm({ ...form, type, referenceId: "", referenceName: "", headId: "" });
+    setExtra({ clientId: "", chargeCategory: "", refundOf: "", refundReason: "" });
   }
 
   function updateReferenceId(refId: string) {
     let name = "";
-    if (form.type === "client_receive") {
+    if (form.type === "client_receive" || form.type === "client_charge" || form.type === "client_refund") {
       const booking = store.bookings.find((b) => b.headId === refId);
       if (booking) {
         const headClient = store.clients.find((c) => c.headId === refId);
         name = headClient ? getClientName(headClient) : refId;
       }
       setForm({ ...form, referenceId: refId, referenceName: name || form.referenceName, headId: refId });
-    } else if (form.type === "supplier_payment" || form.type === "purchase") {
+      setExtra((x) => ({ ...x, clientId: "" }));
+    } else if (form.type === "supplier_payment" || form.type === "purchase" || form.type === "supplier_refund") {
       const supplier = store.suppliers.find((s) => s.id === refId);
       name = supplier?.companyName || "";
       setForm({ ...form, referenceId: refId, referenceName: name || form.referenceName });
@@ -231,6 +269,9 @@ function EntriesPage() {
             <SelectItem value="supplier_payment">Supplier Payment</SelectItem>
             <SelectItem value="agent_commission">Agent Commission</SelectItem>
             <SelectItem value="expense">Expense</SelectItem>
+            <SelectItem value="client_charge">Extra Charge to Client (Embassy / Service Fee)</SelectItem>
+            <SelectItem value="client_refund">Refund to Client</SelectItem>
+            <SelectItem value="supplier_refund">Refund from Supplier</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -249,6 +290,108 @@ function EntriesPage() {
             }))}
             className="mt-1"
           />
+        </div>
+      )}
+
+      {(form.type === "client_charge" || form.type === "client_refund") && (
+        <div className="space-y-3 rounded-lg border border-primary/40 bg-primary/5 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+            {form.type === "client_charge" ? "Charge Details" : "Client Refund Details"}
+          </p>
+          <div><Label className="text-[10px]">Head ID (Booking)</Label>
+            <SearchableSelect
+              value={form.headId}
+              onChange={(v) => updateReferenceId(v)}
+              placeholder="Search Head ID..."
+              options={store.bookings.map((b) => ({
+                value: b.headId,
+                label: `${b.headId} — ${b.packageType}`,
+                hint: `${b.travelDate} · ${formatCurrency(b.totalAmount)}`,
+              }))}
+              className="mt-1"
+            />
+          </div>
+          <div><Label className="text-[10px]">Member (optional — defaults to head member)</Label>
+            <SearchableSelect
+              value={extra.clientId}
+              onChange={(v) => {
+                const c = store.clients.find((x) => x.id === v);
+                setExtra({ ...extra, clientId: v });
+                if (c) setForm((f) => ({ ...f, referenceName: getClientName(c) }));
+              }}
+              placeholder={form.headId ? "Select member..." : "Select a Head ID first"}
+              options={store.clients.filter((c) => c.headId === form.headId).map((c) => ({
+                value: c.id,
+                label: `${c.id} — ${getClientName(c)}`,
+                hint: `${c.ageCategory || "Adult"} · Due ${formatCurrency(c.amountDue)}`,
+              }))}
+              className="mt-1"
+            />
+          </div>
+          {form.type === "client_charge" ? (
+            <div><Label className="text-[10px]">Charge Type</Label>
+              <Select value={extra.chargeCategory} onValueChange={(v) => setExtra({ ...extra, chargeCategory: v })}>
+                <SelectTrigger className="bg-accent/20 border-border mt-1 h-8 text-xs"><SelectValue placeholder="Embassy fee / Visa fee / Other" /></SelectTrigger>
+                <SelectContent>{CHARGE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+              </Select>
+              <p className="mt-1 text-[10px] text-muted-foreground">This amount is added to the member's due and to the booking total automatically.</p>
+            </div>
+          ) : (
+            <>
+              <div><Label className="text-[10px]">Refund Against (optional)</Label>
+                <SearchableSelect
+                  value={extra.refundOf}
+                  onChange={(v) => setExtra({ ...extra, refundOf: v })}
+                  placeholder="Link to the original receipt..."
+                  options={store.entries.filter((e) => e.type === "client_receive" && (!form.headId || e.headId === form.headId)).map((e) => ({
+                    value: e.id, label: `${e.id} — ${formatCurrency(e.amount)}`, hint: `${e.date} · ${e.referenceName}`,
+                  }))}
+                  className="mt-1"
+                />
+              </div>
+              <div><Label className="text-[10px]">Reason</Label><Input value={extra.refundReason} onChange={(e) => setExtra({ ...extra, refundReason: e.target.value })} placeholder="Visa rejected / trip cancelled..." className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+              <p className="text-[10px] text-muted-foreground">Refunds are deducted from the head's received amount everywhere.</p>
+            </>
+          )}
+        </div>
+      )}
+
+      {form.type === "supplier_refund" && (
+        <div className="space-y-3 rounded-lg border border-success/40 bg-success/5 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-success">Supplier Refund Details</p>
+          <div><Label className="text-[10px]">Supplier</Label>
+            <SearchableSelect
+              value={form.referenceId}
+              onChange={(v) => updateReferenceId(v)}
+              placeholder="Search Supplier..."
+              options={store.suppliers.map((s) => ({ value: s.id, label: `${s.id} — ${s.companyName}`, hint: s.serviceType }))}
+              className="mt-1"
+            />
+          </div>
+          <div><Label className="text-[10px]">Refund Against Purchase (optional)</Label>
+            <SearchableSelect
+              value={extra.refundOf}
+              onChange={(v) => setExtra({ ...extra, refundOf: v })}
+              placeholder="Select the original purchase..."
+              options={store.entries.filter((e) => e.type === "purchase" && (!form.referenceId || e.referenceId === form.referenceId)).map((e) => ({
+                value: e.id,
+                label: `${e.id} — ${formatCurrency(e.amount)}`,
+                hint: [e.date, e.serviceCategory, e.headId].filter(Boolean).join(" · "),
+              }))}
+              className="mt-1"
+            />
+          </div>
+          <div><Label className="text-[10px]">Link to Head ID (optional)</Label>
+            <SearchableSelect
+              value={form.headId}
+              onChange={(v) => setForm({ ...form, headId: v })}
+              placeholder="Tag this refund to a booking..."
+              options={store.bookings.map((b) => ({ value: b.headId, label: `${b.headId} — ${b.packageType}`, hint: b.travelDate }))}
+              className="mt-1"
+            />
+          </div>
+          <div><Label className="text-[10px]">Reason</Label><Input value={extra.refundReason} onChange={(e) => setExtra({ ...extra, refundReason: e.target.value })} placeholder="Cancelled ticket / unused room night..." className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+          <p className="text-[10px] text-muted-foreground">This credit reduces the supplier's payable in statements automatically.</p>
         </div>
       )}
 
@@ -473,7 +616,7 @@ function EntriesPage() {
         actions={
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2" onClick={() => { setForm({ date: getPKTDate(), type: "client_receive", headId: "", referenceId: "", referenceName: "", amount: "", note: "" }); setDetails(emptyDetails); setServiceCategory(""); setAutoTotal(true); }}>
+              <Button className="gap-2" onClick={() => { setForm({ date: getPKTDate(), type: "client_receive", headId: "", referenceId: "", referenceName: "", amount: "", note: "" }); setDetails(emptyDetails); setServiceCategory(""); setAutoTotal(true); setExtra({ clientId: "", chargeCategory: "", refundOf: "", refundReason: "" }); setGroupMode("none"); setGroupId(""); }}>
                 <Plus className="h-4 w-4" /> New Entry
               </Button>
             </DialogTrigger>
@@ -508,7 +651,7 @@ function EntriesPage() {
 
       {/* Type Filters */}
       <div className="flex flex-wrap gap-2">
-        {(["all", "client_receive", "purchase", "supplier_payment", "agent_commission", "expense"] as const).map((t) => (
+        {(["all", "client_receive", "client_charge", "purchase", "supplier_payment", "agent_commission", "expense", "client_refund", "supplier_refund"] as const).map((t) => (
           <button key={t} onClick={() => setTypeFilter(t)} className={`rounded-lg px-4 py-2 text-xs font-medium transition-all ${typeFilter === t ? "bg-primary text-primary-foreground" : "bg-accent/30 text-muted-foreground hover:bg-accent/50"}`}>
             {t === "all" ? "All" : typeLabels[t]}
           </button>
@@ -541,10 +684,10 @@ function EntriesPage() {
                     <p className="text-sm font-medium">{e.referenceName}</p>
                     <p className="text-xs text-muted-foreground">{e.referenceId}</p>
                   </td>
-                  <td className={`px-4 py-3 font-semibold ${e.type === "client_receive" ? "text-success" : "text-destructive"}`}>
-                    {e.type === "client_receive" ? "+" : "-"}{formatCurrency(e.amount)}
+                  <td className={`px-4 py-3 font-semibold ${INFLOW_TYPES.includes(e.type) ? "text-success" : e.type === "client_charge" ? "text-primary" : "text-destructive"}`}>
+                    {INFLOW_TYPES.includes(e.type) ? "+" : e.type === "client_charge" ? "" : "-"}{formatCurrency(e.amount)}
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs max-w-[200px] truncate">{e.note}</td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs max-w-[200px] truncate">{[e.chargeCategory, e.refundReason, e.note].filter(Boolean).join(" · ")}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1">
                       <button onClick={() => generatePaymentReceipt(e)} className="rounded p-1 hover:bg-accent" title="Download Receipt"><Download className="h-3.5 w-3.5 text-success" /></button>

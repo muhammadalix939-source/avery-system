@@ -241,7 +241,33 @@ function BookingsPage() {
 
   function handleEdit() {
     if (!selected) return;
-    const cs = store.clients.filter((c) => c.headId === selected.headId);
+    const headId = selected.headId;
+
+    // --- Keep member roster in sync with the pax counts entered on this screen ---
+    const wanted: Record<"Adult" | "Child" | "Infant", number> = {
+      Adult: Math.max(0, Number(form.adults) || 0),
+      Child: Math.max(0, Number(form.children) || 0),
+      Infant: Math.max(0, Number(form.infants) || 0),
+    };
+    (["Adult", "Child", "Infant"] as const).forEach((cat) => {
+      const existing = store.clients.filter((c) => c.headId === headId && (c.ageCategory || "Adult") === cat);
+      if (existing.length > wanted[cat]) {
+        existing.slice(wanted[cat]).forEach((c) => store.deleteClient(c.id));
+      } else if (existing.length < wanted[cat]) {
+        const lead = store.clients.find((c) => c.headId === headId);
+        for (let i = existing.length; i < wanted[cat]; i++) {
+          store.addClient({
+            headId, firstName: cat, lastName: String(i + 1), gender: "Male", ageCategory: cat,
+            nationality: lead?.nationality || "", passport: "", cnic: "", dateOfBirth: "", dateOfIssue: "", dateOfExpire: "",
+            phone: lead?.phone || "", email: lead?.email || "",
+            packageType: form.packageType, paymentStatus: "Unpaid", amountDue: 0, amountPaid: 0,
+            isVip: false, destination: form.destination, driveLink: form.driveLink,
+          });
+        }
+      }
+    });
+
+    const cs = store.clients.filter((c) => c.headId === headId);
     const adults = cs.filter((c) => (c.ageCategory || "Adult") === "Adult");
     const children = cs.filter((c) => c.ageCategory === "Child");
     const infants = cs.filter((c) => c.ageCategory === "Infant");
@@ -257,12 +283,32 @@ function BookingsPage() {
       const rem = Math.max(0, computedTotal - childPrice * children.length - infantPrice * infants.length);
       adultPrice = adults.length > 0 ? Math.round(rem / adults.length) : 0;
     }
+
+    // Resolve group linkage (allow attaching an existing booking to a group, or creating one)
+    let finalGroupId: string | undefined =
+      groupMode === "existing" ? (groupId || undefined) : groupMode === "none" ? undefined : selected.groupId;
+    if (groupMode === "new" && newGroup.name.trim()) {
+      finalGroupId = store.addGroup({
+        name: newGroup.name.trim(),
+        category: "Booking",
+        supplierId: form.supplierId || undefined,
+        pnr: newGroup.pnr || undefined,
+        flightNumber: newGroup.flightNumber || undefined,
+        date: newGroup.date || form.travelDate || undefined,
+        description: newGroup.description || undefined,
+        totalPax: newGroup.totalPax ? Number(newGroup.totalPax) : undefined,
+      });
+    }
+
     store.updateBooking(selected.id, {
       agentId: form.agentId, supplierId: form.supplierId,
       totalAmount: computedTotal, amountReceived: Number(form.amountReceived) || 0,
       totalCost: Number(form.totalCost) || 0, commission: Number(form.commission) || 0,
       packageType: form.packageType, status: form.status, travelDate: form.travelDate,
       destination: form.destination, driveLink: form.driveLink,
+      groupId: finalGroupId,
+      members: cs.length,
+      clientIds: cs.map((c) => c.id),
     });
     // Override per-category dues and redistribute the payment
     let remaining = Number(form.amountReceived) || 0;
@@ -289,7 +335,7 @@ function BookingsPage() {
     const infants = cs.filter((c) => c.ageCategory === "Infant");
     setSelected(b);
     setForm({
-      agentId: b.agentId, supplierId: b.supplierId, totalAmount: String(b.totalAmount),
+      agentId: b.agentId, supplierId: b.supplierId, totalAmount: String(b.baseAmount ?? b.totalAmount),
       amountReceived: String(b.amountReceived), totalCost: String(b.totalCost || 0),
       commission: String(b.commission || 0), packageType: b.packageType, status: b.status,
       travelDate: b.travelDate,
@@ -297,11 +343,13 @@ function BookingsPage() {
       children: String(children.length),
       infants: String(infants.length),
       pricingMode: "total",
-      adultPrice: String(adults[0]?.amountDue || 0),
-      childPrice: String(children[0]?.amountDue || 0),
-      infantPrice: String(infants[0]?.amountDue || 0),
+      adultPrice: String(adults[0]?.baseDue ?? adults[0]?.amountDue ?? 0),
+      childPrice: String(children[0]?.baseDue ?? children[0]?.amountDue ?? 0),
+      infantPrice: String(infants[0]?.baseDue ?? infants[0]?.amountDue ?? 0),
       destination: b.destination || "", driveLink: b.driveLink || "",
     });
+    if (b.groupId) { setGroupMode("existing"); setGroupId(b.groupId); } else { setGroupMode("none"); setGroupId(""); }
+    setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "", totalPax: "" });
     setEditOpen(true);
   }
 

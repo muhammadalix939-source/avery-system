@@ -68,6 +68,7 @@ export function computeGroupStats(
   const purchases = tagged.filter((e) => e.type === "purchase");
   const payments = tagged.filter((e) => e.type === "supplier_payment");
   const groupExpenses = tagged.filter((e) => e.type === "expense");
+  const supplierRefunds = tagged.filter((e) => e.type === "supplier_refund");
   const receipts = data.entries.filter((e) => e.type === "client_receive" && headIds.has(e.headId));
 
   const purchasePax = purchases.reduce((s, e) => {
@@ -80,7 +81,7 @@ export function computeGroupStats(
 
   const revenue = heads.reduce((s, h) => s + h.totalAmount, 0);
   const received = heads.reduce((s, h) => s + h.received, 0);
-  const supplierBill = purchases.reduce((s, e) => s + e.amount, 0);
+  const supplierBill = Math.max(0, purchases.reduce((s, e) => s + e.amount, 0) - supplierRefunds.reduce((s, e) => s + e.amount, 0));
   const supplierPaid = payments.reduce((s, e) => s + e.amount, 0);
   const commission = linkedBookings.reduce((s, b) => s + (b.commission || 0), 0);
   const expenses = groupExpenses.reduce((s, e) => s + e.amount, 0);

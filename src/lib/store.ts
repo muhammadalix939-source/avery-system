@@ -7,7 +7,15 @@ import { getPKTDate } from "./date-utils";
 export interface LedgerEntry {
   id: string;
   date: string;
-  type: "client_receive" | "supplier_payment" | "agent_commission" | "expense" | "purchase";
+  type:
+    | "client_receive"
+    | "supplier_payment"
+    | "agent_commission"
+    | "expense"
+    | "purchase"
+    | "client_charge"
+    | "client_refund"
+    | "supplier_refund";
   headId: string;
   referenceId: string; // client/supplier/agent ID
   referenceName: string;
@@ -16,6 +24,11 @@ export interface LedgerEntry {
   createdAt: string;
   /** Optional PNR / batch group linking multiple purchases (typically flights or hotel rooming) */
   groupId?: string;
+  /** Extra charge / refund metadata */
+  clientId?: string;          // specific member the charge / refund belongs to
+  chargeCategory?: string;    // Embassy Fee, Visa Fee, Ticket Change, Service Charge...
+  refundOf?: string;          // original ledger entry ID this refund reverses
+  refundReason?: string;
   // For purchase entries: which service was bought (Hotel, Flight, Visa, Transport, Other)
   serviceCategory?: string;
   // Category-specific breakdown captured on purchase entries
@@ -194,15 +207,16 @@ function resyncFromEntries(refIds: { supplierIds?: string[]; agentIds?: string[]
   const agentIds = new Set(refIds.agentIds || []);
   const headIds = new Set(refIds.headIds || []);
 
-  // Suppliers: totalPayable = sum(purchase entries), totalPaid = sum(supplier_payment entries)
+  // Suppliers: totalPayable = purchases − supplier refunds, totalPaid = supplier payments
   if (supplierIds.size) {
     suppliers = suppliers.map((s) => {
       if (!supplierIds.has(s.id)) return s;
       const purchases = entries.filter((e) => e.type === "purchase" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
+      const refunds  = entries.filter((e) => e.type === "supplier_refund" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
       const payments  = entries.filter((e) => e.type === "supplier_payment" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
       // Also honour any legacy totalCost coming from bookings for this supplier
       const bookingCost = bookings.filter((b) => b.supplierId === s.id).reduce((sum, b) => sum + (b.totalCost || 0), 0);
-      return { ...s, totalPayable: Math.max(purchases, bookingCost), totalPaid: payments };
+      return { ...s, totalPayable: Math.max(0, Math.max(purchases, bookingCost) - refunds), totalPaid: payments };
     });
   }
 
@@ -218,9 +232,30 @@ function resyncFromEntries(refIds: { supplierIds?: string[]; agentIds?: string[]
   // Bookings / clients: amountReceived = sum(client_receive entries for that head), redistribute to clients
   if (headIds.size) {
     headIds.forEach((headId) => {
-      const totalReceived = entries.filter((e) => e.type === "client_receive" && e.headId === headId).reduce((s, e) => s + e.amount, 0);
-      bookings = bookings.map((b) => b.headId === headId ? { ...b, amountReceived: totalReceived } : b);
+      const gross = entries.filter((e) => e.type === "client_receive" && e.headId === headId).reduce((s, e) => s + e.amount, 0);
+      const refunded = entries.filter((e) => e.type === "client_refund" && e.headId === headId).reduce((s, e) => s + e.amount, 0);
+      const charges = entries.filter((e) => e.type === "client_charge" && e.headId === headId);
+      const chargeTotal = charges.reduce((s, e) => s + e.amount, 0);
+      const totalReceived = Math.max(0, gross - refunded);
+
+      bookings = bookings.map((b) => {
+        if (b.headId !== headId) return b;
+        const base = b.baseAmount ?? b.totalAmount;
+        return { ...b, baseAmount: base, extraCharges: chargeTotal, refunded, totalAmount: base + chargeTotal, amountReceived: totalReceived };
+      });
+
+      // Push each extra charge onto the member it belongs to (unassigned charges hit the head/lead member).
       const headClients = clients.filter((c) => c.headId === headId);
+      const leadId = headClients[0]?.id;
+      clients = clients.map((c) => {
+        if (c.headId !== headId) return c;
+        const extra = charges
+          .filter((e) => (e.clientId ? e.clientId === c.id : c.id === leadId))
+          .reduce((s, e) => s + e.amount, 0);
+        const base = c.baseDue ?? c.amountDue;
+        return { ...c, baseDue: base, extraCharges: extra, amountDue: base + extra };
+      });
+
       let remaining = totalReceived;
       clients = clients.map((c) => {
         if (c.headId !== headId) return c;
@@ -274,12 +309,20 @@ export function useStore() {
     // Client CRUD
     addClient: (data: Omit<Client, "id">) => {
       const id = generateId("AV-C", nextClientNum++);
-      clients = [...clients, { ...data, id }];
+      clients = [...clients, { ...data, id, baseDue: data.amountDue, extraCharges: 0 }];
       notify();
       return id;
     },
     updateClient: (id: string, data: Partial<Client>) => {
-      clients = clients.map((c) => (c.id === id ? { ...c, ...data } : c));
+      clients = clients.map((c) => {
+        if (c.id !== id) return c;
+        const next = { ...c, ...data };
+        if (data.amountDue !== undefined) {
+          next.baseDue = data.amountDue;
+          next.amountDue = data.amountDue + (c.extraCharges || 0);
+        }
+        return next;
+      });
       notify();
     },
     deleteClient: (id: string) => {
@@ -323,13 +366,21 @@ export function useStore() {
     // Booking CRUD
     addBooking: (data: Omit<Booking, "id">) => {
       const id = `B${String(nextBookingNum++).padStart(3, "0")}`;
-      bookings = [...bookings, { ...data, id }];
+      bookings = [...bookings, { ...data, id, baseAmount: data.totalAmount, extraCharges: 0 }];
       notify();
       return id;
     },
     updateBooking: (id: string, data: Partial<Booking>) => {
       const before = bookings.find((b) => b.id === id);
-      bookings = bookings.map((b) => (b.id === id ? { ...b, ...data } : b));
+      bookings = bookings.map((b) => {
+        if (b.id !== id) return b;
+        const next = { ...b, ...data };
+        if (data.totalAmount !== undefined) {
+          next.baseAmount = data.totalAmount;
+          next.totalAmount = data.totalAmount + (b.extraCharges || 0);
+        }
+        return next;
+      });
       const after = bookings.find((b) => b.id === id);
       // Auto-sync deltas to agent / supplier when totals change
       if (before && after) {
@@ -431,9 +482,9 @@ export function useStore() {
       const entry = { ...data, id, createdAt: new Date().toLocaleString("en-PK", { timeZone: "Asia/Karachi" }) };
       entries = [...entries, entry];
       resyncFromEntries({
-        supplierIds: (data.type === "purchase" || data.type === "supplier_payment") ? [data.referenceId] : [],
+        supplierIds: (data.type === "purchase" || data.type === "supplier_payment" || data.type === "supplier_refund") ? [data.referenceId] : [],
         agentIds: data.type === "agent_commission" ? [data.referenceId] : [],
-        headIds: data.type === "client_receive" && data.headId ? [data.headId] : [],
+        headIds: (data.type === "client_receive" || data.type === "client_charge" || data.type === "client_refund") && data.headId ? [data.headId] : [],
       });
       notify();
       return id;
@@ -448,9 +499,9 @@ export function useStore() {
       const headIds = new Set<string>();
       [before, after].forEach((e) => {
         if (!e) return;
-        if (e.type === "purchase" || e.type === "supplier_payment") { if (e.referenceId) supplierIds.add(e.referenceId); }
+        if (e.type === "purchase" || e.type === "supplier_payment" || e.type === "supplier_refund") { if (e.referenceId) supplierIds.add(e.referenceId); }
         if (e.type === "agent_commission") { if (e.referenceId) agentIds.add(e.referenceId); }
-        if (e.type === "client_receive") { if (e.headId) headIds.add(e.headId); }
+        if (e.type === "client_receive" || e.type === "client_charge" || e.type === "client_refund") { if (e.headId) headIds.add(e.headId); }
       });
       resyncFromEntries({ supplierIds: [...supplierIds], agentIds: [...agentIds], headIds: [...headIds] });
       notify();
@@ -460,9 +511,9 @@ export function useStore() {
       entries = entries.filter((x) => x.id !== id);
       if (e) {
         resyncFromEntries({
-          supplierIds: (e.type === "purchase" || e.type === "supplier_payment") && e.referenceId ? [e.referenceId] : [],
+          supplierIds: (e.type === "purchase" || e.type === "supplier_payment" || e.type === "supplier_refund") && e.referenceId ? [e.referenceId] : [],
           agentIds: e.type === "agent_commission" && e.referenceId ? [e.referenceId] : [],
-          headIds: e.type === "client_receive" && e.headId ? [e.headId] : [],
+          headIds: (e.type === "client_receive" || e.type === "client_charge" || e.type === "client_refund") && e.headId ? [e.headId] : [],
         });
       }
       notify();
