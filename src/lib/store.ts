@@ -7,7 +7,15 @@ import { getPKTDate } from "./date-utils";
 export interface LedgerEntry {
   id: string;
   date: string;
-  type: "client_receive" | "supplier_payment" | "agent_commission" | "expense" | "purchase";
+  type:
+    | "client_receive"
+    | "supplier_payment"
+    | "agent_commission"
+    | "expense"
+    | "purchase"
+    | "client_charge"
+    | "client_refund"
+    | "supplier_refund";
   headId: string;
   referenceId: string; // client/supplier/agent ID
   referenceName: string;
@@ -16,6 +24,11 @@ export interface LedgerEntry {
   createdAt: string;
   /** Optional PNR / batch group linking multiple purchases (typically flights or hotel rooming) */
   groupId?: string;
+  /** Extra charge / refund metadata */
+  clientId?: string;          // specific member the charge / refund belongs to
+  chargeCategory?: string;    // Embassy Fee, Visa Fee, Ticket Change, Service Charge...
+  refundOf?: string;          // original ledger entry ID this refund reverses
+  refundReason?: string;
   // For purchase entries: which service was bought (Hotel, Flight, Visa, Transport, Other)
   serviceCategory?: string;
   // Category-specific breakdown captured on purchase entries
