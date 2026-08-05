@@ -41,9 +41,11 @@ function Dashboard() {
   const liveSupplierPaid = store.entries.filter((e) => e.type === "supplier_payment").reduce((s, e) => s + e.amount, 0);
   const liveExpenses = store.entries.filter((e) => e.type === "expense").reduce((s, e) => s + e.amount, 0);
   const liveAgentCommissionPaid = store.entries.filter((e) => e.type === "agent_commission").reduce((s, e) => s + e.amount, 0);
+  const clientRefunds = store.entries.filter((e) => e.type === "client_refund").reduce((s, e) => s + e.amount, 0);
+  const supplierRefunds = store.entries.filter((e) => e.type === "supplier_refund").reduce((s, e) => s + e.amount, 0);
   const purchaseHeads = new Set(store.entries.filter((e) => e.type === "purchase" && e.headId).map((e) => e.headId));
   const bookingCostFallback = store.bookings.filter((b) => !purchaseHeads.has(b.headId)).reduce((s, b) => s + (b.totalCost || 0), 0);
-  const totalBusinessCost = livePurchases + bookingCostFallback;
+  const totalBusinessCost = Math.max(0, livePurchases + bookingCostFallback - supplierRefunds);
   const agentCommissionEarned = store.bookings.reduce((s, b) => s + (b.commission || 0), 0);
   const bookedSales = store.bookings.reduce((s, b) => s + b.totalAmount, 0);
   const totalRevenue = liveClientReceived + (o.revenue || 0);
@@ -53,7 +55,7 @@ function Dashboard() {
   const supplierPayable = store.suppliers.reduce((s, sp) => s + Math.max(0, (sp.totalPayable + (sp.openingPayable || 0)) - (sp.totalPaid + (sp.openingPaid || 0))), 0) + (o.supplierDue || 0);
   const totalExpenses = liveExpenses;
   const profit = totalRevenue - totalBusinessCost - totalExpenses - agentCommissionEarned + (o.profit || 0);
-  const cashOnHand = totalRevenue - liveSupplierPaid - totalExpenses - liveAgentCommissionPaid;
+  const cashOnHand = totalRevenue + supplierRefunds - liveSupplierPaid - totalExpenses - liveAgentCommissionPaid - clientRefunds;
 
   const hasAnyData =
     store.bookings.length > 0 || store.clients.length > 0 || store.entries.length > 0 ||
