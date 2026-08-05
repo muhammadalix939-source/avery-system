@@ -614,7 +614,7 @@ function EntriesPage() {
         actions={
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2" onClick={() => { setForm({ date: getPKTDate(), type: "client_receive", headId: "", referenceId: "", referenceName: "", amount: "", note: "" }); setDetails(emptyDetails); setServiceCategory(""); setAutoTotal(true); }}>
+              <Button className="gap-2" onClick={() => { setForm({ date: getPKTDate(), type: "client_receive", headId: "", referenceId: "", referenceName: "", amount: "", note: "" }); setDetails(emptyDetails); setServiceCategory(""); setAutoTotal(true); setExtra({ clientId: "", chargeCategory: "", refundOf: "", refundReason: "" }); setGroupMode("none"); setGroupId(""); }}>
                 <Plus className="h-4 w-4" /> New Entry
               </Button>
             </DialogTrigger>
@@ -649,7 +649,7 @@ function EntriesPage() {
 
       {/* Type Filters */}
       <div className="flex flex-wrap gap-2">
-        {(["all", "client_receive", "purchase", "supplier_payment", "agent_commission", "expense"] as const).map((t) => (
+        {(["all", "client_receive", "client_charge", "purchase", "supplier_payment", "agent_commission", "expense", "client_refund", "supplier_refund"] as const).map((t) => (
           <button key={t} onClick={() => setTypeFilter(t)} className={`rounded-lg px-4 py-2 text-xs font-medium transition-all ${typeFilter === t ? "bg-primary text-primary-foreground" : "bg-accent/30 text-muted-foreground hover:bg-accent/50"}`}>
             {t === "all" ? "All" : typeLabels[t]}
           </button>
@@ -682,10 +682,10 @@ function EntriesPage() {
                     <p className="text-sm font-medium">{e.referenceName}</p>
                     <p className="text-xs text-muted-foreground">{e.referenceId}</p>
                   </td>
-                  <td className={`px-4 py-3 font-semibold ${e.type === "client_receive" ? "text-success" : "text-destructive"}`}>
-                    {e.type === "client_receive" ? "+" : "-"}{formatCurrency(e.amount)}
+                  <td className={`px-4 py-3 font-semibold ${INFLOW_TYPES.includes(e.type) ? "text-success" : e.type === "client_charge" ? "text-primary" : "text-destructive"}`}>
+                    {INFLOW_TYPES.includes(e.type) ? "+" : e.type === "client_charge" ? "" : "-"}{formatCurrency(e.amount)}
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs max-w-[200px] truncate">{e.note}</td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs max-w-[200px] truncate">{[e.chargeCategory, e.refundReason, e.note].filter(Boolean).join(" · ")}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1">
                       <button onClick={() => generatePaymentReceipt(e)} className="rounded p-1 hover:bg-accent" title="Download Receipt"><Download className="h-3.5 w-3.5 text-success" /></button>
