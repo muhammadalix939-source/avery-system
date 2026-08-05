@@ -335,7 +335,7 @@ function BookingsPage() {
     const infants = cs.filter((c) => c.ageCategory === "Infant");
     setSelected(b);
     setForm({
-      agentId: b.agentId, supplierId: b.supplierId, totalAmount: String(b.totalAmount),
+      agentId: b.agentId, supplierId: b.supplierId, totalAmount: String(b.baseAmount ?? b.totalAmount),
       amountReceived: String(b.amountReceived), totalCost: String(b.totalCost || 0),
       commission: String(b.commission || 0), packageType: b.packageType, status: b.status,
       travelDate: b.travelDate,
@@ -343,9 +343,9 @@ function BookingsPage() {
       children: String(children.length),
       infants: String(infants.length),
       pricingMode: "total",
-      adultPrice: String(adults[0]?.amountDue || 0),
-      childPrice: String(children[0]?.amountDue || 0),
-      infantPrice: String(infants[0]?.amountDue || 0),
+      adultPrice: String(adults[0]?.baseDue ?? adults[0]?.amountDue ?? 0),
+      childPrice: String(children[0]?.baseDue ?? children[0]?.amountDue ?? 0),
+      infantPrice: String(infants[0]?.baseDue ?? infants[0]?.amountDue ?? 0),
       destination: b.destination || "", driveLink: b.driveLink || "",
     });
     if (b.groupId) { setGroupMode("existing"); setGroupId(b.groupId); } else { setGroupMode("none"); setGroupId(""); }
