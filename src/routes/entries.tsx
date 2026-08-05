@@ -153,10 +153,15 @@ function EntriesPage() {
       serviceCategory: serviceCategory || undefined,
       purchaseDetails: form.type === "purchase" ? buildDetailsPayload(serviceCategory, details) : undefined,
       groupId: form.type === "purchase" ? finalGroupId : undefined,
+      clientId: extra.clientId || undefined,
+      chargeCategory: form.type === "client_charge" ? (extra.chargeCategory || undefined) : undefined,
+      refundOf: extra.refundOf || undefined,
+      refundReason: extra.refundReason || undefined,
     });
     setForm({ date: "", type: "client_receive", headId: "", referenceId: "", referenceName: "", amount: "", note: "" });
     setServiceCategory("");
     setDetails(emptyDetails);
+    setExtra({ clientId: "", chargeCategory: "", refundOf: "", refundReason: "" });
     setGroupMode("none"); setGroupId(""); setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "", totalPax: "" });
     setAddOpen(false);
   }
@@ -183,6 +188,10 @@ function EntriesPage() {
       serviceCategory: serviceCategory || undefined,
       purchaseDetails: form.type === "purchase" ? buildDetailsPayload(serviceCategory, details) : undefined,
       groupId: form.type === "purchase" ? finalGroupId : undefined,
+      clientId: extra.clientId || undefined,
+      chargeCategory: form.type === "client_charge" ? (extra.chargeCategory || undefined) : undefined,
+      refundOf: extra.refundOf || undefined,
+      refundReason: extra.refundReason || undefined,
     });
     setEditOpen(false);
   }
@@ -191,6 +200,7 @@ function EntriesPage() {
     setSelected(e);
     setForm({ date: e.date, type: e.type, headId: e.headId, referenceId: e.referenceId, referenceName: e.referenceName, amount: String(e.amount), note: e.note });
     setServiceCategory(e.serviceCategory || "");
+    setExtra({ clientId: e.clientId || "", chargeCategory: e.chargeCategory || "", refundOf: e.refundOf || "", refundReason: e.refundReason || "" });
     if (e.groupId) { setGroupMode("existing"); setGroupId(e.groupId); } else { setGroupMode("none"); setGroupId(""); }
     setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "", totalPax: "" });
     const d = e.purchaseDetails || {};
