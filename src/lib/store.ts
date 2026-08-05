@@ -309,12 +309,20 @@ export function useStore() {
     // Client CRUD
     addClient: (data: Omit<Client, "id">) => {
       const id = generateId("AV-C", nextClientNum++);
-      clients = [...clients, { ...data, id }];
+      clients = [...clients, { ...data, id, baseDue: data.amountDue, extraCharges: 0 }];
       notify();
       return id;
     },
     updateClient: (id: string, data: Partial<Client>) => {
-      clients = clients.map((c) => (c.id === id ? { ...c, ...data } : c));
+      clients = clients.map((c) => {
+        if (c.id !== id) return c;
+        const next = { ...c, ...data };
+        if (data.amountDue !== undefined) {
+          next.baseDue = data.amountDue;
+          next.amountDue = data.amountDue + (c.extraCharges || 0);
+        }
+        return next;
+      });
       notify();
     },
     deleteClient: (id: string) => {
@@ -358,13 +366,21 @@ export function useStore() {
     // Booking CRUD
     addBooking: (data: Omit<Booking, "id">) => {
       const id = `B${String(nextBookingNum++).padStart(3, "0")}`;
-      bookings = [...bookings, { ...data, id }];
+      bookings = [...bookings, { ...data, id, baseAmount: data.totalAmount, extraCharges: 0 }];
       notify();
       return id;
     },
     updateBooking: (id: string, data: Partial<Booking>) => {
       const before = bookings.find((b) => b.id === id);
-      bookings = bookings.map((b) => (b.id === id ? { ...b, ...data } : b));
+      bookings = bookings.map((b) => {
+        if (b.id !== id) return b;
+        const next = { ...b, ...data };
+        if (data.totalAmount !== undefined) {
+          next.baseAmount = data.totalAmount;
+          next.totalAmount = data.totalAmount + (b.extraCharges || 0);
+        }
+        return next;
+      });
       const after = bookings.find((b) => b.id === id);
       // Auto-sync deltas to agent / supplier when totals change
       if (before && after) {
