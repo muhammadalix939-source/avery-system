@@ -207,15 +207,16 @@ function resyncFromEntries(refIds: { supplierIds?: string[]; agentIds?: string[]
   const agentIds = new Set(refIds.agentIds || []);
   const headIds = new Set(refIds.headIds || []);
 
-  // Suppliers: totalPayable = sum(purchase entries), totalPaid = sum(supplier_payment entries)
+  // Suppliers: totalPayable = purchases − supplier refunds, totalPaid = supplier payments
   if (supplierIds.size) {
     suppliers = suppliers.map((s) => {
       if (!supplierIds.has(s.id)) return s;
       const purchases = entries.filter((e) => e.type === "purchase" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
+      const refunds  = entries.filter((e) => e.type === "supplier_refund" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
       const payments  = entries.filter((e) => e.type === "supplier_payment" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
       // Also honour any legacy totalCost coming from bookings for this supplier
       const bookingCost = bookings.filter((b) => b.supplierId === s.id).reduce((sum, b) => sum + (b.totalCost || 0), 0);
-      return { ...s, totalPayable: Math.max(purchases, bookingCost), totalPaid: payments };
+      return { ...s, totalPayable: Math.max(0, Math.max(purchases, bookingCost) - refunds), totalPaid: payments };
     });
   }
 
@@ -231,9 +232,30 @@ function resyncFromEntries(refIds: { supplierIds?: string[]; agentIds?: string[]
   // Bookings / clients: amountReceived = sum(client_receive entries for that head), redistribute to clients
   if (headIds.size) {
     headIds.forEach((headId) => {
-      const totalReceived = entries.filter((e) => e.type === "client_receive" && e.headId === headId).reduce((s, e) => s + e.amount, 0);
-      bookings = bookings.map((b) => b.headId === headId ? { ...b, amountReceived: totalReceived } : b);
+      const gross = entries.filter((e) => e.type === "client_receive" && e.headId === headId).reduce((s, e) => s + e.amount, 0);
+      const refunded = entries.filter((e) => e.type === "client_refund" && e.headId === headId).reduce((s, e) => s + e.amount, 0);
+      const charges = entries.filter((e) => e.type === "client_charge" && e.headId === headId);
+      const chargeTotal = charges.reduce((s, e) => s + e.amount, 0);
+      const totalReceived = Math.max(0, gross - refunded);
+
+      bookings = bookings.map((b) => {
+        if (b.headId !== headId) return b;
+        const base = b.baseAmount ?? b.totalAmount;
+        return { ...b, baseAmount: base, extraCharges: chargeTotal, refunded, totalAmount: base + chargeTotal, amountReceived: totalReceived };
+      });
+
+      // Push each extra charge onto the member it belongs to (unassigned charges hit the head/lead member).
       const headClients = clients.filter((c) => c.headId === headId);
+      const leadId = headClients[0]?.id;
+      clients = clients.map((c) => {
+        if (c.headId !== headId) return c;
+        const extra = charges
+          .filter((e) => (e.clientId ? e.clientId === c.id : c.id === leadId))
+          .reduce((s, e) => s + e.amount, 0);
+        const base = c.baseDue ?? c.amountDue;
+        return { ...c, baseDue: base, extraCharges: extra, amountDue: base + extra };
+      });
+
       let remaining = totalReceived;
       clients = clients.map((c) => {
         if (c.headId !== headId) return c;
