@@ -253,6 +253,10 @@ function labelType(t: LedgerEntry["type"]): string {
     case "supplier_payment": return "Supplier Pmt";
     case "agent_commission": return "Commission";
     case "expense": return "Expense";
+    case "purchase": return "Purchase";
+    case "client_charge": return "Extra Charge";
+    case "client_refund": return "Client Refund";
+    case "supplier_refund": return "Supplier Refund";
     default: return t;
   }
 }
