@@ -223,8 +223,10 @@ function EntriesPage() {
     setEditOpen(true);
   }
 
-  const totalReceived = store.entries.filter((e) => e.type === "client_receive").reduce((s, e) => s + e.amount, 0);
-  const totalPaid = store.entries.filter((e) => e.type === "supplier_payment" || e.type === "agent_commission" || e.type === "expense").reduce((s, e) => s + e.amount, 0);
+  const totalReceived = store.entries.filter((e) => e.type === "client_receive").reduce((s, e) => s + e.amount, 0)
+    - store.entries.filter((e) => e.type === "client_refund").reduce((s, e) => s + e.amount, 0);
+  const totalPaid = store.entries.filter((e) => e.type === "supplier_payment" || e.type === "agent_commission" || e.type === "expense").reduce((s, e) => s + e.amount, 0)
+    - store.entries.filter((e) => e.type === "supplier_refund").reduce((s, e) => s + e.amount, 0);
   const totalPurchases = store.entries.filter((e) => e.type === "purchase").reduce((s, e) => s + e.amount, 0);
 
   // Auto-populate reference name when type or referenceId changes
