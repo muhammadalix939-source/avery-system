@@ -230,18 +230,20 @@ function EntriesPage() {
   // Auto-populate reference name when type or referenceId changes
   function updateFormType(type: LedgerEntry["type"]) {
     setForm({ ...form, type, referenceId: "", referenceName: "", headId: "" });
+    setExtra({ clientId: "", chargeCategory: "", refundOf: "", refundReason: "" });
   }
 
   function updateReferenceId(refId: string) {
     let name = "";
-    if (form.type === "client_receive") {
+    if (form.type === "client_receive" || form.type === "client_charge" || form.type === "client_refund") {
       const booking = store.bookings.find((b) => b.headId === refId);
       if (booking) {
         const headClient = store.clients.find((c) => c.headId === refId);
         name = headClient ? getClientName(headClient) : refId;
       }
       setForm({ ...form, referenceId: refId, referenceName: name || form.referenceName, headId: refId });
-    } else if (form.type === "supplier_payment" || form.type === "purchase") {
+      setExtra((x) => ({ ...x, clientId: "" }));
+    } else if (form.type === "supplier_payment" || form.type === "purchase" || form.type === "supplier_refund") {
       const supplier = store.suppliers.find((s) => s.id === refId);
       name = supplier?.companyName || "";
       setForm({ ...form, referenceId: refId, referenceName: name || form.referenceName });
