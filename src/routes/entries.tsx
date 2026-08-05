@@ -25,6 +25,9 @@ const typeLabels: Record<LedgerEntry["type"], string> = {
   supplier_payment: "Supplier Payment",
   agent_commission: "Agent Commission",
   expense: "Expense",
+  client_charge: "Extra Charge to Client",
+  client_refund: "Refund to Client",
+  supplier_refund: "Refund from Supplier",
 };
 
 const typeColors: Record<LedgerEntry["type"], string> = {
@@ -33,7 +36,26 @@ const typeColors: Record<LedgerEntry["type"], string> = {
   supplier_payment: "text-destructive",
   agent_commission: "text-warning",
   expense: "text-destructive",
+  client_charge: "text-primary",
+  client_refund: "text-destructive",
+  supplier_refund: "text-success",
 };
+
+/** Money that flows INTO the business (shown with a + sign). */
+const INFLOW_TYPES: LedgerEntry["type"][] = ["client_receive", "supplier_refund"];
+
+export const CHARGE_CATEGORIES = [
+  "Embassy / Send-to-Embassy Fee",
+  "Visa Fee",
+  "Ticket Change / Reissue",
+  "Excess Baggage",
+  "Hotel Upgrade",
+  "Transport Extra",
+  "Insurance",
+  "Service / Processing Charge",
+  "Late Payment Charge",
+  "Other Charge",
+];
 
 function buildDetailsPayload(cat: string, d: {
   adults: string; children: string; infants: string;
