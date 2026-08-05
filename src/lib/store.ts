@@ -482,9 +482,9 @@ export function useStore() {
       const entry = { ...data, id, createdAt: new Date().toLocaleString("en-PK", { timeZone: "Asia/Karachi" }) };
       entries = [...entries, entry];
       resyncFromEntries({
-        supplierIds: (data.type === "purchase" || data.type === "supplier_payment") ? [data.referenceId] : [],
+        supplierIds: (data.type === "purchase" || data.type === "supplier_payment" || data.type === "supplier_refund") ? [data.referenceId] : [],
         agentIds: data.type === "agent_commission" ? [data.referenceId] : [],
-        headIds: data.type === "client_receive" && data.headId ? [data.headId] : [],
+        headIds: (data.type === "client_receive" || data.type === "client_charge" || data.type === "client_refund") && data.headId ? [data.headId] : [],
       });
       notify();
       return id;
@@ -499,9 +499,9 @@ export function useStore() {
       const headIds = new Set<string>();
       [before, after].forEach((e) => {
         if (!e) return;
-        if (e.type === "purchase" || e.type === "supplier_payment") { if (e.referenceId) supplierIds.add(e.referenceId); }
+        if (e.type === "purchase" || e.type === "supplier_payment" || e.type === "supplier_refund") { if (e.referenceId) supplierIds.add(e.referenceId); }
         if (e.type === "agent_commission") { if (e.referenceId) agentIds.add(e.referenceId); }
-        if (e.type === "client_receive") { if (e.headId) headIds.add(e.headId); }
+        if (e.type === "client_receive" || e.type === "client_charge" || e.type === "client_refund") { if (e.headId) headIds.add(e.headId); }
       });
       resyncFromEntries({ supplierIds: [...supplierIds], agentIds: [...agentIds], headIds: [...headIds] });
       notify();
@@ -511,9 +511,9 @@ export function useStore() {
       entries = entries.filter((x) => x.id !== id);
       if (e) {
         resyncFromEntries({
-          supplierIds: (e.type === "purchase" || e.type === "supplier_payment") && e.referenceId ? [e.referenceId] : [],
+          supplierIds: (e.type === "purchase" || e.type === "supplier_payment" || e.type === "supplier_refund") && e.referenceId ? [e.referenceId] : [],
           agentIds: e.type === "agent_commission" && e.referenceId ? [e.referenceId] : [],
-          headIds: e.type === "client_receive" && e.headId ? [e.headId] : [],
+          headIds: (e.type === "client_receive" || e.type === "client_charge" || e.type === "client_refund") && e.headId ? [e.headId] : [],
         });
       }
       notify();
