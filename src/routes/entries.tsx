@@ -267,6 +267,9 @@ function EntriesPage() {
             <SelectItem value="supplier_payment">Supplier Payment</SelectItem>
             <SelectItem value="agent_commission">Agent Commission</SelectItem>
             <SelectItem value="expense">Expense</SelectItem>
+            <SelectItem value="client_charge">Extra Charge to Client (Embassy / Service Fee)</SelectItem>
+            <SelectItem value="client_refund">Refund to Client</SelectItem>
+            <SelectItem value="supplier_refund">Refund from Supplier</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -285,6 +288,108 @@ function EntriesPage() {
             }))}
             className="mt-1"
           />
+        </div>
+      )}
+
+      {(form.type === "client_charge" || form.type === "client_refund") && (
+        <div className="space-y-3 rounded-lg border border-primary/40 bg-primary/5 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+            {form.type === "client_charge" ? "Charge Details" : "Client Refund Details"}
+          </p>
+          <div><Label className="text-[10px]">Head ID (Booking)</Label>
+            <SearchableSelect
+              value={form.headId}
+              onChange={(v) => updateReferenceId(v)}
+              placeholder="Search Head ID..."
+              options={store.bookings.map((b) => ({
+                value: b.headId,
+                label: `${b.headId} — ${b.packageType}`,
+                hint: `${b.travelDate} · ${formatCurrency(b.totalAmount)}`,
+              }))}
+              className="mt-1"
+            />
+          </div>
+          <div><Label className="text-[10px]">Member (optional — defaults to head member)</Label>
+            <SearchableSelect
+              value={extra.clientId}
+              onChange={(v) => {
+                const c = store.clients.find((x) => x.id === v);
+                setExtra({ ...extra, clientId: v });
+                if (c) setForm((f) => ({ ...f, referenceName: getClientName(c) }));
+              }}
+              placeholder={form.headId ? "Select member..." : "Select a Head ID first"}
+              options={store.clients.filter((c) => c.headId === form.headId).map((c) => ({
+                value: c.id,
+                label: `${c.id} — ${getClientName(c)}`,
+                hint: `${c.ageCategory || "Adult"} · Due ${formatCurrency(c.amountDue)}`,
+              }))}
+              className="mt-1"
+            />
+          </div>
+          {form.type === "client_charge" ? (
+            <div><Label className="text-[10px]">Charge Type</Label>
+              <Select value={extra.chargeCategory} onValueChange={(v) => setExtra({ ...extra, chargeCategory: v })}>
+                <SelectTrigger className="bg-accent/20 border-border mt-1 h-8 text-xs"><SelectValue placeholder="Embassy fee / Visa fee / Other" /></SelectTrigger>
+                <SelectContent>{CHARGE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+              </Select>
+              <p className="mt-1 text-[10px] text-muted-foreground">This amount is added to the member's due and to the booking total automatically.</p>
+            </div>
+          ) : (
+            <>
+              <div><Label className="text-[10px]">Refund Against (optional)</Label>
+                <SearchableSelect
+                  value={extra.refundOf}
+                  onChange={(v) => setExtra({ ...extra, refundOf: v })}
+                  placeholder="Link to the original receipt..."
+                  options={store.entries.filter((e) => e.type === "client_receive" && (!form.headId || e.headId === form.headId)).map((e) => ({
+                    value: e.id, label: `${e.id} — ${formatCurrency(e.amount)}`, hint: `${e.date} · ${e.referenceName}`,
+                  }))}
+                  className="mt-1"
+                />
+              </div>
+              <div><Label className="text-[10px]">Reason</Label><Input value={extra.refundReason} onChange={(e) => setExtra({ ...extra, refundReason: e.target.value })} placeholder="Visa rejected / trip cancelled..." className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+              <p className="text-[10px] text-muted-foreground">Refunds are deducted from the head's received amount everywhere.</p>
+            </>
+          )}
+        </div>
+      )}
+
+      {form.type === "supplier_refund" && (
+        <div className="space-y-3 rounded-lg border border-success/40 bg-success/5 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-success">Supplier Refund Details</p>
+          <div><Label className="text-[10px]">Supplier</Label>
+            <SearchableSelect
+              value={form.referenceId}
+              onChange={(v) => updateReferenceId(v)}
+              placeholder="Search Supplier..."
+              options={store.suppliers.map((s) => ({ value: s.id, label: `${s.id} — ${s.companyName}`, hint: s.serviceType }))}
+              className="mt-1"
+            />
+          </div>
+          <div><Label className="text-[10px]">Refund Against Purchase (optional)</Label>
+            <SearchableSelect
+              value={extra.refundOf}
+              onChange={(v) => setExtra({ ...extra, refundOf: v })}
+              placeholder="Select the original purchase..."
+              options={store.entries.filter((e) => e.type === "purchase" && (!form.referenceId || e.referenceId === form.referenceId)).map((e) => ({
+                value: e.id,
+                label: `${e.id} — ${formatCurrency(e.amount)}`,
+                hint: [e.date, e.serviceCategory, e.headId].filter(Boolean).join(" · "),
+              }))}
+              className="mt-1"
+            />
+          </div>
+          <div><Label className="text-[10px]">Link to Head ID (optional)</Label>
+            <SearchableSelect
+              value={form.headId}
+              onChange={(v) => setForm({ ...form, headId: v })}
+              placeholder="Tag this refund to a booking..."
+              options={store.bookings.map((b) => ({ value: b.headId, label: `${b.headId} — ${b.packageType}`, hint: b.travelDate }))}
+              className="mt-1"
+            />
+          </div>
+          <div><Label className="text-[10px]">Reason</Label><Input value={extra.refundReason} onChange={(e) => setExtra({ ...extra, refundReason: e.target.value })} placeholder="Cancelled ticket / unused room night..." className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+          <p className="text-[10px] text-muted-foreground">This credit reduces the supplier's payable in statements automatically.</p>
         </div>
       )}
 
