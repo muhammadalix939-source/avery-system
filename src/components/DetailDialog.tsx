@@ -307,15 +307,6 @@ function LedgerBlock({ title, hint, rows }: { title: string; hint?: string; rows
   );
 }
 
-function LegacyRow({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div className="flex justify-between border-b border-border/30 py-2">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={`font-medium ${color || ""}`}>{value}</span>
-    </div>
-  );
-}
-
 function StatCard({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div className="rounded-lg bg-accent/20 p-3 text-center">
