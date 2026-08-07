@@ -60,6 +60,8 @@ export interface Client {
   baseDue?: number;
   /** Sum of extra charges billed to this member via the ledger. */
   extraCharges?: number;
+  /** Sum refunded back to this member via the ledger (reduces net due). */
+  refunded?: number;
   /** Carry-forward balance from before this system (added to amountPaid baseline). */
   openingPaid?: number;
   isVip: boolean;

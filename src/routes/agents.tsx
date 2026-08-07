@@ -79,7 +79,14 @@ function AgentsPage() {
     generateAgentReport(a, entries, { ...range, bookings: agentBookings });
   }
 
-  const relatedEntries = selected ? store.entries.filter((e) => e.referenceId === selected.id) : [];
+  // Agent ledger = own commission entries + every client transaction of the heads this agent brought.
+  const relatedEntries = (() => {
+    if (!selected) return [];
+    const agentHeads = new Set(store.bookings.filter((b) => b.agentId === selected.id).map((b) => b.headId));
+    return store.entries.filter(
+      (e) => e.referenceId === selected.id || (e.headId && agentHeads.has(e.headId) && e.type !== "expense")
+    );
+  })();
 
   const formFields = (
     <div className="space-y-3">
