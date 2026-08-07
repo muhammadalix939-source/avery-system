@@ -130,23 +130,22 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
               {type === "supplier" && renderSupplierFull(data as Supplier, getSupplierStats(data as Supplier), () => setSubView("bookings"))}
               {type === "booking" && renderBooking(data as Booking)}
 
-              {entries.length > 0 && (
-                <div>
-                  <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-2">Transaction History</h4>
-                  <div className="space-y-2">
-                    {entries.map((e) => (
-                      <div key={e.id} className="flex items-center justify-between rounded-lg bg-accent/20 px-3 py-2 text-xs">
-                        <div>
-                          <p className="font-medium">{e.note || e.type}</p>
-                          <p className="text-muted-foreground">{e.date}</p>
-                        </div>
-                        <span className={e.type === "client_receive" ? "text-success" : "text-destructive"}>
-                          {e.type === "client_receive" ? "+" : "-"}{formatCurrency(e.amount)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              {entries.length > 0 && type === "agent" && (
+                <>
+                  <LedgerBlock
+                    title="Commission Ledger"
+                    hint="Commission payouts settled to this agent."
+                    rows={entries.filter((e) => e.type === "agent_commission" && e.referenceId === (data as Agent).id)}
+                  />
+                  <LedgerBlock
+                    title="Client Business Ledger"
+                    hint="Every client transaction of the bookings this agent brought — receipts, extra charges and refunds."
+                    rows={entries.filter((e) => e.type !== "agent_commission")}
+                  />
+                </>
+              )}
+              {entries.length > 0 && type !== "agent" && (
+                <LedgerBlock title="Transaction History" rows={entries} />
               )}
             </>
           )}
@@ -254,6 +253,61 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
 }
 
 function Row({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div className="flex justify-between border-b border-border/30 py-2">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`font-medium ${color || ""}`}>{value}</span>
+    </div>
+  );
+}
+
+const ENTRY_LABELS: Record<string, string> = {
+  client_receive: "Payment Received",
+  client_charge: "Extra Charge",
+  client_refund: "Refund to Client",
+  supplier_payment: "Supplier Payment",
+  supplier_refund: "Refund from Supplier",
+  agent_commission: "Commission Paid",
+  purchase: "Purchase",
+  expense: "Expense",
+};
+const INFLOW = new Set(["client_receive", "supplier_refund"]);
+
+function LedgerBlock({ title, hint, rows }: { title: string; hint?: string; rows: LedgerEntry[] }) {
+  if (rows.length === 0) return null;
+  const total = rows.reduce((s, e) => s + (INFLOW.has(e.type) ? e.amount : -e.amount), 0);
+  return (
+    <div>
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h4>
+        <span className={`text-xs font-bold ${total >= 0 ? "text-success" : "text-destructive"}`}>
+          {total >= 0 ? "+" : "-"}{formatCurrency(Math.abs(total))}
+        </span>
+      </div>
+      {hint && <p className="mb-2 text-[10px] text-muted-foreground">{hint}</p>}
+      <div className="space-y-2">
+        {rows.map((e) => {
+          const inflow = INFLOW.has(e.type);
+          return (
+            <div key={e.id} className="flex items-center justify-between rounded-lg bg-accent/20 px-3 py-2 text-xs">
+              <div className="min-w-0">
+                <p className="truncate font-medium">{ENTRY_LABELS[e.type] || e.type}{e.note ? ` — ${e.note}` : ""}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {[e.date, e.headId, e.chargeCategory, e.serviceCategory].filter(Boolean).join(" · ")}
+                </p>
+              </div>
+              <span className={`shrink-0 pl-2 ${inflow ? "text-success" : "text-destructive"}`}>
+                {inflow ? "+" : "-"}{formatCurrency(e.amount)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function LegacyRow({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div className="flex justify-between border-b border-border/30 py-2">
       <span className="text-muted-foreground">{label}</span>
