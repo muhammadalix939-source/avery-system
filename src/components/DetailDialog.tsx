@@ -35,7 +35,7 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
     if (!data) return;
     if (type === "client") generateClientStatement(data as Client, entries);
     if (type === "supplier") generateSupplierLedger(data as Supplier, entries);
-    if (type === "agent") generateAgentReport(data as Agent, entries);
+    if (type === "agent") generateAgentReport(data as Agent, entries.filter((e) => e.referenceId === (data as Agent).id));
   }
 
   function handleHistory() {
@@ -60,7 +60,7 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
       const a = data as Agent;
       generatePaymentHistory(`Agent ${a.id}`,
         [["Agent ID", a.id], ["Name", a.name], ["Phone", a.phone]],
-        entries.filter((e) => e.type === "agent_commission"),
+        entries.filter((e) => e.type === "agent_commission" && e.referenceId === a.id),
         [["Commission", fc(a.commission), "ink"], ["Paid", fc(a.paidCommission || 0), "success"], ["Payable", fc((a.commission || 0) - (a.paidCommission || 0)), "destructive"]]);
     }
   }
