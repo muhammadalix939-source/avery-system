@@ -185,18 +185,15 @@ function hydrateFromStorage() {
 }
 
 // ---------- Group capacity helper ----------
-/** How many pax are already consumed by a given group across bookings + purchase entries. */
+/** How many pax are already consumed by a given group — CLIENT members only.
+ *  Supplier purchases / bills / expenses tagged to the group never consume seats. */
 export function computeGroupUsedPax(groupId: string): number {
-  const bookingPax = bookings
+  return bookings
     .filter((b) => b.groupId === groupId)
-    .reduce((sum, b) => sum + (b.members || 0), 0);
-  const entryPax = entries
-    .filter((e) => e.groupId === groupId)
-    .reduce((sum, e) => {
-      const d = e.purchaseDetails || {};
-      return sum + (d.adults || 0) + (d.children || 0) + (d.infants || 0);
+    .reduce((sum, b) => {
+      const memberCount = clients.filter((c) => c.headId === b.headId).length;
+      return sum + (memberCount || b.members || 0);
     }, 0);
-  return bookingPax + entryPax;
 }
 
 // ---------- Source-of-truth resync ----------
