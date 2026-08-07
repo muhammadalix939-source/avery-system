@@ -22,13 +22,16 @@ export interface GroupStats {
   payments: LedgerEntry[];
   groupExpenses: LedgerEntry[];
   receipts: LedgerEntry[];
-  /** Pax already consumed (bookings members + purchase pax) */
+  /** Pax already consumed — CLIENT members only (never supplier purchase pax) */
   usedPax: number;
+  /** Pax the supplier has invoiced us for (from purchase entries) — informational only */
+  billedPax: number;
   capacity: number;
   remainingPax: number;
   /** Sales booked to this group */
   revenue: number;
   received: number;
+  refunds: number;
   pendingReceivable: number;
   /** Supplier bill for this group */
   supplierBill: number;
@@ -71,16 +74,19 @@ export function computeGroupStats(
   const supplierRefunds = tagged.filter((e) => e.type === "supplier_refund");
   const receipts = data.entries.filter((e) => e.type === "client_receive" && headIds.has(e.headId));
 
-  const purchasePax = purchases.reduce((s, e) => {
+  const billedPax = purchases.reduce((s, e) => {
     const d = e.purchaseDetails || {};
     return s + (d.adults || 0) + (d.children || 0) + (d.infants || 0);
   }, 0);
-  const bookingPax = linkedBookings.reduce((s, b) => s + (b.members || 0), 0);
-  const usedPax = bookingPax + purchasePax;
+  // Seats are consumed by CLIENTS only. Supplier bills / expenses never consume capacity.
+  const usedPax = heads.reduce((s, h) => s + (h.clients.length || h.members || 0), 0);
   const capacity = group.totalPax || 0;
 
   const revenue = heads.reduce((s, h) => s + h.totalAmount, 0);
   const received = heads.reduce((s, h) => s + h.received, 0);
+  const refunds = data.entries
+    .filter((e) => e.type === "client_refund" && headIds.has(e.headId))
+    .reduce((s, e) => s + e.amount, 0);
   const supplierBill = Math.max(0, purchases.reduce((s, e) => s + e.amount, 0) - supplierRefunds.reduce((s, e) => s + e.amount, 0));
   const supplierPaid = payments.reduce((s, e) => s + e.amount, 0);
   const commission = linkedBookings.reduce((s, b) => s + (b.commission || 0), 0);
@@ -98,8 +104,8 @@ export function computeGroupStats(
     group,
     supplier: data.suppliers.find((s) => s.id === group.supplierId),
     heads, purchases, payments, groupExpenses, receipts,
-    usedPax, capacity, remainingPax: Math.max(0, capacity - usedPax),
-    revenue, received, pendingReceivable: Math.max(0, revenue - received),
+    usedPax, billedPax, capacity, remainingPax: Math.max(0, capacity - usedPax),
+    revenue, received, refunds, pendingReceivable: Math.max(0, revenue - received),
     supplierBill, supplierPaid, supplierOutstanding: supplierBill - supplierPaid,
     commission, expenses, netProfit,
     margin: revenue > 0 ? (netProfit / revenue) * 100 : 0,

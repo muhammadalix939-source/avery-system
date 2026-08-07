@@ -185,18 +185,15 @@ function hydrateFromStorage() {
 }
 
 // ---------- Group capacity helper ----------
-/** How many pax are already consumed by a given group across bookings + purchase entries. */
+/** How many pax are already consumed by a given group — CLIENT members only.
+ *  Supplier purchases / bills / expenses tagged to the group never consume seats. */
 export function computeGroupUsedPax(groupId: string): number {
-  const bookingPax = bookings
+  return bookings
     .filter((b) => b.groupId === groupId)
-    .reduce((sum, b) => sum + (b.members || 0), 0);
-  const entryPax = entries
-    .filter((e) => e.groupId === groupId)
-    .reduce((sum, e) => {
-      const d = e.purchaseDetails || {};
-      return sum + (d.adults || 0) + (d.children || 0) + (d.infants || 0);
+    .reduce((sum, b) => {
+      const memberCount = clients.filter((c) => c.headId === b.headId).length;
+      return sum + (memberCount || b.members || 0);
     }, 0);
-  return bookingPax + entryPax;
 }
 
 // ---------- Source-of-truth resync ----------
@@ -233,7 +230,8 @@ function resyncFromEntries(refIds: { supplierIds?: string[]; agentIds?: string[]
   if (headIds.size) {
     headIds.forEach((headId) => {
       const gross = entries.filter((e) => e.type === "client_receive" && e.headId === headId).reduce((s, e) => s + e.amount, 0);
-      const refunded = entries.filter((e) => e.type === "client_refund" && e.headId === headId).reduce((s, e) => s + e.amount, 0);
+      const refundList = entries.filter((e) => e.type === "client_refund" && e.headId === headId);
+      const refunded = refundList.reduce((s, e) => s + e.amount, 0);
       const charges = entries.filter((e) => e.type === "client_charge" && e.headId === headId);
       const chargeTotal = charges.reduce((s, e) => s + e.amount, 0);
       const totalReceived = Math.max(0, gross - refunded);
@@ -241,10 +239,16 @@ function resyncFromEntries(refIds: { supplierIds?: string[]; agentIds?: string[]
       bookings = bookings.map((b) => {
         if (b.headId !== headId) return b;
         const base = b.baseAmount ?? b.totalAmount;
-        return { ...b, baseAmount: base, extraCharges: chargeTotal, refunded, totalAmount: base + chargeTotal, amountReceived: totalReceived };
+        // A refund reduces the NET sale value of the booking (200,000 − 6,000 = 194,000)
+        return {
+          ...b, baseAmount: base, extraCharges: chargeTotal, refunded,
+          totalAmount: Math.max(0, base + chargeTotal - refunded),
+          amountReceived: totalReceived,
+        };
       });
 
-      // Push each extra charge onto the member it belongs to (unassigned charges hit the head/lead member).
+      // Push each extra charge / refund onto the member it belongs to
+      // (unassigned ones hit the head/lead member). Refunds reduce that member's net due.
       const headClients = clients.filter((c) => c.headId === headId);
       const leadId = headClients[0]?.id;
       clients = clients.map((c) => {
@@ -252,8 +256,11 @@ function resyncFromEntries(refIds: { supplierIds?: string[]; agentIds?: string[]
         const extra = charges
           .filter((e) => (e.clientId ? e.clientId === c.id : c.id === leadId))
           .reduce((s, e) => s + e.amount, 0);
+        const refund = refundList
+          .filter((e) => (e.clientId ? e.clientId === c.id : c.id === leadId))
+          .reduce((s, e) => s + e.amount, 0);
         const base = c.baseDue ?? c.amountDue;
-        return { ...c, baseDue: base, extraCharges: extra, amountDue: base + extra };
+        return { ...c, baseDue: base, extraCharges: extra, refunded: refund, amountDue: Math.max(0, base + extra - refund) };
       });
 
       let remaining = totalReceived;

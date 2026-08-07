@@ -189,7 +189,7 @@ function GroupsPage() {
               {s.capacity > 0 && (
                 <>
                   <div className="mb-1 flex justify-between text-[10px] text-muted-foreground">
-                    <span>{s.usedPax} / {s.capacity} pax booked</span>
+                    <span>{s.usedPax} / {s.capacity} clients booked</span>
                     <span>{s.remainingPax} seats left</span>
                   </div>
                   <div className="mb-3 h-2 overflow-hidden rounded-full bg-accent/30">
@@ -341,20 +341,23 @@ function GroupDetail({ stats, onAddExpense }: { stats: GroupStats; onAddExpense:
         <Cell label="Group Sales" value={formatCurrency(stats.revenue)} tone="text-primary" />
         <Cell label="Received" value={formatCurrency(stats.received)} tone="text-success" />
         <Cell label="Pending" value={formatCurrency(stats.pendingReceivable)} tone="text-destructive" />
-        <Cell label="Pax" value={stats.capacity ? `${stats.usedPax} / ${stats.capacity}` : String(stats.usedPax)} />
+        <Cell label="Clients (Pax)" value={stats.capacity ? `${stats.usedPax} / ${stats.capacity}` : String(stats.usedPax)} />
         <Cell label="Supplier Bill" value={formatCurrency(stats.supplierBill)} tone="text-warning" />
         <Cell label="Supplier Paid" value={formatCurrency(stats.supplierPaid)} tone="text-success" />
         <Cell label="Outstanding" value={formatCurrency(stats.supplierOutstanding)} tone="text-destructive" />
         <Cell label="Commission" value={formatCurrency(stats.commission)} />
       </div>
 
-      <div className="glass-card grid grid-cols-3 gap-3 rounded-xl p-4">
+      <div className="glass-card grid grid-cols-2 gap-3 rounded-xl p-4 sm:grid-cols-5">
         <Cell label="Extras / Gifts" value={formatCurrency(stats.expenses)} tone="text-destructive" />
+        <Cell label="Client Refunds" value={formatCurrency(stats.refunds)} tone="text-destructive" />
+        <Cell label="Supplier Billed Pax" value={String(stats.billedPax)} />
         <Cell label="Net Profit" value={formatCurrency(stats.netProfit)} tone={stats.netProfit >= 0 ? "text-success" : "text-destructive"} />
         <Cell label="Margin" value={`${stats.margin.toFixed(1)}%`} tone={stats.margin >= 0 ? "text-success" : "text-destructive"} />
       </div>
       <p className="text-[10px] text-muted-foreground">
-        Net Profit = Group Sales − Supplier Bill − Agent Commission − Extras / Gifts
+        Seat capacity counts CLIENT members only — supplier bills, purchases and extras never consume seats.
+        Net Profit = Group Sales (net of refunds) − Supplier Bill − Agent Commission − Extras / Gifts
       </p>
 
       {/* Heads */}
