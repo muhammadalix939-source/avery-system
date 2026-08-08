@@ -449,65 +449,20 @@ export function useStore() {
             }
           }
         }
-        // Agent commission / sales delta
-        if (after.agentId && after.agentId !== "Direct") {
-          const agent = agents.find((a) => a.id === after.agentId);
-          if (agent) {
-            const dSales = (after.totalAmount || 0) - (before.totalAmount || 0);
-            const dComm  = (after.commission  || 0) - (before.commission  || 0);
-            if (dSales || dComm) {
-              agents = agents.map((a) => a.id === agent.id ? {
-                ...a,
-                totalSales: Math.max(0, a.totalSales + dSales),
-                commission: Math.max(0, a.commission + dComm),
-              } : a);
-            }
-          }
-        }
-        // Supplier payable delta
-        if (after.supplierId) {
-          const sup = suppliers.find((s) => s.id === after.supplierId);
-          if (sup) {
-            const dCost = (after.totalCost || 0) - (before.totalCost || 0);
-            if (dCost) {
-              suppliers = suppliers.map((s) => s.id === sup.id ? {
-                ...s, totalPayable: Math.max(0, s.totalPayable + dCost),
-              } : s);
-            }
-          }
-        }
       }
+      // Agents & suppliers are fully derived from bookings + ledger
+      resyncDerived();
       notify();
     },
     deleteBooking: (id: string) => {
       const b = bookings.find((x) => x.id === id);
       if (!b) { notify(); return; }
-      // Reverse agent stats
-      if (b.agentId && b.agentId !== "Direct") {
-        const agent = agents.find((a) => a.id === b.agentId);
-        if (agent) {
-          agents = agents.map((a) => a.id === agent.id ? {
-            ...a,
-            totalSales:    Math.max(0, a.totalSales    - (b.totalAmount || 0)),
-            totalClients:  Math.max(0, a.totalClients  - (b.clientIds.length || 0)),
-            commission:    Math.max(0, a.commission    - (b.commission  || 0)),
-          } : a);
-        }
-      }
-      // Reverse supplier payable
-      if (b.supplierId) {
-        const sup = suppliers.find((s) => s.id === b.supplierId);
-        if (sup) {
-          suppliers = suppliers.map((s) => s.id === sup.id ? {
-            ...s, totalPayable: Math.max(0, s.totalPayable - (b.totalCost || 0)),
-          } : s);
-        }
-      }
       // Cascade: delete clients under this head + related ledger entries
       const headId = b.headId;
       clients = clients.filter((c) => c.headId !== headId);
       entries = entries.filter((e) => e.headId !== headId);
       bookings = bookings.filter((x) => x.id !== id);
+      resyncDerived();
       notify();
     },
 
