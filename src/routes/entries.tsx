@@ -91,6 +91,8 @@ function EntriesPage() {
   // Group management (PNR / batch) — for purchase entries
   const [groupMode, setGroupMode] = useState<"none" | "existing" | "new">("none");
   const [groupId, setGroupId] = useState<string>("");
+  // Supplier-payment references (who paid / for which agent's business)
+  const [refs, setRefs] = useState({ agentId: "", paidBy: "" });
   const [newGroup, setNewGroup] = useState({ name: "", pnr: "", flightNumber: "", date: "", description: "", totalPax: "" });
   const emptyDetails = {
     adults: "", children: "", infants: "",
@@ -129,6 +131,9 @@ function EntriesPage() {
     }
   }
 
+  /** Entry types that may be tagged to a Group / PNR */
+  const groupTaggable = form.type === "purchase" || form.type === "supplier_payment" || form.type === "supplier_refund" || form.type === "expense";
+
   const sorted = [...store.entries].sort((a, b) => b.date.localeCompare(a.date));
   const filtered = typeFilter === "all" ? sorted : sorted.filter((e) => e.type === typeFilter);
 
@@ -152,7 +157,9 @@ function EntriesPage() {
       amount: Number(form.amount) || 0, note: form.note,
       serviceCategory: serviceCategory || undefined,
       purchaseDetails: form.type === "purchase" ? buildDetailsPayload(serviceCategory, details) : undefined,
-      groupId: form.type === "purchase" ? finalGroupId : undefined,
+      groupId: groupTaggable ? finalGroupId : undefined,
+      agentId: refs.agentId || undefined,
+      paidBy: refs.paidBy || undefined,
       clientId: extra.clientId || undefined,
       chargeCategory: form.type === "client_charge" ? (extra.chargeCategory || undefined) : undefined,
       refundOf: extra.refundOf || undefined,
@@ -163,6 +170,7 @@ function EntriesPage() {
     setDetails(emptyDetails);
     setExtra({ clientId: "", chargeCategory: "", refundOf: "", refundReason: "" });
     setGroupMode("none"); setGroupId(""); setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "", totalPax: "" });
+    setRefs({ agentId: "", paidBy: "" });
     setAddOpen(false);
   }
 
@@ -187,7 +195,9 @@ function EntriesPage() {
       amount: Number(form.amount) || 0, note: form.note,
       serviceCategory: serviceCategory || undefined,
       purchaseDetails: form.type === "purchase" ? buildDetailsPayload(serviceCategory, details) : undefined,
-      groupId: form.type === "purchase" ? finalGroupId : undefined,
+      groupId: groupTaggable ? finalGroupId : undefined,
+      agentId: refs.agentId || undefined,
+      paidBy: refs.paidBy || undefined,
       clientId: extra.clientId || undefined,
       chargeCategory: form.type === "client_charge" ? (extra.chargeCategory || undefined) : undefined,
       refundOf: extra.refundOf || undefined,
@@ -201,6 +211,7 @@ function EntriesPage() {
     setForm({ date: e.date, type: e.type, headId: e.headId, referenceId: e.referenceId, referenceName: e.referenceName, amount: String(e.amount), note: e.note });
     setServiceCategory(e.serviceCategory || "");
     setExtra({ clientId: e.clientId || "", chargeCategory: e.chargeCategory || "", refundOf: e.refundOf || "", refundReason: e.refundReason || "" });
+    setRefs({ agentId: e.agentId || "", paidBy: e.paidBy || "" });
     if (e.groupId) { setGroupMode("existing"); setGroupId(e.groupId); } else { setGroupMode("none"); setGroupId(""); }
     setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "", totalPax: "" });
     const d = e.purchaseDetails || {};
@@ -233,6 +244,8 @@ function EntriesPage() {
   function updateFormType(type: LedgerEntry["type"]) {
     setForm({ ...form, type, referenceId: "", referenceName: "", headId: "" });
     setExtra({ clientId: "", chargeCategory: "", refundOf: "", refundReason: "" });
+    setRefs({ agentId: "", paidBy: "" });
+    setGroupMode("none"); setGroupId("");
   }
 
   function updateReferenceId(refId: string) {
