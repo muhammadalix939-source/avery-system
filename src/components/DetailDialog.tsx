@@ -69,10 +69,16 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
   function getAgentStats(a: Agent) {
     const agentBookings = allBookings.filter((b) => b.agentId === a.id);
     const agentClients = allClients.filter((c) => agentBookings.some((b) => b.headId === c.headId));
-    const totalSales = agentBookings.reduce((s, b) => s + b.totalAmount, 0);
-    const totalCommission = agentBookings.reduce((s, b) => s + (b.commission || 0), 0);
-    const paidCommission = entries.filter((e) => e.type === "agent_commission" && e.referenceId === a.id).reduce((s, e) => s + e.amount, 0);
-    return { agentBookings, agentClients, totalSales, totalCommission, paidCommission, payable: totalCommission - paidCommission };
+    const totalSales = agentBookings.reduce((s, b) => s + b.totalAmount, 0) + (a.openingSales || 0);
+    const totalCommission = agentBookings.reduce((s, b) => s + (b.commission || 0), 0) + (a.openingCommission || 0);
+    const paidCommission = entries.filter((e) => e.type === "agent_commission" && e.referenceId === a.id).reduce((s, e) => s + e.amount, 0) + (a.openingPaidCommission || 0);
+    const received = agentBookings.reduce((s, b) => s + (b.amountReceived || 0), 0);
+    const netReceivable = Math.max(0, totalSales - totalCommission);
+    return {
+      agentBookings, agentClients, totalSales, totalCommission, paidCommission,
+      payable: totalCommission - paidCommission,
+      received, netReceivable, outstanding: netReceivable - received,
+    };
   }
 
   // Compute supplier stats from bookings
@@ -140,7 +146,7 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
                   <LedgerBlock
                     title="Client Business Ledger"
                     hint="Every client transaction of the bookings this agent brought — receipts, extra charges and refunds."
-                    rows={entries.filter((e) => e.type !== "agent_commission")}
+                    rows={entries.filter((e) => e.type === "client_receive" || e.type === "client_charge" || e.type === "client_refund")}
                   />
                 </>
               )}
