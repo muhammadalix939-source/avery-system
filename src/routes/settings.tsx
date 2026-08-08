@@ -25,6 +25,10 @@ function SettingsPage() {
     clients: String(store.opening.clients || 0),
     supplierDue: String(store.opening.supplierDue || 0),
     profit: String(store.opening.profit || 0),
+    cost: String(store.opening.cost || 0),
+    expenses: String(store.opening.expenses || 0),
+    commission: String(store.opening.commission || 0),
+    cash: String(store.opening.cash || 0),
     note: store.opening.note || "",
   });
 
@@ -36,13 +40,17 @@ function SettingsPage() {
       clients: Number(form.clients) || 0,
       supplierDue: Number(form.supplierDue) || 0,
       profit: Number(form.profit) || 0,
+      cost: Number(form.cost) || 0,
+      expenses: Number(form.expenses) || 0,
+      commission: Number(form.commission) || 0,
+      cash: Number(form.cash) || 0,
       note: form.note,
     });
     toast.success("Opening balances saved");
   }
 
   function reset() {
-    setForm({ revenue: "0", pending: "0", bookings: "0", clients: "0", supplierDue: "0", profit: "0", note: "" });
+    setForm({ revenue: "0", pending: "0", bookings: "0", clients: "0", supplierDue: "0", profit: "0", cost: "0", expenses: "0", commission: "0", cash: "0", note: "" });
   }
 
   function wipeAll(keepOpening: boolean) {
@@ -51,17 +59,21 @@ function SettingsPage() {
       : "This will permanently delete EVERYTHING (including opening balances) and reset the system to a true blank slate. Continue?";
     if (!confirm(msg)) return;
     store.resetAllData({ keepOpening });
-    if (!keepOpening) setForm({ revenue: "0", pending: "0", bookings: "0", clients: "0", supplierDue: "0", profit: "0", note: "" });
+    if (!keepOpening) setForm({ revenue: "0", pending: "0", bookings: "0", clients: "0", supplierDue: "0", profit: "0", cost: "0", expenses: "0", commission: "0", cash: "0", note: "" });
     toast.success(keepOpening ? "All operational data cleared." : "System fully reset to blank slate.");
   }
 
   const fields: Array<[keyof typeof form, string, string]> = [
     ["revenue", "Opening Revenue (PKR)", "Cash already collected before this system"],
+    ["cost", "Opening Cost of Sales (PKR)", "Supplier cost of those old sales — must be filled if Opening Revenue is filled, otherwise profit inflates"],
+    ["expenses", "Opening Expenses (PKR)", "Office / operating expenses already incurred"],
+    ["commission", "Opening Agent Commission (PKR)", "Commission already earned by agents on old sales"],
+    ["cash", "Opening Cash / Bank (PKR)", "Actual money in hand + bank when you started using this system"],
     ["pending", "Opening Pending (PKR)", "Outstanding receivables from old bookings"],
     ["bookings", "Opening Bookings (count)", "Historical booking count"],
     ["clients", "Opening Clients (count)", "Historical client count"],
     ["supplierDue", "Opening Supplier Due (PKR)", "What you still owe legacy suppliers"],
-    ["profit", "Opening Profit (PKR)", "Realised profit before this system"],
+    ["profit", "Profit Adjustment (PKR)", "Manual correction only — leave 0 if you filled Opening Revenue/Cost/Expenses above"],
   ];
 
   return (
@@ -117,11 +129,19 @@ function SettingsPage() {
           <p className="text-xs font-semibold text-primary mb-2">Live Preview</p>
           <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
             <Stat label="Revenue baseline" value={formatCurrency(Number(form.revenue) || 0)} />
+            <Stat label="Cost baseline" value={formatCurrency(Number(form.cost) || 0)} />
+            <Stat label="Expenses baseline" value={formatCurrency(Number(form.expenses) || 0)} />
+            <Stat label="Commission baseline" value={formatCurrency(Number(form.commission) || 0)} />
+            <Stat label="Cash baseline" value={formatCurrency(Number(form.cash) || 0)} />
+            <Stat
+              label="Opening gross profit"
+              value={formatCurrency((Number(form.revenue) || 0) - (Number(form.cost) || 0) - (Number(form.expenses) || 0) - (Number(form.commission) || 0))}
+            />
             <Stat label="Pending baseline" value={formatCurrency(Number(form.pending) || 0)} />
             <Stat label="Bookings baseline" value={String(Number(form.bookings) || 0)} />
             <Stat label="Clients baseline" value={String(Number(form.clients) || 0)} />
             <Stat label="Supplier due baseline" value={formatCurrency(Number(form.supplierDue) || 0)} />
-            <Stat label="Profit baseline" value={formatCurrency(Number(form.profit) || 0)} />
+            <Stat label="Profit adjustment" value={formatCurrency(Number(form.profit) || 0)} />
           </div>
         </div>
       </motion.div>
