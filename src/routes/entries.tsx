@@ -423,6 +423,65 @@ function EntriesPage() {
             className="mt-1"
           />
           </div>
+          {form.type === "supplier_payment" && (
+            <div className="space-y-3 rounded-lg border border-primary/40 bg-primary/5 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">Payment Reference (who / where it belongs)</p>
+              <div><Label className="text-[10px]">Group / PNR (optional)</Label>
+                <SearchableSelect
+                  value={groupMode === "existing" ? groupId : ""}
+                  onChange={(v) => { setGroupMode(v ? "existing" : "none"); setGroupId(v); }}
+                  placeholder={supplierGroups.length ? "Pay against a group..." : "No groups yet"}
+                  options={supplierGroups.map((g) => ({
+                    value: g.id,
+                    label: `${g.id} — ${g.name}`,
+                    hint: [g.category, g.pnr && `PNR ${g.pnr}`, g.date].filter(Boolean).join(" · "),
+                  }))}
+                  className="mt-1"
+                />
+                {(() => {
+                  const sel = groupMode === "existing" ? store.groups.find((g) => g.id === groupId) : null;
+                  if (!sel) return null;
+                  const bill = store.entries.filter((e) => e.type === "purchase" && e.groupId === sel.id).reduce((s, e) => s + e.amount, 0)
+                    - store.entries.filter((e) => e.type === "supplier_refund" && e.groupId === sel.id).reduce((s, e) => s + e.amount, 0);
+                  const paid = store.entries.filter((e) => e.type === "supplier_payment" && e.groupId === sel.id && e.id !== selected?.id).reduce((s, e) => s + e.amount, 0);
+                  const thisPay = Number(form.amount) || 0;
+                  const remaining = bill - paid - thisPay;
+                  return (
+                    <div className="mt-2 flex flex-wrap items-center gap-3 rounded-md bg-accent/20 px-3 py-2 text-[11px]">
+                      <span className="text-muted-foreground">Group Bill: <b className="text-foreground">{formatCurrency(bill)}</b></span>
+                      <span className="text-muted-foreground">Paid: <b className="text-success">{formatCurrency(paid)}</b></span>
+                      <span className="text-muted-foreground">This payment: <b className="text-foreground">{formatCurrency(thisPay)}</b></span>
+                      <span className="ml-auto text-muted-foreground">Remaining: <b className={remaining > 0 ? "text-destructive" : "text-success"}>{formatCurrency(remaining)}</b></span>
+                    </div>
+                  );
+                })()}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label className="text-[10px]">Agent Reference (optional)</Label>
+                  <SearchableSelect
+                    value={refs.agentId}
+                    onChange={(v) => setRefs({ ...refs, agentId: v })}
+                    placeholder="Which agent's business..."
+                    options={store.agents.map((a) => ({ value: a.id, label: `${a.id} — ${a.name}`, hint: a.phone }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div><Label className="text-[10px]">Head ID (optional)</Label>
+                  <SearchableSelect
+                    value={form.headId}
+                    onChange={(v) => setForm({ ...form, headId: v })}
+                    placeholder="Tag to a booking..."
+                    options={store.bookings.map((b) => ({ value: b.headId, label: `${b.headId} — ${b.packageType}`, hint: b.travelDate }))}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+              <div><Label className="text-[10px]">Paid By / Handed Over By</Label>
+                <Input value={refs.paidBy} onChange={(e) => setRefs({ ...refs, paidBy: e.target.value })} placeholder="Office cash / Bank transfer / Agent Ahmed" className="bg-accent/20 border-border mt-1 h-8 text-xs" />
+              </div>
+              <p className="text-[10px] text-muted-foreground">Group-tagged payments show up in that group's settlement progress, and the agent reference appears in the agent's ledger.</p>
+            </div>
+          )}
           {form.type === "purchase" && (
             <>
               <div><Label>Service Category</Label>
