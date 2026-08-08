@@ -342,6 +342,7 @@ export function useStore() {
     addClient: (data: Omit<Client, "id">) => {
       const id = generateId("AV-C", nextClientNum++);
       clients = [...clients, { ...data, id, baseDue: data.amountDue, extraCharges: 0 }];
+      resyncAgents();
       notify();
       return id;
     },
@@ -360,6 +361,7 @@ export function useStore() {
     deleteClient: (id: string) => {
       clients = clients.filter((c) => c.id !== id);
       bookings = bookings.map((b) => ({ ...b, clientIds: b.clientIds.filter((cid) => cid !== id) }));
+      resyncAgents();
       notify();
     },
 
@@ -399,6 +401,7 @@ export function useStore() {
     addBooking: (data: Omit<Booking, "id">) => {
       const id = `B${String(nextBookingNum++).padStart(3, "0")}`;
       bookings = [...bookings, { ...data, id, baseAmount: data.totalAmount, extraCharges: 0 }];
+      resyncDerived();
       notify();
       return id;
     },
