@@ -178,6 +178,23 @@ function AgentsPage() {
               <div><p className="text-[10px] uppercase text-muted-foreground">Paid</p><p className="text-sm font-semibold text-success">{formatCurrency(a.paidCommission + (a.openingPaidCommission || 0))}</p></div>
               <div><p className="text-[10px] uppercase text-muted-foreground">Payable</p><p className="text-sm font-semibold text-destructive">{formatCurrency((a.commission + (a.openingCommission || 0)) - (a.paidCommission + (a.openingPaidCommission || 0)))}</p></div>
             </div>
+            {(() => {
+              const ab = store.bookings.filter((b) => b.agentId === a.id);
+              const sales = ab.reduce((s, b) => s + (b.totalAmount || 0), 0) + (a.openingSales || 0);
+              const comm = a.commission + (a.openingCommission || 0);
+              const net = Math.max(0, sales - comm);
+              const received = ab.reduce((s, b) => s + (b.amountReceived || 0), 0);
+              return (
+                <div className="mt-2 rounded-lg bg-accent/20 p-2.5">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Business Account</p>
+                  <div className="mt-1 grid grid-cols-3 gap-2">
+                    <div><p className="text-[9px] uppercase text-muted-foreground">Net Receivable</p><p className="text-xs font-semibold text-primary">{formatCurrency(net)}</p><p className="text-[9px] text-muted-foreground">sale − commission</p></div>
+                    <div><p className="text-[9px] uppercase text-muted-foreground">Received</p><p className="text-xs font-semibold text-success">{formatCurrency(received)}</p></div>
+                    <div><p className="text-[9px] uppercase text-muted-foreground">Remaining</p><p className={`text-xs font-semibold ${net - received > 0 ? "text-destructive" : "text-success"}`}>{formatCurrency(net - received)}</p></div>
+                  </div>
+                </div>
+              );
+            })()}
           </motion.div>
         ))}
       </div>
