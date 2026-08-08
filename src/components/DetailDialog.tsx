@@ -69,10 +69,16 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
   function getAgentStats(a: Agent) {
     const agentBookings = allBookings.filter((b) => b.agentId === a.id);
     const agentClients = allClients.filter((c) => agentBookings.some((b) => b.headId === c.headId));
-    const totalSales = agentBookings.reduce((s, b) => s + b.totalAmount, 0);
-    const totalCommission = agentBookings.reduce((s, b) => s + (b.commission || 0), 0);
-    const paidCommission = entries.filter((e) => e.type === "agent_commission" && e.referenceId === a.id).reduce((s, e) => s + e.amount, 0);
-    return { agentBookings, agentClients, totalSales, totalCommission, paidCommission, payable: totalCommission - paidCommission };
+    const totalSales = agentBookings.reduce((s, b) => s + b.totalAmount, 0) + (a.openingSales || 0);
+    const totalCommission = agentBookings.reduce((s, b) => s + (b.commission || 0), 0) + (a.openingCommission || 0);
+    const paidCommission = entries.filter((e) => e.type === "agent_commission" && e.referenceId === a.id).reduce((s, e) => s + e.amount, 0) + (a.openingPaidCommission || 0);
+    const received = agentBookings.reduce((s, b) => s + (b.amountReceived || 0), 0);
+    const netReceivable = Math.max(0, totalSales - totalCommission);
+    return {
+      agentBookings, agentClients, totalSales, totalCommission, paidCommission,
+      payable: totalCommission - paidCommission,
+      received, netReceivable, outstanding: netReceivable - received,
+    };
   }
 
   // Compute supplier stats from bookings
@@ -140,7 +146,7 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
                   <LedgerBlock
                     title="Client Business Ledger"
                     hint="Every client transaction of the bookings this agent brought — receipts, extra charges and refunds."
-                    rows={entries.filter((e) => e.type !== "agent_commission")}
+                    rows={entries.filter((e) => e.type === "client_receive" || e.type === "client_charge" || e.type === "client_refund")}
                   />
                 </>
               )}
@@ -347,7 +353,7 @@ function renderClient(c: Client) {
   );
 }
 
-function renderAgentFull(a: Agent, stats: { agentBookings: any[]; agentClients: Client[]; totalSales: number; totalCommission: number; paidCommission: number; payable: number }, onViewClients: () => void) {
+function renderAgentFull(a: Agent, stats: { agentBookings: any[]; agentClients: Client[]; totalSales: number; totalCommission: number; paidCommission: number; payable: number; received: number; netReceivable: number; outstanding: number }, onViewClients: () => void) {
   return (
     <>
       <Row label="Agent ID" value={a.id} />
@@ -368,6 +374,15 @@ function renderAgentFull(a: Agent, stats: { agentBookings: any[]; agentClients: 
         <StatCard label="Total Commission" value={formatCurrency(stats.totalCommission)} color="text-warning" />
         <StatCard label="Paid Commission" value={formatCurrency(stats.paidCommission)} color="text-success" />
         <StatCard label="Payable" value={formatCurrency(stats.payable)} color="text-destructive" />
+      </div>
+
+      <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-1.5">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">Business Account (Receivable from Agent)</p>
+        <div className="flex justify-between text-xs"><span className="text-muted-foreground">Gross Sale</span><span className="font-medium">{formatCurrency(stats.totalSales)}</span></div>
+        <div className="flex justify-between text-xs"><span className="text-muted-foreground">Less: Agent Commission</span><span className="text-destructive">− {formatCurrency(stats.totalCommission)}</span></div>
+        <div className="flex justify-between border-t border-border/50 pt-1.5 text-xs font-semibold"><span>Net Receivable</span><span className="text-primary">{formatCurrency(stats.netReceivable)}</span></div>
+        <div className="flex justify-between text-xs"><span className="text-muted-foreground">Received</span><span className="text-success">{formatCurrency(stats.received)}</span></div>
+        <div className="flex justify-between border-t border-border/50 pt-1.5 text-sm font-bold"><span>Remaining</span><span className={stats.outstanding > 0 ? "text-destructive" : "text-success"}>{formatCurrency(stats.outstanding)}</span></div>
       </div>
 
       <Button onClick={onViewClients} variant="outline" className="w-full gap-2 text-xs">

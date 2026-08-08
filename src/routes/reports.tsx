@@ -215,21 +215,37 @@ function ReportsPage() {
       {/* Cash Flow + Expense Breakdown */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-xl p-5">
-          <h3 className="mb-4 text-sm font-semibold">Cash Flow Statement</h3>
+          <h3 className="mb-1 text-sm font-semibold">Cash Flow Statement</h3>
+          <p className="mb-3 text-[11px] text-muted-foreground">Real money movement only — unpaid purchases are excluded (they sit in Supplier Payable).</p>
           <table className="w-full text-sm">
             <tbody>
+              <tr className="border-b border-border/50"><td className="px-2 py-2">Opening Cash / Bank</td><td className="px-2 py-2 text-right">{formatCurrency(t.openingCash)}</td></tr>
               <tr className="border-b border-border"><td className="px-2 py-2 font-semibold text-success" colSpan={2}>Inflows</td></tr>
-              <tr className="border-b border-border/50"><td className="px-2 py-2">Client Receipts</td><td className="px-2 py-2 text-right">{formatCurrency(t.liveReceived)}</td></tr>
-              <tr className="border-b border-border/50"><td className="px-2 py-2">Opening Balance</td><td className="px-2 py-2 text-right">{formatCurrency(store.opening.revenue || 0)}</td></tr>
-              <tr className="border-b border-border"><td className="px-2 py-2 font-semibold">Total Inflows</td><td className="px-2 py-2 text-right font-semibold text-success">{formatCurrency(t.totalRevenue)}</td></tr>
+              <tr className="border-b border-border/50"><td className="px-2 py-2">Client Receipts (gross)</td><td className="px-2 py-2 text-right">{formatCurrency(t.liveReceived + t.clientRefunds)}</td></tr>
+              <tr className="border-b border-border/50"><td className="px-2 py-2">Less: Refunds to Clients</td><td className="px-2 py-2 text-right text-destructive">− {formatCurrency(t.clientRefunds)}</td></tr>
+              <tr className="border-b border-border"><td className="px-2 py-2 font-semibold">Net Cash Received</td><td className="px-2 py-2 text-right font-semibold text-success">{formatCurrency(t.liveReceived)}</td></tr>
               <tr className="border-b border-border"><td className="px-2 py-2 font-semibold text-destructive" colSpan={2}>Outflows</td></tr>
               <tr className="border-b border-border/50"><td className="px-2 py-2">Supplier Payments</td><td className="px-2 py-2 text-right">{formatCurrency(t.supplierPaid)}</td></tr>
-              <tr className="border-b border-border/50"><td className="px-2 py-2">Expenses</td><td className="px-2 py-2 text-right">{formatCurrency(t.expenses)}</td></tr>
+              <tr className="border-b border-border/50"><td className="px-2 py-2">Expenses (live)</td><td className="px-2 py-2 text-right">{formatCurrency(t.expenses - t.openingExpenses)}</td></tr>
               <tr className="border-b border-border/50"><td className="px-2 py-2">Commission Paid</td><td className="px-2 py-2 text-right">{formatCurrency(t.commissionPaid)}</td></tr>
-              <tr className="border-b border-border"><td className="px-2 py-2 font-semibold">Total Outflows</td><td className="px-2 py-2 text-right font-semibold text-destructive">{formatCurrency(t.supplierPaid + t.expenses + t.commissionPaid)}</td></tr>
-              <tr><td className="px-2 py-3 text-base font-bold">Net Cash Flow</td><td className={`px-2 py-3 text-right text-base font-bold ${t.cashOnHand >= 0 ? "text-success" : "text-destructive"}`}>{formatCurrency(t.cashOnHand)}</td></tr>
+              <tr className="border-b border-border"><td className="px-2 py-2 font-semibold">Total Outflows</td><td className="px-2 py-2 text-right font-semibold text-destructive">{formatCurrency(t.supplierPaid + (t.expenses - t.openingExpenses) + t.commissionPaid)}</td></tr>
+              <tr><td className="px-2 py-3 text-base font-bold">Closing Cash on Hand</td><td className={`px-2 py-3 text-right text-base font-bold ${t.cashOnHand >= 0 ? "text-success" : "text-destructive"}`}>{formatCurrency(t.cashOnHand)}</td></tr>
             </tbody>
           </table>
+          <div className="mt-4 rounded-lg border border-border/60 bg-accent/10 p-3">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-primary">Profit Reconciliation</p>
+            <table className="w-full text-xs">
+              <tbody>
+                <tr><td className="py-1">Revenue (live {formatCurrency(t.liveReceived)} + B/F {formatCurrency(t.openingRevenue)})</td><td className="py-1 text-right">{formatCurrency(t.totalRevenue)}</td></tr>
+                <tr><td className="py-1">− Cost of Sales (live {formatCurrency(t.totalCost - t.openingCost)} + B/F {formatCurrency(t.openingCost)})</td><td className="py-1 text-right">{formatCurrency(t.totalCost)}</td></tr>
+                <tr className="border-t border-border/50"><td className="py-1 font-semibold">= Gross Profit</td><td className={`py-1 text-right font-semibold ${t.grossProfit >= 0 ? "text-success" : "text-destructive"}`}>{formatCurrency(t.grossProfit)}</td></tr>
+                <tr><td className="py-1">− Expenses (incl. B/F {formatCurrency(t.openingExpenses)})</td><td className="py-1 text-right">{formatCurrency(t.expenses)}</td></tr>
+                <tr><td className="py-1">− Agent Commission earned (incl. B/F {formatCurrency(t.openingCommission)})</td><td className="py-1 text-right">{formatCurrency(t.commissionEarned)}</td></tr>
+                {t.openingProfit !== 0 && <tr><td className="py-1">+ Manual profit adjustment</td><td className="py-1 text-right">{formatCurrency(t.openingProfit)}</td></tr>}
+                <tr className="border-t border-border"><td className="py-1.5 text-sm font-bold">= Net Profit</td><td className={`py-1.5 text-right text-sm font-bold ${t.netProfit >= 0 ? "text-success" : "text-destructive"}`}>{formatCurrency(t.netProfit)}</td></tr>
+              </tbody>
+            </table>
+          </div>
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-xl p-5">

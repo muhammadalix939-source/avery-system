@@ -24,6 +24,10 @@ export interface LedgerEntry {
   createdAt: string;
   /** Optional PNR / batch group linking multiple purchases (typically flights or hotel rooming) */
   groupId?: string;
+  /** Optional agent reference — which agent this money relates to (supplier payment, receipt, refund) */
+  agentId?: string;
+  /** Free-text reference of who physically paid / received (agent, client, office, bank) */
+  paidBy?: string;
   /** Extra charge / refund metadata */
   clientId?: string;          // specific member the charge / refund belongs to
   chargeCategory?: string;    // Embassy Fee, Visa Fee, Ticket Change, Service Charge...
@@ -84,11 +88,20 @@ export interface OpeningBalances {
   clients: number;
   supplierDue: number;
   profit: number;
+  /** Legacy cost of sales already incurred before this system */
+  cost?: number;
+  /** Legacy operating expenses already incurred */
+  expenses?: number;
+  /** Legacy agent commission already earned by agents */
+  commission?: number;
+  /** Opening cash / bank balance */
+  cash?: number;
   note?: string;
 }
 
 const defaultOpening: OpeningBalances = {
   revenue: 0, pending: 0, bookings: 0, clients: 0, supplierDue: 0, profit: 0,
+  cost: 0, expenses: 0, commission: 0, cash: 0,
 };
 
 interface PersistedState {
@@ -181,6 +194,8 @@ function hydrateFromStorage() {
       nextGroupNum = s.counters.group || nextGroupNum;
     }
   } catch {}
+  // Persisted files may carry stale derived numbers — recompute from source of truth.
+  resyncDerived();
   listeners.forEach((l) => l());
 }
 
@@ -197,34 +212,44 @@ export function computeGroupUsedPax(groupId: string): number {
 }
 
 // ---------- Source-of-truth resync ----------
+/** Agents are ALWAYS derived: sales / clients / commission come from bookings,
+ *  paid commission comes from the ledger. Never mutated by deltas. */
+function resyncAgents() {
+  agents = agents.map((a) => {
+    const ab = bookings.filter((b) => b.agentId === a.id);
+    const heads = new Set(ab.map((b) => b.headId));
+    const memberCount = clients.filter((c) => heads.has(c.headId)).length;
+    return {
+      ...a,
+      totalSales: ab.reduce((s, b) => s + (b.totalAmount || 0), 0),
+      totalClients: memberCount || ab.reduce((s, b) => s + (b.members || 0), 0),
+      commission: ab.reduce((s, b) => s + (b.commission || 0), 0),
+      paidCommission: entries.filter((e) => e.type === "agent_commission" && e.referenceId === a.id).reduce((s, e) => s + e.amount, 0),
+    };
+  });
+}
+
+/** Suppliers are derived from purchases / refunds / payments (booking cost as fallback). */
+function resyncSuppliers() {
+  suppliers = suppliers.map((s) => {
+    const purchases = entries.filter((e) => e.type === "purchase" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
+    const refunds = entries.filter((e) => e.type === "supplier_refund" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
+    const payments = entries.filter((e) => e.type === "supplier_payment" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
+    const bookingCost = bookings.filter((b) => b.supplierId === s.id).reduce((sum, b) => sum + (b.totalCost || 0), 0);
+    return { ...s, totalPayable: Math.max(0, Math.max(purchases, bookingCost) - refunds), totalPaid: payments };
+  });
+}
+
+/** Recompute everything that is derived. Cheap for CRM-sized data. */
+function resyncDerived() { resyncSuppliers(); resyncAgents(); }
+
 // Recompute derived totals on suppliers / agents / bookings from the entries array.
 // Call after ANY entry add / update / delete so views and PDFs stay consistent.
 function resyncFromEntries(refIds: { supplierIds?: string[]; agentIds?: string[]; headIds?: string[] }) {
-  const supplierIds = new Set(refIds.supplierIds || []);
-  const agentIds = new Set(refIds.agentIds || []);
   const headIds = new Set(refIds.headIds || []);
 
-  // Suppliers: totalPayable = purchases − supplier refunds, totalPaid = supplier payments
-  if (supplierIds.size) {
-    suppliers = suppliers.map((s) => {
-      if (!supplierIds.has(s.id)) return s;
-      const purchases = entries.filter((e) => e.type === "purchase" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
-      const refunds  = entries.filter((e) => e.type === "supplier_refund" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
-      const payments  = entries.filter((e) => e.type === "supplier_payment" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
-      // Also honour any legacy totalCost coming from bookings for this supplier
-      const bookingCost = bookings.filter((b) => b.supplierId === s.id).reduce((sum, b) => sum + (b.totalCost || 0), 0);
-      return { ...s, totalPayable: Math.max(0, Math.max(purchases, bookingCost) - refunds), totalPaid: payments };
-    });
-  }
-
-  // Agents: paidCommission = sum(agent_commission entries)
-  if (agentIds.size) {
-    agents = agents.map((a) => {
-      if (!agentIds.has(a.id)) return a;
-      const paid = entries.filter((e) => e.type === "agent_commission" && e.referenceId === a.id).reduce((sum, e) => sum + e.amount, 0);
-      return { ...a, paidCommission: paid };
-    });
-  }
+  // Suppliers & agents are fully derived — always recompute both.
+  resyncDerived();
 
   // Bookings / clients: amountReceived = sum(client_receive entries for that head), redistribute to clients
   if (headIds.size) {
@@ -273,6 +298,8 @@ function resyncFromEntries(refIds: { supplierIds?: string[]; agentIds?: string[]
       });
     });
   }
+  // Booking totals may have shifted (charges / refunds) → agent sales follow.
+  resyncAgents();
 }
 
 export function useStore() {
@@ -317,6 +344,7 @@ export function useStore() {
     addClient: (data: Omit<Client, "id">) => {
       const id = generateId("AV-C", nextClientNum++);
       clients = [...clients, { ...data, id, baseDue: data.amountDue, extraCharges: 0 }];
+      resyncAgents();
       notify();
       return id;
     },
@@ -335,6 +363,7 @@ export function useStore() {
     deleteClient: (id: string) => {
       clients = clients.filter((c) => c.id !== id);
       bookings = bookings.map((b) => ({ ...b, clientIds: b.clientIds.filter((cid) => cid !== id) }));
+      resyncAgents();
       notify();
     },
 
@@ -374,6 +403,7 @@ export function useStore() {
     addBooking: (data: Omit<Booking, "id">) => {
       const id = `B${String(nextBookingNum++).padStart(3, "0")}`;
       bookings = [...bookings, { ...data, id, baseAmount: data.totalAmount, extraCharges: 0 }];
+      resyncDerived();
       notify();
       return id;
     },
@@ -421,65 +451,20 @@ export function useStore() {
             }
           }
         }
-        // Agent commission / sales delta
-        if (after.agentId && after.agentId !== "Direct") {
-          const agent = agents.find((a) => a.id === after.agentId);
-          if (agent) {
-            const dSales = (after.totalAmount || 0) - (before.totalAmount || 0);
-            const dComm  = (after.commission  || 0) - (before.commission  || 0);
-            if (dSales || dComm) {
-              agents = agents.map((a) => a.id === agent.id ? {
-                ...a,
-                totalSales: Math.max(0, a.totalSales + dSales),
-                commission: Math.max(0, a.commission + dComm),
-              } : a);
-            }
-          }
-        }
-        // Supplier payable delta
-        if (after.supplierId) {
-          const sup = suppliers.find((s) => s.id === after.supplierId);
-          if (sup) {
-            const dCost = (after.totalCost || 0) - (before.totalCost || 0);
-            if (dCost) {
-              suppliers = suppliers.map((s) => s.id === sup.id ? {
-                ...s, totalPayable: Math.max(0, s.totalPayable + dCost),
-              } : s);
-            }
-          }
-        }
       }
+      // Agents & suppliers are fully derived from bookings + ledger
+      resyncDerived();
       notify();
     },
     deleteBooking: (id: string) => {
       const b = bookings.find((x) => x.id === id);
       if (!b) { notify(); return; }
-      // Reverse agent stats
-      if (b.agentId && b.agentId !== "Direct") {
-        const agent = agents.find((a) => a.id === b.agentId);
-        if (agent) {
-          agents = agents.map((a) => a.id === agent.id ? {
-            ...a,
-            totalSales:    Math.max(0, a.totalSales    - (b.totalAmount || 0)),
-            totalClients:  Math.max(0, a.totalClients  - (b.clientIds.length || 0)),
-            commission:    Math.max(0, a.commission    - (b.commission  || 0)),
-          } : a);
-        }
-      }
-      // Reverse supplier payable
-      if (b.supplierId) {
-        const sup = suppliers.find((s) => s.id === b.supplierId);
-        if (sup) {
-          suppliers = suppliers.map((s) => s.id === sup.id ? {
-            ...s, totalPayable: Math.max(0, s.totalPayable - (b.totalCost || 0)),
-          } : s);
-        }
-      }
       // Cascade: delete clients under this head + related ledger entries
       const headId = b.headId;
       clients = clients.filter((c) => c.headId !== headId);
       entries = entries.filter((e) => e.headId !== headId);
       bookings = bookings.filter((x) => x.id !== id);
+      resyncDerived();
       notify();
     },
 
