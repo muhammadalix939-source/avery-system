@@ -210,6 +210,37 @@ export function computeGroupUsedPax(groupId: string): number {
 }
 
 // ---------- Source-of-truth resync ----------
+/** Agents are ALWAYS derived: sales / clients / commission come from bookings,
+ *  paid commission comes from the ledger. Never mutated by deltas. */
+function resyncAgents() {
+  agents = agents.map((a) => {
+    const ab = bookings.filter((b) => b.agentId === a.id);
+    const heads = new Set(ab.map((b) => b.headId));
+    const memberCount = clients.filter((c) => heads.has(c.headId)).length;
+    return {
+      ...a,
+      totalSales: ab.reduce((s, b) => s + (b.totalAmount || 0), 0),
+      totalClients: memberCount || ab.reduce((s, b) => s + (b.members || 0), 0),
+      commission: ab.reduce((s, b) => s + (b.commission || 0), 0),
+      paidCommission: entries.filter((e) => e.type === "agent_commission" && e.referenceId === a.id).reduce((s, e) => s + e.amount, 0),
+    };
+  });
+}
+
+/** Suppliers are derived from purchases / refunds / payments (booking cost as fallback). */
+function resyncSuppliers() {
+  suppliers = suppliers.map((s) => {
+    const purchases = entries.filter((e) => e.type === "purchase" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
+    const refunds = entries.filter((e) => e.type === "supplier_refund" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
+    const payments = entries.filter((e) => e.type === "supplier_payment" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
+    const bookingCost = bookings.filter((b) => b.supplierId === s.id).reduce((sum, b) => sum + (b.totalCost || 0), 0);
+    return { ...s, totalPayable: Math.max(0, Math.max(purchases, bookingCost) - refunds), totalPaid: payments };
+  });
+}
+
+/** Recompute everything that is derived. Cheap for CRM-sized data. */
+function resyncDerived() { resyncSuppliers(); resyncAgents(); }
+
 // Recompute derived totals on suppliers / agents / bookings from the entries array.
 // Call after ANY entry add / update / delete so views and PDFs stay consistent.
 function resyncFromEntries(refIds: { supplierIds?: string[]; agentIds?: string[]; headIds?: string[] }) {
