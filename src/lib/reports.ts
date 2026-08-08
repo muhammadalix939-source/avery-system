@@ -13,6 +13,8 @@ export interface ReportInput {
 export interface FinancialTotals {
   totalRevenue: number;
   liveReceived: number;
+  clientRefunds: number;
+  supplierRefunds: number;
   bookedSales: number;
   totalCost: number;
   livePurchases: number;
@@ -27,6 +29,13 @@ export interface FinancialTotals {
   netProfit: number;
   margin: number;
   cashOnHand: number;
+  /** Opening (brought-forward) components, kept visible so every total reconciles */
+  openingRevenue: number;
+  openingCost: number;
+  openingExpenses: number;
+  openingCommission: number;
+  openingCash: number;
+  openingProfit: number;
   collectionEfficiency: number;
   avgProfitPerBooking: number;
   avgRevenuePerClient: number;
@@ -35,34 +44,53 @@ export interface FinancialTotals {
 
 export function computeTotals(input: ReportInput): FinancialTotals {
   const { bookings, clients, suppliers, entries, opening } = input;
+  // ---------- Opening (brought-forward) baseline ----------
+  const openingRevenue = opening.revenue || 0;
+  const openingCost = opening.cost || 0;
+  const openingExpenses = opening.expenses || 0;
+  const openingCommission = opening.commission || 0;
+  const openingCash = opening.cash || 0;
+  const openingProfit = opening.profit || 0;
+
+  // ---------- Live movement (ledger is the single source of truth) ----------
   const grossReceived = entries.filter(e => e.type === "client_receive").reduce((s, e) => s + e.amount, 0);
   const clientRefunds = entries.filter(e => e.type === "client_refund").reduce((s, e) => s + e.amount, 0);
   const supplierRefunds = entries.filter(e => e.type === "supplier_refund").reduce((s, e) => s + e.amount, 0);
   const liveReceived = Math.max(0, grossReceived - clientRefunds);
   const livePurchases = entries.filter(e => e.type === "purchase").reduce((s, e) => s + e.amount, 0);
   const supplierPaid = entries.filter(e => e.type === "supplier_payment").reduce((s, e) => s + e.amount, 0);
-  const expenses = entries.filter(e => e.type === "expense").reduce((s, e) => s + e.amount, 0);
+  const liveExpenses = entries.filter(e => e.type === "expense").reduce((s, e) => s + e.amount, 0);
   const commissionPaid = entries.filter(e => e.type === "agent_commission").reduce((s, e) => s + e.amount, 0);
   const purchaseHeads = new Set(entries.filter(e => e.type === "purchase" && e.headId).map(e => e.headId));
   const bookingCostFallback = bookings.filter(b => !purchaseHeads.has(b.headId)).reduce((s, b) => s + (b.totalCost || 0), 0);
-  const totalCost = Math.max(0, livePurchases + bookingCostFallback - supplierRefunds);
-  const commissionEarned = bookings.reduce((s, b) => s + (b.commission || 0), 0);
   const bookedSales = bookings.reduce((s, b) => s + b.totalAmount, 0);
-  const totalRevenue = liveReceived + (opening.revenue || 0);
-  const pending = Math.max(0, bookedSales + (opening.pending || 0) - totalRevenue);
+
+  // ---------- Totals: EVERY total carries its own opening component ----------
+  // Revenue  = live receipts (net of refunds) + opening revenue
+  const totalRevenue = liveReceived + openingRevenue;
+  // Cost of sales = live purchases (net of supplier refunds) or booking cost fallback + opening cost
+  const totalCost = Math.max(0, livePurchases + bookingCostFallback - supplierRefunds) + openingCost;
+  const expenses = liveExpenses + openingExpenses;
+  const commissionEarned = bookings.reduce((s, b) => s + (b.commission || 0), 0) + openingCommission;
+  const pending = Math.max(0, (bookedSales - bookings.reduce((s, b) => s + (b.amountReceived || 0), 0)) + (opening.pending || 0));
   const supplierPayable = suppliers.reduce((s, sp) => s + Math.max(0, (sp.totalPayable + (sp.openingPayable || 0)) - (sp.totalPaid + (sp.openingPaid || 0))), 0) + (opening.supplierDue || 0);
+  // Gross profit = Revenue − Cost of sales   (both include their opening parts)
   const grossProfit = totalRevenue - totalCost;
-  const netProfit = grossProfit - expenses - commissionEarned + (opening.profit || 0);
+  // Net profit = Gross − Expenses − Commission earned + manual profit adjustment
+  const netProfit = grossProfit - expenses - commissionEarned + openingProfit;
   const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
-  const cashOnHand = totalRevenue - supplierPaid - expenses - commissionPaid;
+  // Cash is strictly actual money movement: opening cash + receipts − real payouts.
+  // (Purchases that are not yet paid never touch cash; opening revenue is NOT cash unless it is in opening cash.)
+  const cashOnHand = openingCash + liveReceived - supplierPaid - liveExpenses - commissionPaid;
   const collectionEfficiency = bookedSales > 0 ? (liveReceived / bookedSales) * 100 : 0;
   const avgProfitPerBooking = bookings.length > 0 ? netProfit / bookings.length : 0;
   const avgRevenuePerClient = clients.length > 0 ? totalRevenue / clients.length : 0;
   const avgTicketSize = bookings.length > 0 ? bookedSales / bookings.length : 0;
   return {
-    totalRevenue, liveReceived, bookedSales, totalCost, livePurchases, bookingCostFallback,
+    totalRevenue, liveReceived, clientRefunds, supplierRefunds, bookedSales, totalCost, livePurchases, bookingCostFallback,
     expenses, commissionEarned, commissionPaid, supplierPaid, supplierPayable, pending,
     grossProfit, netProfit, margin, cashOnHand, collectionEfficiency,
+    openingRevenue, openingCost, openingExpenses, openingCommission, openingCash, openingProfit,
     avgProfitPerBooking, avgRevenuePerClient, avgTicketSize,
   };
 }
