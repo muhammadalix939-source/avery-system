@@ -244,31 +244,10 @@ function resyncDerived() { resyncSuppliers(); resyncAgents(); }
 // Recompute derived totals on suppliers / agents / bookings from the entries array.
 // Call after ANY entry add / update / delete so views and PDFs stay consistent.
 function resyncFromEntries(refIds: { supplierIds?: string[]; agentIds?: string[]; headIds?: string[] }) {
-  const supplierIds = new Set(refIds.supplierIds || []);
-  const agentIds = new Set(refIds.agentIds || []);
   const headIds = new Set(refIds.headIds || []);
 
-  // Suppliers: totalPayable = purchases − supplier refunds, totalPaid = supplier payments
-  if (supplierIds.size) {
-    suppliers = suppliers.map((s) => {
-      if (!supplierIds.has(s.id)) return s;
-      const purchases = entries.filter((e) => e.type === "purchase" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
-      const refunds  = entries.filter((e) => e.type === "supplier_refund" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
-      const payments  = entries.filter((e) => e.type === "supplier_payment" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
-      // Also honour any legacy totalCost coming from bookings for this supplier
-      const bookingCost = bookings.filter((b) => b.supplierId === s.id).reduce((sum, b) => sum + (b.totalCost || 0), 0);
-      return { ...s, totalPayable: Math.max(0, Math.max(purchases, bookingCost) - refunds), totalPaid: payments };
-    });
-  }
-
-  // Agents: paidCommission = sum(agent_commission entries)
-  if (agentIds.size) {
-    agents = agents.map((a) => {
-      if (!agentIds.has(a.id)) return a;
-      const paid = entries.filter((e) => e.type === "agent_commission" && e.referenceId === a.id).reduce((sum, e) => sum + e.amount, 0);
-      return { ...a, paidCommission: paid };
-    });
-  }
+  // Suppliers & agents are fully derived — always recompute both.
+  resyncDerived();
 
   // Bookings / clients: amountReceived = sum(client_receive entries for that head), redistribute to clients
   if (headIds.size) {
@@ -317,6 +296,8 @@ function resyncFromEntries(refIds: { supplierIds?: string[]; agentIds?: string[]
       });
     });
   }
+  // Booking totals may have shifted (charges / refunds) → agent sales follow.
+  resyncAgents();
 }
 
 export function useStore() {
