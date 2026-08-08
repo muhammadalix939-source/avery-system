@@ -24,6 +24,10 @@ export interface LedgerEntry {
   createdAt: string;
   /** Optional PNR / batch group linking multiple purchases (typically flights or hotel rooming) */
   groupId?: string;
+  /** Optional agent reference — which agent this money relates to (supplier payment, receipt, refund) */
+  agentId?: string;
+  /** Free-text reference of who physically paid / received (agent, client, office, bank) */
+  paidBy?: string;
   /** Extra charge / refund metadata */
   clientId?: string;          // specific member the charge / refund belongs to
   chargeCategory?: string;    // Embassy Fee, Visa Fee, Ticket Change, Service Charge...
@@ -84,11 +88,20 @@ export interface OpeningBalances {
   clients: number;
   supplierDue: number;
   profit: number;
+  /** Legacy cost of sales already incurred before this system */
+  cost?: number;
+  /** Legacy operating expenses already incurred */
+  expenses?: number;
+  /** Legacy agent commission already earned by agents */
+  commission?: number;
+  /** Opening cash / bank balance */
+  cash?: number;
   note?: string;
 }
 
 const defaultOpening: OpeningBalances = {
   revenue: 0, pending: 0, bookings: 0, clients: 0, supplierDue: 0, profit: 0,
+  cost: 0, expenses: 0, commission: 0, cash: 0,
 };
 
 interface PersistedState {
