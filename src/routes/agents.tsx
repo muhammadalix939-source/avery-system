@@ -79,12 +79,17 @@ function AgentsPage() {
     generateAgentReport(a, entries, { ...range, bookings: agentBookings });
   }
 
-  // Agent ledger = own commission entries + every client transaction of the heads this agent brought.
+  // Agent ledger = own commission payouts + the CLIENT transactions of heads this agent brought.
+  // Supplier purchases / payments / office expenses never belong in an agent ledger.
   const relatedEntries = (() => {
     if (!selected) return [];
     const agentHeads = new Set(store.bookings.filter((b) => b.agentId === selected.id).map((b) => b.headId));
+    const clientTypes = new Set(["client_receive", "client_charge", "client_refund"]);
     return store.entries.filter(
-      (e) => e.referenceId === selected.id || (e.headId && agentHeads.has(e.headId) && e.type !== "expense")
+      (e) =>
+        (e.type === "agent_commission" && e.referenceId === selected.id) ||
+        (clientTypes.has(e.type) && e.headId && agentHeads.has(e.headId)) ||
+        (e.agentId === selected.id && e.type === "supplier_payment")
     );
   })();
 
