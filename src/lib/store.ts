@@ -194,6 +194,8 @@ function hydrateFromStorage() {
       nextGroupNum = s.counters.group || nextGroupNum;
     }
   } catch {}
+  // Persisted files may carry stale derived numbers — recompute from source of truth.
+  resyncDerived();
   listeners.forEach((l) => l());
 }
 
