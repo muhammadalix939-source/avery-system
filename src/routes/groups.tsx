@@ -14,6 +14,8 @@ import StatusBadge from "@/components/StatusBadge";
 import { formatCurrency } from "@/lib/data";
 import { useStore, type PurchaseGroup } from "@/lib/store";
 import { computeGroupStats, type GroupStats } from "@/lib/groups";
+import { computeUrgency, sortByUrgency, urgencyLabel, urgencyTone, type GroupUrgency } from "@/lib/urgency";
+import ConfirmDelete from "@/components/ConfirmDelete";
 import { getPKTDate } from "@/lib/date-utils";
 
 export const Route = createFileRoute("/groups")({
@@ -46,6 +48,7 @@ function GroupsPage() {
   const [search, setSearch] = useState("");
   const [form, setForm] = useState(emptyForm);
   const [selected, setSelected] = useState<PurchaseGroup | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<PurchaseGroup | null>(null);
 
   const stats = useMemo<GroupStats[]>(
     () => store.groups.map((g) => computeGroupStats(g, store)),
@@ -54,12 +57,16 @@ function GroupsPage() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return stats;
-    return stats.filter((s) =>
+    const base = q ? stats.filter((s) =>
       [s.group.id, s.group.name, s.group.pnr, s.group.flightNumber, s.group.category, s.supplier?.companyName]
         .filter(Boolean).join(" ").toLowerCase().includes(q)
-    );
+    ) : stats;
+    // Nearest departure first, then lowest remaining seats — most urgent on top.
+    return sortByUrgency(base, (s) => computeUrgency(s));
   }, [stats, search]);
+
+  const activeGroups = useMemo(() => filtered.filter((s) => !computeUrgency(s).isFull), [filtered]);
+  const fullGroups = useMemo(() => filtered.filter((s) => computeUrgency(s).isFull), [filtered]);
 
   const totals = useMemo(() => ({
     groups: stats.length,
