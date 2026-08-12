@@ -208,7 +208,7 @@ function ClientsPage() {
       </motion.div>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="bg-card border-border max-w-lg">
+        <DialogContent className="bg-card border-border max-w-lg max-h-[88vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Edit Client — {selected?.id}</DialogTitle></DialogHeader>
           {formFields}
           {selected && <div className="mt-2"><ClientChecklistPanel client={selected} /></div>}
