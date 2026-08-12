@@ -701,6 +701,9 @@ function EntriesPage() {
         }
       />
 
+      {/* Live seat status for group sale / bill entry */}
+      <GroupSeatStrip />
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         <div className="glass-card rounded-xl p-5">
