@@ -9,6 +9,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import DetailDialog from "@/components/DetailDialog";
+import ChecklistBadge from "@/components/ChecklistBadge";
+import ClientChecklistPanel from "@/components/ClientChecklistPanel";
+import ConfirmDelete from "@/components/ConfirmDelete";
 import { formatCurrency, getClientName, PACKAGE_TYPES, type Client } from "@/lib/data";
 import { useStore } from "@/lib/store";
 import { generateClientStatement } from "@/lib/pdf";
@@ -26,6 +29,7 @@ function ClientsPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selected, setSelected] = useState<Client | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Client | null>(null);
   const [form, setForm] = useState({
     headId: "", firstName: "", lastName: "", gender: "Male" as Client["gender"],
     nationality: "", passport: "", cnic: "", dateOfBirth: "", dateOfIssue: "", dateOfExpire: "",
@@ -172,7 +176,8 @@ function ClientsPage() {
               <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
                 <th className="px-4 py-3">Client ID</th><th className="px-4 py-3">Name</th><th className="px-4 py-3">Head ID</th>
                 <th className="px-4 py-3">Phone</th><th className="px-4 py-3">Package</th><th className="px-4 py-3">Paid</th>
-                <th className="px-4 py-3">Due</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Actions</th>
+                <th className="px-4 py-3">Due</th><th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Services</th><th className="px-4 py-3">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -186,12 +191,13 @@ function ClientsPage() {
                   <td className="px-4 py-3 text-success">{formatCurrency(c.amountPaid)}</td>
                   <td className="px-4 py-3 text-destructive">{formatCurrency(c.amountDue - c.amountPaid)}</td>
                   <td className="px-4 py-3"><StatusBadge status={c.paymentStatus} /></td>
+                  <td className="px-4 py-3"><ChecklistBadge client={c} compact /></td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1">
                       <button onClick={() => { setSelected(c); setDetailOpen(true); }} className="rounded p-1 hover:bg-accent"><Eye className="h-3.5 w-3.5 text-primary" /></button>
                       <button onClick={() => downloadStatement(c)} className="rounded p-1 hover:bg-accent" title="Download Statement"><Download className="h-3.5 w-3.5 text-success" /></button>
                       <button onClick={() => openEdit(c)} className="rounded p-1 hover:bg-accent"><Pencil className="h-3.5 w-3.5 text-warning" /></button>
-                      <button onClick={() => store.deleteClient(c.id)} className="rounded p-1 hover:bg-accent"><Trash2 className="h-3.5 w-3.5 text-destructive" /></button>
+                      <button onClick={() => setDeleteTarget(c)} className="rounded p-1 hover:bg-accent"><Trash2 className="h-3.5 w-3.5 text-destructive" /></button>
                     </div>
                   </td>
                 </tr>
@@ -202,12 +208,21 @@ function ClientsPage() {
       </motion.div>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="bg-card border-border max-w-lg">
+        <DialogContent className="bg-card border-border max-w-lg max-h-[88vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Edit Client — {selected?.id}</DialogTitle></DialogHeader>
           {formFields}
+          {selected && <div className="mt-2"><ClientChecklistPanel client={selected} /></div>}
           <Button onClick={handleEdit} className="w-full">Save Changes</Button>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDelete
+        open={!!deleteTarget}
+        onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}
+        title={`Delete ${deleteTarget ? getClientName(deleteTarget) : "client"}?`}
+        description="This client record, along with their service checklist, will be permanently removed."
+        onConfirm={() => { if (deleteTarget) store.deleteClient(deleteTarget.id); setDeleteTarget(null); }}
+      />
 
       <DetailDialog open={detailOpen} onOpenChange={setDetailOpen} type="client" data={selected} entries={relatedEntries} allClients={store.clients} allBookings={store.bookings} />
     </div>

@@ -1,7 +1,8 @@
 // Centralized state management for the CRM
 import { useState, useCallback, useEffect } from "react";
-import type { Client, Booking, Agent, Supplier, HotelService, FlightService, TransportService, VisaService, OtherService } from "./data";
+import type { Client, Booking, Agent, Supplier, HotelService, FlightService, TransportService, VisaService, OtherService, ChecklistItem } from "./data";
 import { mockClients, mockBookings, mockAgents, mockSuppliers, mockMonthlyData as defaultMonthlyData, generateId } from "./data";
+import { defaultChecklist } from "./checklist";
 import { getPKTDate } from "./date-utils";
 
 export interface LedgerEntry {
@@ -364,6 +365,34 @@ export function useStore() {
       clients = clients.filter((c) => c.id !== id);
       bookings = bookings.map((b) => ({ ...b, clientIds: b.clientIds.filter((cid) => cid !== id) }));
       resyncAgents();
+      notify();
+    },
+
+    // ---- Service Checklist CRUD (per client) ----
+    addChecklistItem: (clientId: string, label: string) => {
+      const item: ChecklistItem = { id: `chk-${Date.now().toString(36)}`, label: label.trim() || "New item", status: "Pending" };
+      clients = clients.map((c) => (c.id === clientId ? { ...c, checklist: [...(c.checklist?.length ? c.checklist : defaultChecklist()), item] } : c));
+      notify();
+      return item.id;
+    },
+    updateChecklistItem: (clientId: string, itemId: string, data: Partial<ChecklistItem>) => {
+      clients = clients.map((c) => {
+        if (c.id !== clientId) return c;
+        const base = c.checklist?.length ? c.checklist : defaultChecklist();
+        return { ...c, checklist: base.map((i) => (i.id === itemId ? { ...i, ...data } : i)) };
+      });
+      notify();
+    },
+    deleteChecklistItem: (clientId: string, itemId: string) => {
+      clients = clients.map((c) => {
+        if (c.id !== clientId) return c;
+        const base = c.checklist?.length ? c.checklist : defaultChecklist();
+        return { ...c, checklist: base.filter((i) => i.id !== itemId) };
+      });
+      notify();
+    },
+    setChecklistArchived: (clientId: string, archived: boolean) => {
+      clients = clients.map((c) => (c.id === clientId ? { ...c, checklistArchived: archived } : c));
       notify();
     },
 

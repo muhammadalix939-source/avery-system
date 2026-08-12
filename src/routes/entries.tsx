@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import PageHeader from "@/components/PageHeader";
+import GroupSeatStrip from "@/components/GroupSeatStrip";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { formatCurrency, getClientName } from "@/lib/data";
 import { useStore, computeGroupUsedPax, type LedgerEntry } from "@/lib/store";
@@ -700,6 +701,9 @@ function EntriesPage() {
           </Dialog>
         }
       />
+
+      {/* Live seat status for group sale / bill entry */}
+      <GroupSeatStrip />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">

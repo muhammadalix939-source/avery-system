@@ -6,15 +6,19 @@ import { Input } from "@/components/ui/input";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import DetailDialog from "@/components/DetailDialog";
+import ChecklistBadge from "@/components/ChecklistBadge";
 import { formatCurrency, getClientName, type Client, type Agent, type Supplier, type Booking } from "@/lib/data";
 import { useStore } from "@/lib/store";
+import { computeGroupStats } from "@/lib/groups";
+import { computeUrgency, urgencyLabel } from "@/lib/urgency";
+import { checklistProgress, getChecklist } from "@/lib/checklist";
 
 export const Route = createFileRoute("/search")({
   component: SearchPage,
   head: () => ({ meta: [{ title: "Search — AV Travel CRM" }] }),
 });
 
-type ResultType = "booking" | "client" | "agent" | "supplier";
+type ResultType = "booking" | "client" | "agent" | "supplier" | "group";
 
 interface SearchResult {
   type: ResultType;
@@ -24,6 +28,8 @@ interface SearchResult {
   status: string;
   extra?: string;
   raw: Client | Agent | Supplier | Booking;
+  /** Client results carry their checklist progress for the inline badge. */
+  client?: Client;
 }
 
 const typeColors: Record<ResultType, string> = {
@@ -31,6 +37,7 @@ const typeColors: Record<ResultType, string> = {
   client: "bg-success/10 text-success",
   agent: "bg-warning/10 text-warning",
   supplier: "bg-chart-3/10 text-chart-3",
+  group: "bg-primary/10 text-primary",
 };
 
 function SearchPage() {
@@ -43,14 +50,15 @@ function SearchPage() {
   }, [query]);
   const [typeFilter, setTypeFilter] = useState<ResultType | "all">("all");
   const [detailOpen, setDetailOpen] = useState(false);
-  const [selectedType, setSelectedType] = useState<ResultType>("client");
+  const [selectedType, setSelectedType] = useState<Exclude<ResultType, "group">>("client");
   const [selectedData, setSelectedData] = useState<Client | Agent | Supplier | Booking | null>(null);
 
-  const results = useMemo(() => searchAll(debounced, store), [debounced, store.bookings, store.clients, store.agents, store.suppliers]);
+  const results = useMemo(() => searchAll(debounced, store), [debounced, store.bookings, store.clients, store.agents, store.suppliers, store.groups, store.entries]);
   const filtered = useMemo(() => typeFilter === "all" ? results : results.filter((r) => r.type === typeFilter), [results, typeFilter]);
 
   function handleClick(r: SearchResult) {
-    setSelectedType(r.type);
+    // Group hits open their linked booking detail (groups themselves live on /groups).
+    setSelectedType(r.type === "group" ? "booking" : r.type);
     setSelectedData(r.raw);
     setDetailOpen(true);
   }
@@ -67,7 +75,7 @@ function SearchPage() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {(["all", "booking", "client", "agent", "supplier"] as const).map((t) => (
+        {(["all", "booking", "client", "agent", "supplier", "group"] as const).map((t) => (
           <button key={t} onClick={() => setTypeFilter(t)} className={`rounded-lg px-4 py-2 text-xs font-medium capitalize transition-all ${typeFilter === t ? "bg-primary text-primary-foreground" : "bg-accent/30 text-muted-foreground hover:bg-accent/50"}`}>
             {t === "all" ? "All" : `${t}s`}
           </button>
@@ -90,6 +98,7 @@ function SearchPage() {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              {r.client && <ChecklistBadge client={r.client} compact />}
               {r.extra && <span className="text-sm font-medium text-primary">{r.extra}</span>}
               <StatusBadge status={r.status} />
             </div>
@@ -122,8 +131,11 @@ function searchAll(query: string, store: ReturnType<typeof useStore>): SearchRes
 
   store.clients.forEach((c) => {
     const fullName = getClientName(c).toLowerCase();
-    if (c.id.toLowerCase().includes(q) || fullName.includes(q) || c.phone.includes(q) || c.passport.toLowerCase().includes(q)) {
-      results.push({ type: "client", id: c.id, title: getClientName(c), subtitle: `${c.id} · ${c.headId} · ${c.passport}`, status: c.paymentStatus, extra: formatCurrency(c.amountPaid), raw: c });
+    const checklistText = getChecklist(c).map((i) => `${i.label} ${i.status}`).join(" ").toLowerCase();
+    const progress = checklistProgress(c);
+    const alertText = `${progress.isComplete ? "completed services" : "pending services"} ${progress.label}`;
+    if (c.id.toLowerCase().includes(q) || fullName.includes(q) || c.phone.includes(q) || c.passport.toLowerCase().includes(q) || checklistText.includes(q) || alertText.includes(q)) {
+      results.push({ type: "client", id: c.id, title: getClientName(c), subtitle: `${c.id} · ${c.headId} · ${c.passport}`, status: c.paymentStatus, extra: formatCurrency(c.amountPaid), raw: c, client: c });
     }
   });
 
@@ -137,6 +149,21 @@ function searchAll(query: string, store: ReturnType<typeof useStore>): SearchRes
     if (s.id.toLowerCase().includes(q) || s.companyName.toLowerCase().includes(q) || s.phone.includes(q)) {
       const remaining = s.totalPayable - s.totalPaid;
       results.push({ type: "supplier", id: s.id, title: s.companyName, subtitle: `${s.id} · ${s.serviceType}`, status: remaining === 0 ? "Paid" : "Partial", extra: formatCurrency(remaining), raw: s });
+    }
+  });
+
+  store.groups.forEach((g) => {
+    const stats = computeGroupStats(g, store);
+    const u = computeUrgency(stats);
+    const hay = [g.id, g.name, g.pnr, g.flightNumber, g.category, g.date, u.isFull ? "full closed" : "active open"].filter(Boolean).join(" ").toLowerCase();
+    if (hay.includes(q)) {
+      results.push({
+        type: "group", id: g.id, title: g.name,
+        subtitle: `${g.id} · ${g.category} · ${g.date || "no date"} · ${u.capacity > 0 ? `${u.remainingSeats}/${u.capacity} seats left` : `${stats.usedPax} pax`} · ${u.reason}`,
+        status: u.isFull ? "Inactive" : "Active",
+        extra: urgencyLabel[u.level],
+        raw: (stats.heads[0]?.booking ?? { headId: g.id }) as any,
+      });
     }
   });
 

@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
 import {
-  Plus, Trash2, Pencil, Layers, Users, Wallet, TrendingUp, Gift, ChevronRight, Search,
+  Plus, Trash2, Pencil, Layers, Users, Wallet, TrendingUp, Gift, ChevronRight, Search, Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,8 @@ import StatusBadge from "@/components/StatusBadge";
 import { formatCurrency } from "@/lib/data";
 import { useStore, type PurchaseGroup } from "@/lib/store";
 import { computeGroupStats, type GroupStats } from "@/lib/groups";
+import { computeUrgency, sortByUrgency, urgencyLabel, urgencyTone, type GroupUrgency } from "@/lib/urgency";
+import ConfirmDelete from "@/components/ConfirmDelete";
 import { getPKTDate } from "@/lib/date-utils";
 
 export const Route = createFileRoute("/groups")({
@@ -46,6 +48,7 @@ function GroupsPage() {
   const [search, setSearch] = useState("");
   const [form, setForm] = useState(emptyForm);
   const [selected, setSelected] = useState<PurchaseGroup | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<PurchaseGroup | null>(null);
 
   const stats = useMemo<GroupStats[]>(
     () => store.groups.map((g) => computeGroupStats(g, store)),
@@ -54,12 +57,16 @@ function GroupsPage() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return stats;
-    return stats.filter((s) =>
+    const base = q ? stats.filter((s) =>
       [s.group.id, s.group.name, s.group.pnr, s.group.flightNumber, s.group.category, s.supplier?.companyName]
         .filter(Boolean).join(" ").toLowerCase().includes(q)
-    );
+    ) : stats;
+    // Nearest departure first, then lowest remaining seats — most urgent on top.
+    return sortByUrgency(base, (s) => computeUrgency(s));
   }, [stats, search]);
+
+  const activeGroups = useMemo(() => filtered.filter((s) => !computeUrgency(s).isFull), [filtered]);
+  const fullGroups = useMemo(() => filtered.filter((s) => computeUrgency(s).isFull), [filtered]);
 
   const totals = useMemo(() => ({
     groups: stats.length,
@@ -163,60 +170,46 @@ function GroupsPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        {filtered.map((s, i) => {
-          const pct = s.capacity > 0 ? Math.min(100, Math.round((s.usedPax / s.capacity) * 100)) : 0;
-          return (
-            <motion.div key={s.group.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i * 0.05, 0.3) }}
-              className="glass-card cursor-pointer rounded-xl p-5 transition-colors hover:border-primary/40"
-              onClick={() => setDetailId(s.group.id)}>
-              <div className="mb-3 flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold">{s.group.name}</h3>
-                    <span className="rounded-md bg-accent/40 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary">{s.group.category}</span>
-                  </div>
-                  <p className="mt-1 text-[10px] text-muted-foreground">
-                    {[s.group.id, s.group.pnr && `PNR ${s.group.pnr}`, s.group.flightNumber, s.group.date, s.supplier?.companyName].filter(Boolean).join(" · ")}
-                  </p>
-                </div>
-                <div className="flex shrink-0 gap-1" onClick={(e) => e.stopPropagation()}>
-                  <button onClick={() => { setExpenseFor(s.group); }} className="rounded p-1 hover:bg-accent" title="Add gift / extra expense"><Gift className="h-3.5 w-3.5 text-primary" /></button>
-                  <button onClick={() => openEdit(s.group)} className="rounded p-1 hover:bg-accent" title="Edit"><Pencil className="h-3.5 w-3.5 text-warning" /></button>
-                  <button onClick={() => store.deleteGroup(s.group.id)} className="rounded p-1 hover:bg-accent" title="Delete"><Trash2 className="h-3.5 w-3.5 text-destructive" /></button>
-                </div>
-              </div>
-
-              {s.capacity > 0 && (
-                <>
-                  <div className="mb-1 flex justify-between text-[10px] text-muted-foreground">
-                    <span>{s.usedPax} / {s.capacity} clients booked</span>
-                    <span>{s.remainingPax} seats left</span>
-                  </div>
-                  <div className="mb-3 h-2 overflow-hidden rounded-full bg-accent/30">
-                    <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
-                  </div>
-                </>
-              )}
-
-              <div className="grid grid-cols-4 gap-2 border-t border-border/50 pt-3 text-xs">
-                <Cell label="Sales" value={formatCurrency(s.revenue)} tone="text-primary" />
-                <Cell label="Supplier Bill" value={formatCurrency(s.supplierBill)} tone="text-warning" />
-                <Cell label="Extras" value={formatCurrency(s.expenses)} tone="text-destructive" />
-                <Cell label="Net Profit" value={formatCurrency(s.netProfit)} tone={s.netProfit >= 0 ? "text-success" : "text-destructive"} />
-              </div>
-              <div className="mt-3 flex items-center justify-between text-[10px] text-muted-foreground">
-                <span>{s.heads.length} head{s.heads.length === 1 ? "" : "s"} · margin {s.margin.toFixed(1)}%</span>
-                <span className="flex items-center gap-1 text-primary">Open detail <ChevronRight className="h-3 w-3" /></span>
-              </div>
-            </motion.div>
-          );
-        })}
-        {filtered.length === 0 && (
+        {activeGroups.map((s, i) => (
+          <GroupCard key={s.group.id} s={s} index={i}
+            onOpen={() => setDetailId(s.group.id)}
+            onExpense={() => setExpenseFor(s.group)}
+            onEdit={() => openEdit(s.group)}
+            onDelete={() => setDeleteTarget(s.group)} />
+        ))}
+        {activeGroups.length === 0 && (
           <div className="glass-card rounded-xl p-12 text-center text-sm text-muted-foreground xl:col-span-2">
-            No groups yet. Create a group to track PNR-level cost and profit.
+            No active groups. Create a group to track PNR-level cost and profit.
           </div>
         )}
       </div>
+
+      {fullGroups.length > 0 && (
+        <div className="space-y-3 border-t border-border/60 pt-5">
+          <div className="flex items-center gap-2">
+            <Lock className="h-4 w-4 text-muted-foreground" />
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Full / Closed Groups ({fullGroups.length})</p>
+            <span className="text-[10px] text-muted-foreground">Closed for new sales — still searchable everywhere</span>
+          </div>
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            {fullGroups.map((s, i) => (
+              <GroupCard key={s.group.id} s={s} index={i} muted
+                onOpen={() => setDetailId(s.group.id)}
+                onExpense={() => setExpenseFor(s.group)}
+                onEdit={() => openEdit(s.group)}
+                onDelete={() => setDeleteTarget(s.group)} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <ConfirmDelete
+        open={!!deleteTarget}
+        onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}
+        title={`Delete group ${deleteTarget?.name || ""}?`}
+        description="The group will be removed and any tagged entries will be untagged. Bookings and clients are not deleted."
+        onConfirm={() => { if (deleteTarget) store.deleteGroup(deleteTarget.id); setDeleteTarget(null); }}
+      />
 
       {/* Edit */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
@@ -253,6 +246,61 @@ function GroupsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function GroupCard({ s, index, muted, onOpen, onExpense, onEdit, onDelete }: {
+  s: GroupStats; index: number; muted?: boolean;
+  onOpen: () => void; onExpense: () => void; onEdit: () => void; onDelete: () => void;
+}) {
+  const u: GroupUrgency = computeUrgency(s);
+  const pct = s.capacity > 0 ? Math.min(100, Math.round((s.usedPax / s.capacity) * 100)) : 0;
+  return (
+    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(index * 0.05, 0.3) }}
+      className={`glass-card cursor-pointer rounded-xl p-5 transition-colors hover:border-primary/40 ${muted ? "opacity-60 hover:opacity-100" : ""}`}
+      onClick={onOpen}>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-semibold">{s.group.name}</h3>
+            <span className="rounded-md bg-accent/40 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary">{s.group.category}</span>
+            <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold ${urgencyTone[u.level]}`}>{urgencyLabel[u.level]}</span>
+          </div>
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            {[s.group.id, s.group.pnr && `PNR ${s.group.pnr}`, s.group.flightNumber, s.group.date, s.supplier?.companyName].filter(Boolean).join(" · ")}
+          </p>
+          <p className="mt-0.5 text-[10px] font-medium text-muted-foreground">{u.reason}</p>
+        </div>
+        <div className="flex shrink-0 gap-1" onClick={(e) => e.stopPropagation()}>
+          <button onClick={onExpense} className="rounded p-1 hover:bg-accent" title="Add gift / extra expense"><Gift className="h-3.5 w-3.5 text-primary" /></button>
+          <button onClick={onEdit} className="rounded p-1 hover:bg-accent" title="Edit"><Pencil className="h-3.5 w-3.5 text-warning" /></button>
+          <button onClick={onDelete} className="rounded p-1 hover:bg-accent" title="Delete"><Trash2 className="h-3.5 w-3.5 text-destructive" /></button>
+        </div>
+      </div>
+
+      {s.capacity > 0 && (
+        <>
+          <div className="mb-1 flex justify-between text-[10px] text-muted-foreground">
+            <span>{s.usedPax} / {s.capacity} clients booked</span>
+            <span className={u.remainingSeats <= 3 && !u.isFull ? "font-semibold text-destructive" : ""}>{s.remainingPax} seats left</span>
+          </div>
+          <div className="mb-3 h-2 overflow-hidden rounded-full bg-accent/30">
+            <div className={`h-full rounded-full transition-all ${u.isFull ? "bg-muted-foreground" : "bg-primary"}`} style={{ width: `${pct}%` }} />
+          </div>
+        </>
+      )}
+
+      <div className="grid grid-cols-4 gap-2 border-t border-border/50 pt-3 text-xs">
+        <Cell label="Sales" value={formatCurrency(s.revenue)} tone="text-primary" />
+        <Cell label="Supplier Bill" value={formatCurrency(s.supplierBill)} tone="text-warning" />
+        <Cell label="Extras" value={formatCurrency(s.expenses)} tone="text-destructive" />
+        <Cell label="Net Profit" value={formatCurrency(s.netProfit)} tone={s.netProfit >= 0 ? "text-success" : "text-destructive"} />
+      </div>
+      <div className="mt-3 flex items-center justify-between text-[10px] text-muted-foreground">
+        <span>{s.heads.length} head{s.heads.length === 1 ? "" : "s"} · margin {s.margin.toFixed(1)}%</span>
+        <span className="flex items-center gap-1 text-primary">Open detail <ChevronRight className="h-3 w-3" /></span>
+      </div>
+    </motion.div>
   );
 }
 
