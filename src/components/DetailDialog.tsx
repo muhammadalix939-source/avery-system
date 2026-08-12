@@ -2,6 +2,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Download, ChevronRight, ArrowLeft, Users, DollarSign, FileText } from "lucide-react";
 import StatusBadge from "@/components/StatusBadge";
+import ClientChecklistPanel from "@/components/ClientChecklistPanel";
 import { formatCurrency, getClientName } from "@/lib/data";
 import type { Client, Booking, Agent, Supplier } from "@/lib/data";
 import type { LedgerEntry } from "@/lib/store";
@@ -131,7 +132,12 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
           {/* MAIN VIEW */}
           {subView === "main" && (
             <>
-              {type === "client" && renderClient(data as Client)}
+              {type === "client" && (
+                <>
+                  {renderClient(data as Client)}
+                  <ClientChecklistPanel client={data as Client} />
+                </>
+              )}
               {type === "agent" && renderAgentFull(data as Agent, getAgentStats(data as Agent), () => setSubView("clients"))}
               {type === "supplier" && renderSupplierFull(data as Supplier, getSupplierStats(data as Supplier), () => setSubView("bookings"))}
               {type === "booking" && renderBooking(data as Booking)}
