@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import PageHeader from "@/components/PageHeader";
+import GroupSeatStrip from "@/components/GroupSeatStrip";
 import StatusBadge from "@/components/StatusBadge";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import BookingServicesMenu, { VoucherDownloadMenu } from "@/components/BookingServicesMenu";
@@ -645,6 +646,9 @@ function BookingsPage() {
           </Dialog>
         }
       />
+
+      {/* Live seat status — most urgent groups first */}
+      <GroupSeatStrip />
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-xl">
         <div className="overflow-x-auto">
