@@ -19,6 +19,7 @@ import { Route as ExpensesRouteImport } from './routes/expenses'
 import { Route as EntriesRouteImport } from './routes/entries'
 import { Route as ClientsRouteImport } from './routes/clients'
 import { Route as BookingsRouteImport } from './routes/bookings'
+import { Route as AlertsRouteImport } from './routes/alerts'
 import { Route as AgentsRouteImport } from './routes/agents'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -72,6 +73,11 @@ const BookingsRoute = BookingsRouteImport.update({
   path: '/bookings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AlertsRoute = AlertsRouteImport.update({
+  id: '/alerts',
+  path: '/alerts',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AgentsRoute = AgentsRouteImport.update({
   id: '/agents',
   path: '/agents',
@@ -86,6 +92,7 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agents': typeof AgentsRoute
+  '/alerts': typeof AlertsRoute
   '/bookings': typeof BookingsRoute
   '/clients': typeof ClientsRoute
   '/entries': typeof EntriesRoute
@@ -100,6 +107,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agents': typeof AgentsRoute
+  '/alerts': typeof AlertsRoute
   '/bookings': typeof BookingsRoute
   '/clients': typeof ClientsRoute
   '/entries': typeof EntriesRoute
@@ -115,6 +123,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/agents': typeof AgentsRoute
+  '/alerts': typeof AlertsRoute
   '/bookings': typeof BookingsRoute
   '/clients': typeof ClientsRoute
   '/entries': typeof EntriesRoute
@@ -131,6 +140,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/agents'
+    | '/alerts'
     | '/bookings'
     | '/clients'
     | '/entries'
@@ -145,6 +155,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/agents'
+    | '/alerts'
     | '/bookings'
     | '/clients'
     | '/entries'
@@ -159,6 +170,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/agents'
+    | '/alerts'
     | '/bookings'
     | '/clients'
     | '/entries'
@@ -174,6 +186,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AgentsRoute: typeof AgentsRoute
+  AlertsRoute: typeof AlertsRoute
   BookingsRoute: typeof BookingsRoute
   ClientsRoute: typeof ClientsRoute
   EntriesRoute: typeof EntriesRoute
@@ -258,6 +271,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BookingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/alerts': {
+      id: '/alerts'
+      path: '/alerts'
+      fullPath: '/alerts'
+      preLoaderRoute: typeof AlertsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/agents': {
       id: '/agents'
       path: '/agents'
@@ -278,6 +298,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AgentsRoute: AgentsRoute,
+  AlertsRoute: AlertsRoute,
   BookingsRoute: BookingsRoute,
   ClientsRoute: ClientsRoute,
   EntriesRoute: EntriesRoute,
@@ -292,12 +313,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}
