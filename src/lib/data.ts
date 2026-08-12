@@ -37,6 +37,15 @@ export const PACKAGE_TYPES = [
 ] as const;
 export type PackageType = (typeof PACKAGE_TYPES)[number];
 
+export type ChecklistStatus = "Pending" | "In Progress" | "Completed";
+
+export interface ChecklistItem {
+  id: string;
+  label: string;
+  status: ChecklistStatus;
+  note?: string;
+}
+
 export interface Client {
   id: string;
   headId: string;
@@ -67,6 +76,10 @@ export interface Client {
   isVip: boolean;
   destination?: string;
   driveLink?: string;
+  /** Per-client service checklist (Transport / Ziyarat / Hotel / Visa + custom items). */
+  checklist?: ChecklistItem[];
+  /** Manually archived out of the active Clients alerts tab (reversible). */
+  checklistArchived?: boolean;
 }
 
 export function getClientName(c: Client): string {
