@@ -50,14 +50,15 @@ function SearchPage() {
   }, [query]);
   const [typeFilter, setTypeFilter] = useState<ResultType | "all">("all");
   const [detailOpen, setDetailOpen] = useState(false);
-  const [selectedType, setSelectedType] = useState<ResultType>("client");
+  const [selectedType, setSelectedType] = useState<Exclude<ResultType, "group">>("client");
   const [selectedData, setSelectedData] = useState<Client | Agent | Supplier | Booking | null>(null);
 
   const results = useMemo(() => searchAll(debounced, store), [debounced, store.bookings, store.clients, store.agents, store.suppliers, store.groups, store.entries]);
   const filtered = useMemo(() => typeFilter === "all" ? results : results.filter((r) => r.type === typeFilter), [results, typeFilter]);
 
   function handleClick(r: SearchResult) {
-    setSelectedType(r.type);
+    // Group hits open their linked booking detail (groups themselves live on /groups).
+    setSelectedType(r.type === "group" ? "booking" : r.type);
     setSelectedData(r.raw);
     setDetailOpen(true);
   }
