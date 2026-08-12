@@ -703,7 +703,6 @@ function EntriesPage() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-*** placeholder
         <div className="glass-card rounded-xl p-5">
           <p className="text-[10px] uppercase text-muted-foreground">Total Received</p>
           <p className="text-xl font-bold text-success">{formatCurrency(totalReceived)}</p>
