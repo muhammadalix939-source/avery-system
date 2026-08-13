@@ -137,3 +137,21 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: str
     </div>
   );
 }
+
+function Pill({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <span className="rounded-full border border-border/60 bg-accent/20 px-2.5 py-1 text-[10px]">
+      <span className="uppercase tracking-wide text-muted-foreground">{label} </span>
+      <span className={`font-bold ${tone || ""}`}>{value}</span>
+    </span>
+  );
+}
+
+function StatUnused({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <div className="rounded-lg bg-accent/20 p-2.5">
+      <p className="text-[9px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className={`text-sm font-bold ${tone || ""}`}>{value}</p>
+    </div>
+  );
+}
