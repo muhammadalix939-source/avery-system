@@ -146,12 +146,3 @@ function Pill({ label, value, tone }: { label: string; value: string; tone?: str
     </span>
   );
 }
-
-function StatUnused({ label, value, tone }: { label: string; value: string; tone?: string }) {
-  return (
-    <div className="rounded-lg bg-accent/20 p-2.5">
-      <p className="text-[9px] uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className={`text-sm font-bold ${tone || ""}`}>{value}</p>
-    </div>
-  );
-}
