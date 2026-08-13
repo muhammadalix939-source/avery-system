@@ -75,6 +75,7 @@ function GroupsPage() {
     bill: stats.reduce((s, x) => s + x.supplierBill, 0),
     extras: stats.reduce((s, x) => s + x.expenses, 0),
     profit: stats.reduce((s, x) => s + x.netProfit, 0),
+    seatsLeft: stats.reduce((s, x) => s + (x.capacity > 0 ? Math.max(0, x.capacity - x.usedPax) : 0), 0),
   }), [stats]);
 
   const detail = detailId ? stats.find((s) => s.group.id === detailId) : null;
@@ -155,12 +156,14 @@ function GroupsPage() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 xl:grid-cols-7">
         <Kpi icon={Layers} label="Groups" value={String(totals.groups)} />
         <Kpi icon={Users} label="Total Pax" value={String(totals.pax)} />
+        <Kpi icon={Users} label="Seats Left" value={String(totals.seatsLeft)} tone={totals.seatsLeft <= 3 ? "text-destructive" : "text-success"} />
         <Kpi icon={TrendingUp} label="Group Sales" value={formatCurrency(totals.revenue)} tone="text-primary" />
         <Kpi icon={Wallet} label="Supplier Bill" value={formatCurrency(totals.bill)} tone="text-warning" />
         <Kpi icon={Gift} label="Extras / Gifts" value={formatCurrency(totals.extras)} tone="text-destructive" />
+        <Kpi icon={TrendingUp} label="Group Profit" value={formatCurrency(totals.profit)} tone={totals.profit >= 0 ? "text-success" : "text-destructive"} />
       </div>
 
       <div className="glass-card flex items-center gap-2 rounded-xl px-3 py-2">

@@ -21,7 +21,7 @@ interface DetailDialogProps {
 }
 
 export default function DetailDialog({ open, onOpenChange, type, data, entries = [], allClients = [], allBookings = [] }: DetailDialogProps) {
-  const [subView, setSubView] = useState<"main" | "clients" | "client-detail" | "bookings" | "statement">("main");
+  const [subView, setSubView] = useState<"main" | "clients" | "client-detail" | "bookings" | "statement" | "business">("main");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [includeOpening, setIncludeOpening] = useState(true);
 
@@ -106,6 +106,7 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
               {subView === "statement" ? `Statement — ${type === "supplier" ? (data as Supplier).companyName : type === "agent" ? (data as Agent).name : getClientName(data as Client)}` :
                subView === "client-detail" && selectedClient ? `${getClientName(selectedClient)}` :
                subView === "clients" && type === "agent" ? `Clients of ${(data as Agent).name}` :
+               subView === "business" && type === "agent" ? `Business Account — ${(data as Agent).name}` :
                subView === "bookings" && type === "supplier" ? `Bookings — ${(data as Supplier).companyName}` :
                type === "client" ? `Client: ${getClientName(data as Client)}` :
                type === "agent" ? `Agent: ${(data as Agent).name}` :
@@ -138,7 +139,7 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
                   <ClientChecklistPanel client={data as Client} />
                 </>
               )}
-              {type === "agent" && renderAgentFull(data as Agent, getAgentStats(data as Agent), () => setSubView("clients"))}
+              {type === "agent" && renderAgentFull(data as Agent, getAgentStats(data as Agent), () => setSubView("clients"), () => setSubView("business"))}
               {type === "supplier" && renderSupplierFull(data as Supplier, getSupplierStats(data as Supplier), () => setSubView("bookings"))}
               {type === "booking" && renderBooking(data as Booking)}
 
@@ -205,6 +206,47 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
                     </div>
                   );
                 })}
+              </div>
+            );
+          })()}
+
+          {/* AGENT → BUSINESS ACCOUNT */}
+          {subView === "business" && type === "agent" && (() => {
+            const stats = getAgentStats(data as Agent);
+            return (
+              <div className="space-y-3">
+                <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-1.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">Business Account (Receivable from Agent)</p>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Gross Sale</span><span className="font-medium">{formatCurrency(stats.totalSales)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Less: Agent Commission</span><span className="text-destructive">− {formatCurrency(stats.totalCommission)}</span></div>
+                  <div className="flex justify-between border-t border-border/50 pt-1.5 text-xs font-semibold"><span>Net Receivable</span><span className="text-primary">{formatCurrency(stats.netReceivable)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Received</span><span className="text-success">{formatCurrency(stats.received)}</span></div>
+                  <div className="flex justify-between border-t border-border/50 pt-1.5 text-sm font-bold"><span>Remaining</span><span className={stats.outstanding > 0 ? "text-destructive" : "text-success"}>{formatCurrency(stats.outstanding)}</span></div>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <StatCard label="Bookings" value={String(stats.agentBookings.length)} />
+                  <StatCard label="Clients" value={String(stats.agentClients.length)} />
+                  <StatCard label="Commission Payable" value={formatCurrency(stats.payable)} color="text-destructive" />
+                </div>
+                <div className="rounded-lg border border-border/50 p-3 space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Booking-wise Receivable</p>
+                  {stats.agentBookings.map((b: any) => {
+                    const net = Math.max(0, (b.totalAmount || 0) - (b.commission || 0));
+                    return (
+                      <div key={b.id} className="flex items-center justify-between rounded bg-accent/20 px-3 py-2">
+                        <div>
+                          <p className="text-xs font-medium">{b.headId}</p>
+                          <p className="text-[10px] text-muted-foreground">{[b.packageType, b.destination].filter(Boolean).join(" · ")}</p>
+                        </div>
+                        <div className="text-right text-[10px]">
+                          <p>Net: <span className="font-semibold text-primary">{formatCurrency(net)}</span></p>
+                          <p>Received: <span className="text-success">{formatCurrency(b.amountReceived || 0)}</span> · Due: <span className="text-destructive">{formatCurrency(Math.max(0, net - (b.amountReceived || 0)))}</span></p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {stats.agentBookings.length === 0 && <p className="py-2 text-center text-[11px] text-muted-foreground">No bookings brought by this agent yet.</p>}
+                </div>
               </div>
             );
           })()}
@@ -359,7 +401,7 @@ function renderClient(c: Client) {
   );
 }
 
-function renderAgentFull(a: Agent, stats: { agentBookings: any[]; agentClients: Client[]; totalSales: number; totalCommission: number; paidCommission: number; payable: number; received: number; netReceivable: number; outstanding: number }, onViewClients: () => void) {
+function renderAgentFull(a: Agent, stats: { agentBookings: any[]; agentClients: Client[]; totalSales: number; totalCommission: number; paidCommission: number; payable: number; received: number; netReceivable: number; outstanding: number }, onViewClients: () => void, onViewBusiness: () => void) {
   return (
     <>
       <Row label="Agent ID" value={a.id} />
@@ -382,18 +424,14 @@ function renderAgentFull(a: Agent, stats: { agentBookings: any[]; agentClients: 
         <StatCard label="Payable" value={formatCurrency(stats.payable)} color="text-destructive" />
       </div>
 
-      <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-1.5">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">Business Account (Receivable from Agent)</p>
-        <div className="flex justify-between text-xs"><span className="text-muted-foreground">Gross Sale</span><span className="font-medium">{formatCurrency(stats.totalSales)}</span></div>
-        <div className="flex justify-between text-xs"><span className="text-muted-foreground">Less: Agent Commission</span><span className="text-destructive">− {formatCurrency(stats.totalCommission)}</span></div>
-        <div className="flex justify-between border-t border-border/50 pt-1.5 text-xs font-semibold"><span>Net Receivable</span><span className="text-primary">{formatCurrency(stats.netReceivable)}</span></div>
-        <div className="flex justify-between text-xs"><span className="text-muted-foreground">Received</span><span className="text-success">{formatCurrency(stats.received)}</span></div>
-        <div className="flex justify-between border-t border-border/50 pt-1.5 text-sm font-bold"><span>Remaining</span><span className={stats.outstanding > 0 ? "text-destructive" : "text-success"}>{formatCurrency(stats.outstanding)}</span></div>
+      <div className="space-y-2">
+        <Button onClick={onViewClients} variant="outline" className="w-full gap-2 text-xs">
+          <Users className="h-3.5 w-3.5" /> View All Clients ({stats.agentClients.length}) <ChevronRight className="h-3.5 w-3.5 ml-auto" />
+        </Button>
+        <Button onClick={onViewBusiness} variant="outline" className="w-full gap-2 text-xs">
+          <DollarSign className="h-3.5 w-3.5" /> View Business Account <ChevronRight className="h-3.5 w-3.5 ml-auto" />
+        </Button>
       </div>
-
-      <Button onClick={onViewClients} variant="outline" className="w-full gap-2 text-xs">
-        <Users className="h-3.5 w-3.5" /> View All Clients ({stats.agentClients.length}) <ChevronRight className="h-3.5 w-3.5 ml-auto" />
-      </Button>
     </>
   );
 }
