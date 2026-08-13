@@ -22,14 +22,25 @@ export default function GroupSeatStrip() {
   const quick = quickId ? store.groups.find((g) => g.id === quickId) : null;
   const quickStats = quick ? computeGroupStats(quick, store) : null;
 
+  const totals = useMemo(() => ({
+    profit: rows.reduce((s, r) => s + r.stats.netProfit, 0),
+    seats: rows.reduce((s, r) => s + (r.urgency.capacity > 0 ? r.urgency.remainingSeats : 0), 0),
+    sales: rows.reduce((s, r) => s + r.stats.revenue, 0),
+  }), [rows]);
+
   if (store.groups.length === 0) return null;
 
   return (
     <div className="glass-card rounded-xl p-4">
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <Layers className="h-4 w-4 text-primary" />
         <p className="text-xs font-semibold uppercase tracking-wider text-primary">Live Seat Status</p>
         <span className="text-[10px] text-muted-foreground">Most urgent groups first · click for quick view</span>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <Pill label="Group Sales" value={formatCurrency(totals.sales)} tone="text-primary" />
+          <Pill label="Group Profit" value={formatCurrency(totals.profit)} tone={totals.profit >= 0 ? "text-success" : "text-destructive"} />
+          <Pill label="Seats Left" value={String(totals.seats)} tone={totals.seats <= 3 ? "text-destructive" : "text-foreground"} />
+        </div>
       </div>
 
       <div className="flex gap-3 overflow-x-auto pb-1">
@@ -48,6 +59,10 @@ export default function GroupSeatStrip() {
               {urgency.capacity > 0 ? `${urgency.remainingSeats} of ${urgency.capacity} seats left` : `${stats.usedPax} pax booked`}
             </p>
             <p className="mt-0.5 text-[10px] opacity-80">{urgency.reason}</p>
+            <div className="mt-2 flex items-center justify-between border-t border-current/20 pt-1.5 text-[10px]">
+              <span className="text-muted-foreground">Sales {formatCurrency(stats.revenue)}</span>
+              <span className={`font-semibold ${stats.netProfit >= 0 ? "text-success" : "text-destructive"}`}>Profit {formatCurrency(stats.netProfit)}</span>
+            </div>
           </button>
         ))}
         {rows.length === 0 && <p className="py-3 text-xs text-muted-foreground">All groups are full — see the Full / Closed section on the Groups page.</p>}
