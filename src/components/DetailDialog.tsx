@@ -401,7 +401,7 @@ function renderClient(c: Client) {
   );
 }
 
-function renderAgentFull(a: Agent, stats: { agentBookings: any[]; agentClients: Client[]; totalSales: number; totalCommission: number; paidCommission: number; payable: number; received: number; netReceivable: number; outstanding: number }, onViewClients: () => void) {
+function renderAgentFull(a: Agent, stats: { agentBookings: any[]; agentClients: Client[]; totalSales: number; totalCommission: number; paidCommission: number; payable: number; received: number; netReceivable: number; outstanding: number }, onViewClients: () => void, onViewBusiness: () => void) {
   return (
     <>
       <Row label="Agent ID" value={a.id} />
@@ -424,18 +424,14 @@ function renderAgentFull(a: Agent, stats: { agentBookings: any[]; agentClients: 
         <StatCard label="Payable" value={formatCurrency(stats.payable)} color="text-destructive" />
       </div>
 
-      <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-1.5">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">Business Account (Receivable from Agent)</p>
-        <div className="flex justify-between text-xs"><span className="text-muted-foreground">Gross Sale</span><span className="font-medium">{formatCurrency(stats.totalSales)}</span></div>
-        <div className="flex justify-between text-xs"><span className="text-muted-foreground">Less: Agent Commission</span><span className="text-destructive">− {formatCurrency(stats.totalCommission)}</span></div>
-        <div className="flex justify-between border-t border-border/50 pt-1.5 text-xs font-semibold"><span>Net Receivable</span><span className="text-primary">{formatCurrency(stats.netReceivable)}</span></div>
-        <div className="flex justify-between text-xs"><span className="text-muted-foreground">Received</span><span className="text-success">{formatCurrency(stats.received)}</span></div>
-        <div className="flex justify-between border-t border-border/50 pt-1.5 text-sm font-bold"><span>Remaining</span><span className={stats.outstanding > 0 ? "text-destructive" : "text-success"}>{formatCurrency(stats.outstanding)}</span></div>
+      <div className="space-y-2">
+        <Button onClick={onViewClients} variant="outline" className="w-full gap-2 text-xs">
+          <Users className="h-3.5 w-3.5" /> View All Clients ({stats.agentClients.length}) <ChevronRight className="h-3.5 w-3.5 ml-auto" />
+        </Button>
+        <Button onClick={onViewBusiness} variant="outline" className="w-full gap-2 text-xs">
+          <DollarSign className="h-3.5 w-3.5" /> View Business Account <ChevronRight className="h-3.5 w-3.5 ml-auto" />
+        </Button>
       </div>
-
-      <Button onClick={onViewClients} variant="outline" className="w-full gap-2 text-xs">
-        <Users className="h-3.5 w-3.5" /> View All Clients ({stats.agentClients.length}) <ChevronRight className="h-3.5 w-3.5 ml-auto" />
-      </Button>
     </>
   );
 }
