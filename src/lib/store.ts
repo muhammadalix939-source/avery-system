@@ -16,7 +16,10 @@ export interface LedgerEntry {
     | "purchase"
     | "client_charge"
     | "client_refund"
-    | "supplier_refund";
+    | "supplier_refund"
+    | "other_sale"
+    | "gift"
+    | "drawing";
   headId: string;
   referenceId: string; // client/supplier/agent ID
   referenceName: string;
@@ -34,6 +37,18 @@ export interface LedgerEntry {
   chargeCategory?: string;    // Embassy Fee, Visa Fee, Ticket Change, Service Charge...
   refundOf?: string;          // original ledger entry ID this refund reverses
   refundReason?: string;
+  /** Physical money account this transaction moved through (Cash / Bank / Wallet). */
+  accountId?: string;
+  /** Cash direction for account posting. */
+  direction?: "in" | "out";
+  /** Supplier ledger reconciliation state. */
+  reconciled?: "recorded" | "matched" | "unmatched";
+  /** Purchase entry: bought for an Agent or a Client head. */
+  purchasedFor?: "agent" | "client";
+  /** Purchase entry: also post the cost to the client personal ledger. */
+  reflectInClientLedger?: boolean;
+  /** Gift & Expense category. */
+  giftCategory?: "Gift" | "Expense";
   // For purchase entries: which service was bought (Hotel, Flight, Visa, Transport, Other)
   serviceCategory?: string;
   // Category-specific breakdown captured on purchase entries
@@ -79,6 +94,41 @@ export interface PurchaseGroup {
   createdAt: string;
 }
 
+// ---------- Accounts (Chart of Accounts) ----------
+export interface Account {
+  id: string;
+  name: string;
+  type: "Cash" | "Bank" | "Mobile Wallet";
+  number?: string;
+  branch?: string;
+  openingBalance: number;
+  openingDate: string;
+}
+
+export interface AccountLedgerRow {
+  id: string;
+  date: string;
+  description: string;
+  transactionType: LedgerEntry["type"];
+  amount: number;
+  direction: "in" | "out";
+  runningBalanceAfter: number;
+}
+
+export interface AlertSettings {
+  lowBalance: number;
+  agentDueLimit: number;
+  unmatchedDays: number;
+  clientOverdueDays: number;
+}
+
+const defaultAlertSettings: AlertSettings = { lowBalance: 20000, agentDueLimit: 100000, unmatchedDays: 7, clientOverdueDays: 15 };
+
+/** Money direction implied by an entry type (used for Account posting). */
+export function entryDirection(type: LedgerEntry["type"]): "in" | "out" {
+  return type === "client_receive" || type === "supplier_refund" || type === "other_sale" ? "in" : "out";
+}
+
 // ---------- Persistence (localStorage) ----------
 const STORAGE_KEY = "av-crm-store-v1";
 
@@ -115,6 +165,9 @@ interface PersistedState {
   counters: { client: number; agent: number; supplier: number; booking: number; head: number; entry: number; group?: number };
   opening?: OpeningBalances;
   groups?: PurchaseGroup[];
+  accounts?: Account[];
+  alertSettings?: AlertSettings;
+  readAlerts?: string[];
 }
 
 const defaultEntries: LedgerEntry[] = [
@@ -145,6 +198,12 @@ let monthlyData = initial.monthlyData;
 let entries: LedgerEntry[] = initial.entries;
 let opening: OpeningBalances = initial.opening || { ...defaultOpening };
 let groups: PurchaseGroup[] = initial.groups || [];
+let accounts: Account[] = initial.accounts || [
+  { id: "AC-001", name: "Main Cash", type: "Cash", openingBalance: 0, openingDate: "2026-01-01" },
+];
+let alertSettings: AlertSettings = initial.alertSettings || { ...defaultAlertSettings };
+let readAlerts: string[] = initial.readAlerts || [];
+let nextAccountNum = 2;
 let nextClientNum = initial.counters.client;
 let nextAgentNum = initial.counters.agent;
 let nextSupplierNum = initial.counters.supplier;
@@ -161,7 +220,7 @@ function persist() {
   saveTimer = setTimeout(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        clients, bookings, agents, suppliers, monthlyData, entries, opening, groups,
+        clients, bookings, agents, suppliers, monthlyData, entries, opening, groups, accounts, alertSettings, readAlerts,
         counters: { client: nextClientNum, agent: nextAgentNum, supplier: nextSupplierNum, booking: nextBookingNum, head: nextHeadNum, entry: nextEntryNum, group: nextGroupNum },
       }));
     } catch {}
@@ -188,6 +247,10 @@ function hydrateFromStorage() {
     entries = s.entries || entries;
     opening = s.opening || opening;
     groups = s.groups || groups;
+    if (s.accounts) accounts = s.accounts;
+    if (s.alertSettings) alertSettings = { ...defaultAlertSettings, ...s.alertSettings };
+    if (s.readAlerts) readAlerts = s.readAlerts;
+    nextAccountNum = accounts.length + 1;
     if (s.counters) {
       nextClientNum = s.counters.client; nextAgentNum = s.counters.agent;
       nextSupplierNum = s.counters.supplier; nextBookingNum = s.counters.booking;
@@ -303,6 +366,35 @@ function resyncFromEntries(refIds: { supplierIds?: string[]; agentIds?: string[]
   resyncAgents();
 }
 
+/** Live balance of an account: opening ± every posted transaction. */
+export function computeAccountBalance(accountId: string): number {
+  const acc = accounts.find((a) => a.id === accountId);
+  if (!acc) return 0;
+  return entries.filter((e) => e.accountId === accountId).reduce((bal, e) => {
+    const dir = e.direction || entryDirection(e.type);
+    return dir === "in" ? bal + e.amount : bal - e.amount;
+  }, acc.openingBalance || 0);
+}
+
+/** Immutable, chronologically running ledger for one account. */
+export function buildAccountLedger(accountId: string): AccountLedgerRow[] {
+  const acc = accounts.find((a) => a.id === accountId);
+  let running = acc?.openingBalance || 0;
+  return entries
+    .filter((e) => e.accountId === accountId)
+    .slice()
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id < b.id ? -1 : 1))
+    .map((e) => {
+      const direction = e.direction || entryDirection(e.type);
+      running = direction === "in" ? running + e.amount : running - e.amount;
+      return {
+        id: e.id, date: e.date,
+        description: `${e.note || e.chargeCategory || e.type.replace(/_/g, " ")}${e.referenceName ? ` — ${e.referenceName}` : ""}`,
+        transactionType: e.type, amount: e.amount, direction, runningBalanceAfter: running,
+      };
+    });
+}
+
 export function useStore() {
   const [, setTick] = useState(0);
   const rerender = useCallback(() => setTick((t) => t + 1), []);
@@ -322,6 +414,42 @@ export function useStore() {
     entries,
     opening,
     groups,
+    accounts,
+    alertSettings,
+    readAlerts,
+
+    // Accounts (Chart of Accounts) CRUD
+    addAccount: (data: Omit<Account, "id">) => {
+      const id = `AC-${String(nextAccountNum++).padStart(3, "0")}`;
+      accounts = [...accounts, { ...data, id }];
+      notify();
+      return id;
+    },
+    updateAccount: (id: string, data: Partial<Account>) => {
+      accounts = accounts.map((a) => (a.id === id ? { ...a, ...data } : a));
+      notify();
+    },
+    deleteAccount: (id: string) => {
+      accounts = accounts.filter((a) => a.id !== id);
+      notify();
+    },
+    setAlertSettings: (data: Partial<AlertSettings>) => {
+      alertSettings = { ...alertSettings, ...data };
+      notify();
+    },
+    markAlertRead: (id: string) => {
+      if (!readAlerts.includes(id)) readAlerts = [...readAlerts, id];
+      notify();
+    },
+    markAllAlertsRead: (ids: string[]) => {
+      readAlerts = [...new Set([...readAlerts, ...ids])];
+      notify();
+    },
+    /** Set the reconciliation state of a supplier purchase row. */
+    setEntryReconciled: (id: string, state: "recorded" | "matched" | "unmatched") => {
+      entries = entries.map((e) => (e.id === id ? { ...e, reconciled: state } : e));
+      notify();
+    },
 
     // Purchase Groups CRUD
     addGroup: (data: Omit<PurchaseGroup, "id" | "createdAt">) => {
@@ -612,6 +740,7 @@ export function useStore() {
       entries = [];
       monthlyData = [];
       groups = [];
+      readAlerts = [];
       if (!opts?.keepOpening) opening = { ...defaultOpening };
       nextClientNum = 1; nextAgentNum = 1; nextSupplierNum = 1;
       nextBookingNum = 1; nextHeadNum = 1; nextEntryNum = 1; nextGroupNum = 1;
