@@ -4,6 +4,7 @@ import { DollarSign, Users, BookOpen, TrendingUp, Clock, Receipt } from "lucide-
 import StatsCard from "@/components/StatsCard";
 import StatusBadge from "@/components/StatusBadge";
 import PageHeader from "@/components/PageHeader";
+import NewEntryDialog from "@/components/NewEntryDialog";
 import { formatCurrency } from "@/lib/data";
 import { useStore } from "@/lib/store";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
@@ -74,7 +75,7 @@ function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Dashboard" subtitle="Overview of your travel business" />
+      <PageHeader title="Dashboard" subtitle="Overview of your travel business" actions={<NewEntryDialog />} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <StatsCard title="Total Revenue" value={formatCurrency(totalRevenue)} icon={DollarSign} delay={0} />
