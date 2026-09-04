@@ -143,20 +143,39 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
               {type === "supplier" && renderSupplierFull(data as Supplier, getSupplierStats(data as Supplier), () => setSubView("bookings"))}
               {type === "booking" && renderBooking(data as Booking)}
 
-              {entries.length > 0 && type === "agent" && (
-                <>
-                  <LedgerBlock
-                    title="Commission Ledger"
-                    hint="Commission payouts settled to this agent."
-                    rows={entries.filter((e) => e.type === "agent_commission" && e.referenceId === (data as Agent).id)}
-                  />
-                  <LedgerBlock
-                    title="Client Business Ledger"
-                    hint="Every client transaction of the bookings this agent brought — receipts, extra charges and refunds."
-                    rows={entries.filter((e) => e.type === "client_receive" || e.type === "client_charge" || e.type === "client_refund")}
-                  />
-                </>
-              )}
+              {type === "agent" && (() => {
+                const agent = data as Agent;
+                const headIds = new Set(allBookings.filter((b) => b.agentId === agent.id).map((b) => b.headId));
+                const commissionRows = entries.filter((e) => e.type === "agent_commission" && e.referenceId === agent.id);
+                const businessRows = entries.filter(
+                  (e) => ["client_receive", "client_charge", "client_refund"].includes(e.type) && !!e.headId && headIds.has(e.headId)
+                );
+                const otherSaleRows = entries.filter((e) => e.type === "other_sale" && (e.referenceId === agent.id || e.agentId === agent.id));
+                return (
+                  <Tabs defaultValue="commission" className="w-full">
+                    <TabsList className="w-full">
+                      <TabsTrigger value="commission" className="flex-1 text-[11px]">Commission ({commissionRows.length})</TabsTrigger>
+                      <TabsTrigger value="business" className="flex-1 text-[11px]">Business Ledger ({businessRows.length})</TabsTrigger>
+                      <TabsTrigger value="other" className="flex-1 text-[11px]">Other Sale ({otherSaleRows.length})</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="commission" className="mt-3">
+                      {commissionRows.length ? (
+                        <LedgerBlock title="Commission Ledger" hint="Commission payouts settled to this agent." rows={commissionRows} />
+                      ) : <EmptyLedger label="No commission payout recorded yet." />}
+                    </TabsContent>
+                    <TabsContent value="business" className="mt-3">
+                      {businessRows.length ? (
+                        <LedgerBlock title="Client Business Ledger" hint="Only the client transactions of bookings this agent brought — receipts, extra charges and refunds." rows={businessRows} />
+                      ) : <EmptyLedger label="No client transaction on this agent's bookings yet." />}
+                    </TabsContent>
+                    <TabsContent value="other" className="mt-3">
+                      {otherSaleRows.length ? (
+                        <LedgerBlock title="Other Sale Ledger" hint="Non-package income booked through this agent (tickets, visa services, misc. sales)." rows={otherSaleRows} />
+                      ) : <EmptyLedger label="No other-sale income booked through this agent." />}
+                    </TabsContent>
+                  </Tabs>
+                );
+              })()}
               {entries.length > 0 && type !== "agent" && (
                 <LedgerBlock title="Transaction History" rows={entries} />
               )}
