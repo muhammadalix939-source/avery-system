@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import PageHeader from "@/components/PageHeader";
 import GroupSeatStrip from "@/components/GroupSeatStrip";
+import NewEntryDialog from "@/components/NewEntryDialog";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { formatCurrency, getClientName } from "@/lib/data";
 import { useStore, computeGroupUsedPax, type LedgerEntry } from "@/lib/store";
