@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import PageHeader from "@/components/PageHeader";
 import GroupSeatStrip from "@/components/GroupSeatStrip";
+import NewEntryDialog from "@/components/NewEntryDialog";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { formatCurrency, getClientName } from "@/lib/data";
 import { useStore, computeGroupUsedPax, type LedgerEntry } from "@/lib/store";
@@ -693,18 +694,21 @@ function EntriesPage() {
         title="Entries & Ledger"
         subtitle="All financial transactions"
         actions={
-          <Dialog open={addOpen} onOpenChange={setAddOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2" onClick={() => { setForm({ date: getPKTDate(), type: "client_receive", headId: "", referenceId: "", referenceName: "", amount: "", note: "" }); setDetails(emptyDetails); setServiceCategory(""); setAutoTotal(true); setExtra({ clientId: "", chargeCategory: "", refundOf: "", refundReason: "" }); setGroupMode("none"); setGroupId(""); }}>
-                <Plus className="h-4 w-4" /> New Entry
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="bg-card border-border max-h-[90vh] overflow-y-auto">
-              <DialogHeader><DialogTitle>Add New Entry</DialogTitle></DialogHeader>
-              {formFields}
-              <Button onClick={handleAdd} className="w-full">Submit Entry</Button>
-            </DialogContent>
-          </Dialog>
+          <div className="flex items-center gap-2">
+            <NewEntryDialog />
+            <Dialog open={addOpen} onOpenChange={setAddOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="gap-2" onClick={() => { setForm({ date: getPKTDate(), type: "client_receive", headId: "", referenceId: "", referenceName: "", amount: "", note: "" }); setDetails(emptyDetails); setServiceCategory(""); setAutoTotal(true); setExtra({ clientId: "", chargeCategory: "", refundOf: "", refundReason: "" }); setGroupMode("none"); setGroupId(""); }}>
+                  <Plus className="h-4 w-4" /> Advanced Entry
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="bg-card border-border max-h-[90vh] overflow-y-auto">
+                <DialogHeader><DialogTitle>Advanced Entry — full service breakdown</DialogTitle></DialogHeader>
+                {formFields}
+                <Button onClick={handleAdd} className="w-full">Submit Entry</Button>
+              </DialogContent>
+            </Dialog>
+          </div>
         }
       />
 
