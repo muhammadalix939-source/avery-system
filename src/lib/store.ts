@@ -177,7 +177,7 @@ const defaultAlertSettings: AlertSettings = { lowBalance: 20000, agentDueLimit: 
 
 /** Money direction implied by an entry type (used for Account posting). */
 export function entryDirection(type: LedgerEntry["type"]): "in" | "out" {
-  return type === "client_receive" || type === "supplier_refund" || type === "other_sale" ? "in" : "out";
+  return type === "client_receive" || type === "supplier_refund" || type === "other_sale" || type === "agent_receive" ? "in" : "out";
 }
 
 // ---------- Persistence (localStorage) ----------
