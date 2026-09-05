@@ -54,7 +54,7 @@ const typeColors: Record<LedgerEntry["type"], string> = {
 };
 
 /** Money that flows INTO the business (shown with a + sign). */
-const INFLOW_TYPES: LedgerEntry["type"][] = ["client_receive", "supplier_refund", "other_sale"];
+const INFLOW_TYPES: LedgerEntry["type"][] = ["client_receive", "supplier_refund", "other_sale", "agent_receive"];
 
 export const CHARGE_CATEGORIES = [
   "Embassy / Send-to-Embassy Fee",
