@@ -5,6 +5,41 @@ import { mockClients, mockBookings, mockAgents, mockSuppliers, mockMonthlyData a
 import { defaultChecklist } from "./checklist";
 import { getPKTDate } from "./date-utils";
 
+/** One line of a supplier payment: which purchase / service it clears. */
+export interface PaymentAllocation {
+  /** Purchase entry being settled (empty = free adjustment). */
+  entryId?: string;
+  label: string;
+  serviceCategory?: string;
+  clientId?: string;
+  headId?: string;
+  agentId?: string;
+  amount: number;
+}
+
+/** Where the money physically landed on the counter-party side (bank slip data). */
+export interface BeneficiaryDetails {
+  method?: "Cash" | "Bank" | "Mobile Wallet" | "Cheque";
+  bankName?: string;
+  accountTitle?: string;
+  accountNumber?: string;
+  startDigits?: string;
+  endDigits?: string;
+  slipRef?: string;
+}
+
+/** Service-level identifiers captured on a purchase (ticket / visa / voucher). */
+export interface ServiceRef {
+  ticketNumber?: string;
+  pnr?: string;
+  airline?: string;
+  sector?: string;
+  passengerName?: string;
+  travelDate?: string;
+  visaNumber?: string;
+  documentNo?: string;
+}
+
 export interface LedgerEntry {
   id: string;
   date: string;
@@ -12,6 +47,7 @@ export interface LedgerEntry {
     | "client_receive"
     | "supplier_payment"
     | "agent_commission"
+    | "agent_receive"
     | "expense"
     | "purchase"
     | "client_charge"
@@ -49,6 +85,21 @@ export interface LedgerEntry {
   reflectInClientLedger?: boolean;
   /** Gift & Expense category. */
   giftCategory?: "Gift" | "Expense";
+  /** How the money moved (voucher classification). */
+  paymentMethod?: "Cash" | "Bank" | "Mobile Wallet" | "Cheque";
+  /** Voucher / slip / transaction reference number. */
+  referenceNo?: string;
+  /** Purchase bought for an agent: price re-sold to the agent (posted as other_sale). */
+  agentSaleAmount?: number;
+  /** Pairs entries together (purchase ↔ agent other-sale, refund ↔ original). */
+  linkedEntryId?: string;
+  /** Ticket / visa / voucher identifiers. */
+  serviceRef?: ServiceRef;
+  /** Supplier payment: which purchases / services this payment clears. */
+  allocations?: PaymentAllocation[];
+  /** Counter-party receiving account (bank slip data). */
+  beneficiary?: BeneficiaryDetails;
+
   // For purchase entries: which service was bought (Hotel, Flight, Visa, Transport, Other)
   serviceCategory?: string;
   // Category-specific breakdown captured on purchase entries
