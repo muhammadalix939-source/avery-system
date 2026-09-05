@@ -9,6 +9,11 @@ import type { LedgerEntry } from "@/lib/store";
 import { generateClientStatement, generateSupplierLedger, generateAgentReport, generatePaymentHistory } from "@/lib/pdf";
 import { formatCurrency as fc } from "@/lib/data";
 import { useState } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+function EmptyLedger({ label }: { label: string }) {
+  return <p className="rounded-lg border border-dashed border-border/60 px-3 py-6 text-center text-[11px] text-muted-foreground">{label}</p>;
+}
 
 interface DetailDialogProps {
   open: boolean;
