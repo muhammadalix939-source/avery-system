@@ -88,6 +88,7 @@ function AgentsPage() {
     return store.entries.filter(
       (e) =>
         (e.type === "agent_commission" && e.referenceId === selected.id) ||
+        (e.type === "other_sale" && (e.referenceId === selected.id || e.agentId === selected.id)) ||
         (clientTypes.has(e.type) && e.headId && agentHeads.has(e.headId)) ||
         (e.agentId === selected.id && e.type === "supplier_payment")
     );
