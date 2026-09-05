@@ -42,6 +42,8 @@ const typeColors: Record<LedgerEntry["type"], string> = {
   purchase: "text-warning",
   supplier_payment: "text-destructive",
   agent_commission: "text-warning",
+  agent_receive: "text-success",
+
   expense: "text-destructive",
   client_charge: "text-primary",
   client_refund: "text-destructive",
