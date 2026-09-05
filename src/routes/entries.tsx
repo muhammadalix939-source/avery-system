@@ -26,6 +26,8 @@ const typeLabels: Record<LedgerEntry["type"], string> = {
   purchase: "Purchase from Supplier",
   supplier_payment: "Supplier Payment",
   agent_commission: "Agent Commission",
+  agent_receive: "Payment Received from Agent",
+
   expense: "Expense",
   client_charge: "Extra Charge to Client",
   client_refund: "Refund to Client",
@@ -40,6 +42,8 @@ const typeColors: Record<LedgerEntry["type"], string> = {
   purchase: "text-warning",
   supplier_payment: "text-destructive",
   agent_commission: "text-warning",
+  agent_receive: "text-success",
+
   expense: "text-destructive",
   client_charge: "text-primary",
   client_refund: "text-destructive",
@@ -50,7 +54,7 @@ const typeColors: Record<LedgerEntry["type"], string> = {
 };
 
 /** Money that flows INTO the business (shown with a + sign). */
-const INFLOW_TYPES: LedgerEntry["type"][] = ["client_receive", "supplier_refund", "other_sale"];
+const INFLOW_TYPES: LedgerEntry["type"][] = ["client_receive", "supplier_refund", "other_sale", "agent_receive"];
 
 export const CHARGE_CATEGORIES = [
   "Embassy / Send-to-Embassy Fee",
