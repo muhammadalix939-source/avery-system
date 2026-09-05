@@ -26,6 +26,8 @@ const typeLabels: Record<LedgerEntry["type"], string> = {
   purchase: "Purchase from Supplier",
   supplier_payment: "Supplier Payment",
   agent_commission: "Agent Commission",
+  agent_receive: "Payment Received from Agent",
+
   expense: "Expense",
   client_charge: "Extra Charge to Client",
   client_refund: "Refund to Client",
