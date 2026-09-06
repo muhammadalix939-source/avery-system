@@ -610,17 +610,51 @@ function StatementView({
           <p className="text-xs text-muted-foreground text-center py-6">No transactions recorded yet.</p>
         )}
 
+        {(() => {
+          const open = supplierOpenItems(entries, s.id);
+          if (open.length === 0) return null;
+          const onAccount = supplierOnAccount(entries, s.id);
+          return (
+            <SectionCard title="Open Items & Settlement" rightLabel={formatCurrency(open.reduce((t, o) => t + o.balance, 0))}>
+              <div className="space-y-2">
+                {open.map((o) => {
+                  const state = settlementState(o);
+                  const tone = state === "Paid" ? "text-success" : state === "Partial" ? "text-warning" : "text-destructive";
+                  return (
+                    <div key={o.entry.id} className="flex items-center justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2 text-xs">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{o.label}</p>
+                        <p className="text-[10px] text-muted-foreground">{o.entry.date} · {o.tag}</p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="font-semibold">{formatCurrency(o.gross)}</p>
+                        <p className={`text-[10px] ${tone}`}>{state} · Bal {formatCurrency(o.balance)}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+                {onAccount > 0 && (
+                  <p className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-[11px] text-primary">
+                    Advance sitting with supplier (On Account): <span className="font-semibold">{formatCurrency(onAccount)}</span>
+                  </p>
+                )}
+              </div>
+            </SectionCard>
+          );
+        })()}
+
         {Array.from(grouped.entries()).map(([label, items]) => {
           const subtotal = items.reduce((s, e) => s + e.amount, 0);
           return (
             <SectionCard key={label} title={label} rightLabel={formatCurrency(subtotal)}>
               <StatementTable
-                columns={["Date", "Description", "Amount"]}
-                rows={items.map((e) => [e.date, e.note || "—", formatCurrency(e.amount)])}
+                columns={["Date", "Reference", "Amount"]}
+                rows={items.map((e) => [e.date, `${e.note || "—"}${e.headId || e.agentId ? ` · ${purchaseTag(e)}` : ""}`, formatCurrency(e.amount)])}
               />
             </SectionCard>
           );
         })}
+
 
         {payments.length > 0 && (
           <SectionCard title="Payments Made" rightLabel={formatCurrency(paidTotal)} tone="success">
