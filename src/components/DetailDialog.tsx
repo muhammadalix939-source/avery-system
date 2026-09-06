@@ -10,6 +10,8 @@ import { generateClientStatement, generateSupplierLedger, generateAgentReport, g
 import { formatCurrency as fc } from "@/lib/data";
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { supplierOpenItems, supplierOnAccount, settlementState, purchaseTag } from "@/lib/settlement";
+
 
 function EmptyLedger({ label }: { label: string }) {
   return <p className="rounded-lg border border-dashed border-border/60 px-3 py-6 text-center text-[11px] text-muted-foreground">{label}</p>;
@@ -75,17 +77,28 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
   function getAgentStats(a: Agent) {
     const agentBookings = allBookings.filter((b) => b.agentId === a.id);
     const agentClients = allClients.filter((c) => agentBookings.some((b) => b.headId === c.headId));
+    const headIds = new Set(agentBookings.map((b) => b.headId));
     const totalSales = agentBookings.reduce((s, b) => s + b.totalAmount, 0) + (a.openingSales || 0);
+    const otherSales = entries.filter((e) => e.type === "other_sale" && (e.referenceId === a.id || e.agentId === a.id)).reduce((s, e) => s + e.amount, 0);
     const totalCommission = agentBookings.reduce((s, b) => s + (b.commission || 0), 0) + (a.openingCommission || 0);
     const paidCommission = entries.filter((e) => e.type === "agent_commission" && e.referenceId === a.id).reduce((s, e) => s + e.amount, 0) + (a.openingPaidCommission || 0);
-    const received = agentBookings.reduce((s, b) => s + (b.amountReceived || 0), 0);
-    const netReceivable = Math.max(0, totalSales - totalCommission);
+    const receivedFromClients = entries
+      .filter((e) => e.type === "client_receive" && !!e.headId && headIds.has(e.headId))
+      .reduce((s, e) => s + e.amount, 0);
+    const receivedFromAgent = entries
+      .filter((e) => e.type === "agent_receive" && (e.referenceId === a.id || e.agentId === a.id))
+      .reduce((s, e) => s + e.amount, 0);
+    const bookingReceived = agentBookings.reduce((s, b) => s + (b.amountReceived || 0), 0);
+    const received = Math.max(receivedFromClients, bookingReceived) + receivedFromAgent;
+    const netReceivable = Math.max(0, totalSales + otherSales - totalCommission);
     return {
-      agentBookings, agentClients, totalSales, totalCommission, paidCommission,
+      agentBookings, agentClients, totalSales, otherSales, totalCommission, paidCommission,
       payable: totalCommission - paidCommission,
+      receivedFromClients: Math.max(receivedFromClients, bookingReceived), receivedFromAgent,
       received, netReceivable, outstanding: netReceivable - received,
     };
   }
+
 
   // Compute supplier stats from bookings
   function getSupplierStats(s: Supplier) {
@@ -156,12 +169,14 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
                   (e) => ["client_receive", "client_charge", "client_refund"].includes(e.type) && !!e.headId && headIds.has(e.headId)
                 );
                 const otherSaleRows = entries.filter((e) => e.type === "other_sale" && (e.referenceId === agent.id || e.agentId === agent.id));
+                const receiptRows = entries.filter((e) => e.type === "agent_receive" && (e.referenceId === agent.id || e.agentId === agent.id));
                 return (
                   <Tabs defaultValue="commission" className="w-full">
                     <TabsList className="w-full">
-                      <TabsTrigger value="commission" className="flex-1 text-[11px]">Commission ({commissionRows.length})</TabsTrigger>
-                      <TabsTrigger value="business" className="flex-1 text-[11px]">Business Ledger ({businessRows.length})</TabsTrigger>
-                      <TabsTrigger value="other" className="flex-1 text-[11px]">Other Sale ({otherSaleRows.length})</TabsTrigger>
+                      <TabsTrigger value="commission" className="flex-1 text-[10px]">Commission ({commissionRows.length})</TabsTrigger>
+                      <TabsTrigger value="business" className="flex-1 text-[10px]">Business ({businessRows.length})</TabsTrigger>
+                      <TabsTrigger value="other" className="flex-1 text-[10px]">Other Sale ({otherSaleRows.length})</TabsTrigger>
+                      <TabsTrigger value="receipts" className="flex-1 text-[10px]">Receipts ({receiptRows.length})</TabsTrigger>
                     </TabsList>
                     <TabsContent value="commission" className="mt-3">
                       {commissionRows.length ? (
@@ -178,7 +193,13 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
                         <LedgerBlock title="Other Sale Ledger" hint="Non-package income booked through this agent (tickets, visa services, misc. sales)." rows={otherSaleRows} />
                       ) : <EmptyLedger label="No other-sale income booked through this agent." />}
                     </TabsContent>
+                    <TabsContent value="receipts" className="mt-3">
+                      {receiptRows.length ? (
+                        <LedgerBlock title="Payments Received from Agent" hint="Cash / bank received directly from the agent against his own sales and other-sale business." rows={receiptRows} />
+                      ) : <EmptyLedger label="No payment received directly from this agent yet." />}
+                    </TabsContent>
                   </Tabs>
+
                 );
               })()}
               {entries.length > 0 && type !== "agent" && (
@@ -241,11 +262,15 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
               <div className="space-y-3">
                 <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-1.5">
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">Business Account (Receivable from Agent)</p>
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Gross Sale</span><span className="font-medium">{formatCurrency(stats.totalSales)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Package Sale</span><span className="font-medium">{formatCurrency(stats.totalSales)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Add: Other Sale</span><span className="font-medium text-primary">+ {formatCurrency(stats.otherSales)}</span></div>
                   <div className="flex justify-between text-xs"><span className="text-muted-foreground">Less: Agent Commission</span><span className="text-destructive">− {formatCurrency(stats.totalCommission)}</span></div>
                   <div className="flex justify-between border-t border-border/50 pt-1.5 text-xs font-semibold"><span>Net Receivable</span><span className="text-primary">{formatCurrency(stats.netReceivable)}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Received</span><span className="text-success">{formatCurrency(stats.received)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Received from Clients</span><span className="text-success">{formatCurrency(stats.receivedFromClients)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Received from Agent</span><span className="text-success">{formatCurrency(stats.receivedFromAgent)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Total Received</span><span className="font-medium text-success">{formatCurrency(stats.received)}</span></div>
                   <div className="flex justify-between border-t border-border/50 pt-1.5 text-sm font-bold"><span>Remaining</span><span className={stats.outstanding > 0 ? "text-destructive" : "text-success"}>{formatCurrency(stats.outstanding)}</span></div>
+
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   <StatCard label="Bookings" value={String(stats.agentBookings.length)} />
@@ -346,10 +371,15 @@ const ENTRY_LABELS: Record<string, string> = {
   supplier_payment: "Supplier Payment",
   supplier_refund: "Refund from Supplier",
   agent_commission: "Commission Paid",
+  agent_receive: "Received from Agent",
+  other_sale: "Other Sale",
+  gift: "Gift / Expense",
+  drawing: "Owner Drawing",
   purchase: "Purchase",
   expense: "Expense",
 };
-const INFLOW = new Set(["client_receive", "supplier_refund"]);
+const INFLOW = new Set(["client_receive", "supplier_refund", "other_sale", "agent_receive"]);
+
 
 function LedgerBlock({ title, hint, rows }: { title: string; hint?: string; rows: LedgerEntry[] }) {
   if (rows.length === 0) return null;
@@ -582,17 +612,51 @@ function StatementView({
           <p className="text-xs text-muted-foreground text-center py-6">No transactions recorded yet.</p>
         )}
 
+        {(() => {
+          const open = supplierOpenItems(entries, s.id);
+          if (open.length === 0) return null;
+          const onAccount = supplierOnAccount(entries, s.id);
+          return (
+            <SectionCard title="Open Items & Settlement" rightLabel={formatCurrency(open.reduce((t, o) => t + o.balance, 0))}>
+              <div className="space-y-2">
+                {open.map((o) => {
+                  const state = settlementState(o);
+                  const tone = state === "Paid" ? "text-success" : state === "Partial" ? "text-warning" : "text-destructive";
+                  return (
+                    <div key={o.entry.id} className="flex items-center justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2 text-xs">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{o.label}</p>
+                        <p className="text-[10px] text-muted-foreground">{o.entry.date} · {o.tag}</p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="font-semibold">{formatCurrency(o.gross)}</p>
+                        <p className={`text-[10px] ${tone}`}>{state} · Bal {formatCurrency(o.balance)}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+                {onAccount > 0 && (
+                  <p className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-[11px] text-primary">
+                    Advance sitting with supplier (On Account): <span className="font-semibold">{formatCurrency(onAccount)}</span>
+                  </p>
+                )}
+              </div>
+            </SectionCard>
+          );
+        })()}
+
         {Array.from(grouped.entries()).map(([label, items]) => {
           const subtotal = items.reduce((s, e) => s + e.amount, 0);
           return (
             <SectionCard key={label} title={label} rightLabel={formatCurrency(subtotal)}>
               <StatementTable
-                columns={["Date", "Description", "Amount"]}
-                rows={items.map((e) => [e.date, e.note || "—", formatCurrency(e.amount)])}
+                columns={["Date", "Reference", "Amount"]}
+                rows={items.map((e) => [e.date, `${e.note || "—"}${e.headId || e.agentId ? ` · ${purchaseTag(e)}` : ""}`, formatCurrency(e.amount)])}
               />
             </SectionCard>
           );
         })}
+
 
         {payments.length > 0 && (
           <SectionCard title="Payments Made" rightLabel={formatCurrency(paidTotal)} tone="success">
