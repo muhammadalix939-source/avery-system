@@ -75,17 +75,28 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
   function getAgentStats(a: Agent) {
     const agentBookings = allBookings.filter((b) => b.agentId === a.id);
     const agentClients = allClients.filter((c) => agentBookings.some((b) => b.headId === c.headId));
+    const headIds = new Set(agentBookings.map((b) => b.headId));
     const totalSales = agentBookings.reduce((s, b) => s + b.totalAmount, 0) + (a.openingSales || 0);
+    const otherSales = entries.filter((e) => e.type === "other_sale" && (e.referenceId === a.id || e.agentId === a.id)).reduce((s, e) => s + e.amount, 0);
     const totalCommission = agentBookings.reduce((s, b) => s + (b.commission || 0), 0) + (a.openingCommission || 0);
     const paidCommission = entries.filter((e) => e.type === "agent_commission" && e.referenceId === a.id).reduce((s, e) => s + e.amount, 0) + (a.openingPaidCommission || 0);
-    const received = agentBookings.reduce((s, b) => s + (b.amountReceived || 0), 0);
-    const netReceivable = Math.max(0, totalSales - totalCommission);
+    const receivedFromClients = entries
+      .filter((e) => e.type === "client_receive" && !!e.headId && headIds.has(e.headId))
+      .reduce((s, e) => s + e.amount, 0);
+    const receivedFromAgent = entries
+      .filter((e) => e.type === "agent_receive" && (e.referenceId === a.id || e.agentId === a.id))
+      .reduce((s, e) => s + e.amount, 0);
+    const bookingReceived = agentBookings.reduce((s, b) => s + (b.amountReceived || 0), 0);
+    const received = Math.max(receivedFromClients, bookingReceived) + receivedFromAgent;
+    const netReceivable = Math.max(0, totalSales + otherSales - totalCommission);
     return {
-      agentBookings, agentClients, totalSales, totalCommission, paidCommission,
+      agentBookings, agentClients, totalSales, otherSales, totalCommission, paidCommission,
       payable: totalCommission - paidCommission,
+      receivedFromClients: Math.max(receivedFromClients, bookingReceived), receivedFromAgent,
       received, netReceivable, outstanding: netReceivable - received,
     };
   }
+
 
   // Compute supplier stats from bookings
   function getSupplierStats(s: Supplier) {
