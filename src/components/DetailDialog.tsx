@@ -252,11 +252,15 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
               <div className="space-y-3">
                 <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-1.5">
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">Business Account (Receivable from Agent)</p>
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Gross Sale</span><span className="font-medium">{formatCurrency(stats.totalSales)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Package Sale</span><span className="font-medium">{formatCurrency(stats.totalSales)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Add: Other Sale</span><span className="font-medium text-primary">+ {formatCurrency(stats.otherSales)}</span></div>
                   <div className="flex justify-between text-xs"><span className="text-muted-foreground">Less: Agent Commission</span><span className="text-destructive">− {formatCurrency(stats.totalCommission)}</span></div>
                   <div className="flex justify-between border-t border-border/50 pt-1.5 text-xs font-semibold"><span>Net Receivable</span><span className="text-primary">{formatCurrency(stats.netReceivable)}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Received</span><span className="text-success">{formatCurrency(stats.received)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Received from Clients</span><span className="text-success">{formatCurrency(stats.receivedFromClients)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Received from Agent</span><span className="text-success">{formatCurrency(stats.receivedFromAgent)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Total Received</span><span className="font-medium text-success">{formatCurrency(stats.received)}</span></div>
                   <div className="flex justify-between border-t border-border/50 pt-1.5 text-sm font-bold"><span>Remaining</span><span className={stats.outstanding > 0 ? "text-destructive" : "text-success"}>{formatCurrency(stats.outstanding)}</span></div>
+
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   <StatCard label="Bookings" value={String(stats.agentBookings.length)} />
