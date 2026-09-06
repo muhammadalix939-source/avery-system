@@ -167,12 +167,14 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
                   (e) => ["client_receive", "client_charge", "client_refund"].includes(e.type) && !!e.headId && headIds.has(e.headId)
                 );
                 const otherSaleRows = entries.filter((e) => e.type === "other_sale" && (e.referenceId === agent.id || e.agentId === agent.id));
+                const receiptRows = entries.filter((e) => e.type === "agent_receive" && (e.referenceId === agent.id || e.agentId === agent.id));
                 return (
                   <Tabs defaultValue="commission" className="w-full">
                     <TabsList className="w-full">
-                      <TabsTrigger value="commission" className="flex-1 text-[11px]">Commission ({commissionRows.length})</TabsTrigger>
-                      <TabsTrigger value="business" className="flex-1 text-[11px]">Business Ledger ({businessRows.length})</TabsTrigger>
-                      <TabsTrigger value="other" className="flex-1 text-[11px]">Other Sale ({otherSaleRows.length})</TabsTrigger>
+                      <TabsTrigger value="commission" className="flex-1 text-[10px]">Commission ({commissionRows.length})</TabsTrigger>
+                      <TabsTrigger value="business" className="flex-1 text-[10px]">Business ({businessRows.length})</TabsTrigger>
+                      <TabsTrigger value="other" className="flex-1 text-[10px]">Other Sale ({otherSaleRows.length})</TabsTrigger>
+                      <TabsTrigger value="receipts" className="flex-1 text-[10px]">Receipts ({receiptRows.length})</TabsTrigger>
                     </TabsList>
                     <TabsContent value="commission" className="mt-3">
                       {commissionRows.length ? (
@@ -189,7 +191,13 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
                         <LedgerBlock title="Other Sale Ledger" hint="Non-package income booked through this agent (tickets, visa services, misc. sales)." rows={otherSaleRows} />
                       ) : <EmptyLedger label="No other-sale income booked through this agent." />}
                     </TabsContent>
+                    <TabsContent value="receipts" className="mt-3">
+                      {receiptRows.length ? (
+                        <LedgerBlock title="Payments Received from Agent" hint="Cash / bank received directly from the agent against his own sales and other-sale business." rows={receiptRows} />
+                      ) : <EmptyLedger label="No payment received directly from this agent yet." />}
+                    </TabsContent>
                   </Tabs>
+
                 );
               })()}
               {entries.length > 0 && type !== "agent" && (
