@@ -10,6 +10,8 @@ import { generateClientStatement, generateSupplierLedger, generateAgentReport, g
 import { formatCurrency as fc } from "@/lib/data";
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { supplierOpenItems, supplierOnAccount, settlementState, purchaseTag } from "@/lib/settlement";
+
 
 function EmptyLedger({ label }: { label: string }) {
   return <p className="rounded-lg border border-dashed border-border/60 px-3 py-6 text-center text-[11px] text-muted-foreground">{label}</p>;
