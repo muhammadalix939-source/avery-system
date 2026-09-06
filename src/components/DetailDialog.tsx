@@ -369,10 +369,15 @@ const ENTRY_LABELS: Record<string, string> = {
   supplier_payment: "Supplier Payment",
   supplier_refund: "Refund from Supplier",
   agent_commission: "Commission Paid",
+  agent_receive: "Received from Agent",
+  other_sale: "Other Sale",
+  gift: "Gift / Expense",
+  drawing: "Owner Drawing",
   purchase: "Purchase",
   expense: "Expense",
 };
-const INFLOW = new Set(["client_receive", "supplier_refund"]);
+const INFLOW = new Set(["client_receive", "supplier_refund", "other_sale", "agent_receive"]);
+
 
 function LedgerBlock({ title, hint, rows }: { title: string; hint?: string; rows: LedgerEntry[] }) {
   if (rows.length === 0) return null;
