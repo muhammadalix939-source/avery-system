@@ -8,7 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import PageHeader from "@/components/PageHeader";
 import GroupSeatStrip from "@/components/GroupSeatStrip";
-import NewEntryDialog from "@/components/NewEntryDialog";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { formatCurrency, getClientName } from "@/lib/data";
 import { useStore, computeGroupUsedPax, type LedgerEntry } from "@/lib/store";
@@ -26,8 +25,6 @@ const typeLabels: Record<LedgerEntry["type"], string> = {
   purchase: "Purchase from Supplier",
   supplier_payment: "Supplier Payment",
   agent_commission: "Agent Commission",
-  agent_receive: "Payment Received from Agent",
-
   expense: "Expense",
   client_charge: "Extra Charge to Client",
   client_refund: "Refund to Client",
@@ -42,8 +39,6 @@ const typeColors: Record<LedgerEntry["type"], string> = {
   purchase: "text-warning",
   supplier_payment: "text-destructive",
   agent_commission: "text-warning",
-  agent_receive: "text-success",
-
   expense: "text-destructive",
   client_charge: "text-primary",
   client_refund: "text-destructive",
@@ -54,7 +49,7 @@ const typeColors: Record<LedgerEntry["type"], string> = {
 };
 
 /** Money that flows INTO the business (shown with a + sign). */
-const INFLOW_TYPES: LedgerEntry["type"][] = ["client_receive", "supplier_refund", "other_sale", "agent_receive"];
+const INFLOW_TYPES: LedgerEntry["type"][] = ["client_receive", "supplier_refund", "other_sale"];
 
 export const CHARGE_CATEGORIES = [
   "Embassy / Send-to-Embassy Fee",
@@ -698,21 +693,18 @@ function EntriesPage() {
         title="Entries & Ledger"
         subtitle="All financial transactions"
         actions={
-          <div className="flex items-center gap-2">
-            <NewEntryDialog />
-            <Dialog open={addOpen} onOpenChange={setAddOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" className="gap-2" onClick={() => { setForm({ date: getPKTDate(), type: "client_receive", headId: "", referenceId: "", referenceName: "", amount: "", note: "" }); setDetails(emptyDetails); setServiceCategory(""); setAutoTotal(true); setExtra({ clientId: "", chargeCategory: "", refundOf: "", refundReason: "" }); setGroupMode("none"); setGroupId(""); }}>
-                  <Plus className="h-4 w-4" /> Advanced Entry
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="bg-card border-border max-h-[90vh] overflow-y-auto">
-                <DialogHeader><DialogTitle>Advanced Entry — full service breakdown</DialogTitle></DialogHeader>
-                {formFields}
-                <Button onClick={handleAdd} className="w-full">Submit Entry</Button>
-              </DialogContent>
-            </Dialog>
-          </div>
+          <Dialog open={addOpen} onOpenChange={setAddOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2" onClick={() => { setForm({ date: getPKTDate(), type: "client_receive", headId: "", referenceId: "", referenceName: "", amount: "", note: "" }); setDetails(emptyDetails); setServiceCategory(""); setAutoTotal(true); setExtra({ clientId: "", chargeCategory: "", refundOf: "", refundReason: "" }); setGroupMode("none"); setGroupId(""); }}>
+                <Plus className="h-4 w-4" /> New Entry
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="bg-card border-border max-h-[90vh] overflow-y-auto">
+              <DialogHeader><DialogTitle>Add New Entry</DialogTitle></DialogHeader>
+              {formFields}
+              <Button onClick={handleAdd} className="w-full">Submit Entry</Button>
+            </DialogContent>
+          </Dialog>
         }
       />
 
