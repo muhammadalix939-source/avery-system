@@ -12,6 +12,7 @@ export interface LedgerEntry {
     | "client_receive"
     | "supplier_payment"
     | "agent_commission"
+    | "agent_receive"
     | "expense"
     | "purchase"
     | "client_charge"
@@ -39,6 +40,8 @@ export interface LedgerEntry {
   refundReason?: string;
   /** Physical money account this transaction moved through (Cash / Bank / Wallet). */
   accountId?: string;
+  /** Bank transfer / cheque / mobile wallet transaction reference number (required for non-Cash accounts). */
+  txnRef?: string;
   /** Cash direction for account posting. */
   direction?: "in" | "out";
   /** Supplier ledger reconciliation state. */
@@ -49,6 +52,14 @@ export interface LedgerEntry {
   reflectInClientLedger?: boolean;
   /** Gift & Expense category. */
   giftCategory?: "Gift" | "Expense";
+  /** Voucher / ticket / confirmation number printed on the supplier's document. */
+  voucherNo?: string;
+  /** Shared Cost Allocation: which specific members (within headId) share this purchase. */
+  sharedClientIds?: string[];
+  /** Equal = amount split evenly across sharedClientIds. Manual = clientSplits gives each person's share. */
+  splitMethod?: "equal" | "manual";
+  /** Manual per-person split amounts, keyed by client id. Must sum to `amount`. */
+  clientSplits?: Record<string, number>;
   // For purchase entries: which service was bought (Hotel, Flight, Visa, Transport, Other)
   serviceCategory?: string;
   // Category-specific breakdown captured on purchase entries
@@ -126,7 +137,7 @@ const defaultAlertSettings: AlertSettings = { lowBalance: 20000, agentDueLimit: 
 
 /** Money direction implied by an entry type (used for Account posting). */
 export function entryDirection(type: LedgerEntry["type"]): "in" | "out" {
-  return type === "client_receive" || type === "supplier_refund" || type === "other_sale" ? "in" : "out";
+  return type === "client_receive" || type === "supplier_refund" || type === "other_sale" || type === "agent_receive" ? "in" : "out";
 }
 
 // ---------- Persistence (localStorage) ----------
