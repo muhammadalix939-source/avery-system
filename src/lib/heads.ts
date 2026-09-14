@@ -2,6 +2,16 @@
 import type { Booking, Client } from "./data";
 import type { LedgerEntry } from "./store";
 
+export interface HeadBusinessMember {
+  id: string;
+  name: string;
+  ageCategory?: string;
+  amount: number;
+  received: number;
+  pending: number;
+  status: "Paid" | "Partial" | "Unpaid";
+}
+
 export interface HeadBusiness {
   headId: string;
   leadName: string;
@@ -16,6 +26,9 @@ export interface HeadBusiness {
   netProfit: number;
   received: number;
   outstanding: number;
+  supplierPaid: number;
+  supplierRemaining: number;
+  memberList: HeadBusinessMember[];
   linked: LedgerEntry[];
 }
 
@@ -42,6 +55,36 @@ export function computeHeadBusiness(
   const commission = booking?.commission || 0;
   const received = linked.filter((e) => e.type === "client_receive").reduce((s, e) => s + e.amount, 0);
 
+  // ---- Supplier Paid / Remaining for THIS head's purchases only ----
+  // 1) Payments explicitly tagged to this head (Head ID field on a Supplier Payment entry).
+  const directSupplierPaid = linked.filter((e) => e.type === "supplier_payment").reduce((s, e) => s + e.amount, 0);
+  // 2) This head may share a PNR / batch Group with other heads. Any payment made against
+  //    that group WITHOUT a specific head tag is prorated by this head's share of the group's bill.
+  const groupIds = new Set(purchaseEntries.map((e) => e.groupId).filter(Boolean) as string[]);
+  let proratedSupplierPaid = 0;
+  groupIds.forEach((gid) => {
+    const groupBill = entries.filter((e) => e.type === "purchase" && e.groupId === gid).reduce((s, e) => s + e.amount, 0);
+    const groupUntaggedPaid = entries.filter((e) => e.type === "supplier_payment" && e.groupId === gid && !e.headId).reduce((s, e) => s + e.amount, 0);
+    const thisHeadShare = purchaseEntries.filter((e) => e.groupId === gid).reduce((s, e) => s + e.amount, 0);
+    if (groupBill > 0) proratedSupplierPaid += groupUntaggedPaid * (thisHeadShare / groupBill);
+  });
+  const supplierPaid = Math.round(directSupplierPaid + proratedSupplierPaid);
+  const supplierRemaining = Math.max(0, Math.round(totalPurchase - supplierPaid));
+
+  // ---- Per-member (Members View) breakdown ----
+  // Client.amountDue / amountPaid / paymentStatus are already the resynced source of truth
+  // (kept in sync by the store from client_receive / client_charge / client_refund entries,
+  // including any Shared Cost Allocation posted from a Purchase entry). We simply expose them.
+  const memberList: HeadBusinessMember[] = members.map((c) => ({
+    id: c.id,
+    name: `${c.firstName} ${c.lastName}`.trim(),
+    ageCategory: c.ageCategory,
+    amount: c.amountDue,
+    received: c.amountPaid,
+    pending: Math.max(0, c.amountDue - c.amountPaid),
+    status: c.paymentStatus,
+  }));
+
   const lead = members[0];
   return {
     headId,
@@ -57,6 +100,9 @@ export function computeHeadBusiness(
     netProfit: netReceivable - totalPurchase - commission,
     received,
     outstanding: Math.max(0, netReceivable - received),
+    supplierPaid,
+    supplierRemaining,
+    memberList,
     linked,
   };
 }
