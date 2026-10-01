@@ -1,96 +1,27 @@
-# Financial Reports Section — Plan
+# Real-Estate CRM Conversion
 
-Naya `/reports` page banayenge — full professional financial dashboard with drill-downs. Existing dashboard untouched rahega.
+## Goal
+Transform Avery from a travel-oriented interface into a premium real-estate operations CRM while preserving the working records, financial posting, search, reporting, and account logic.
 
-## 1. New Route: `src/routes/reports.tsx`
+## Visual system
+- Replace the current black travel styling with midnight blue, brushed gold, crisp white, and cool-gray semantic tokens.
+- Use Libre Baskerville for trusted editorial headings and IBM Plex Sans for dense operational information.
+- Standardize thin architectural borders, restrained shadows, compact badges, polished tables, and responsive spacing.
+- Make navigation usable on desktop and mobile, including a scrollable module list and compact mobile rail.
 
-Sidebar mein **"Financial Reports"** entry add karenge (icon: `BarChart3` / `LineChart`) — `AppSidebar.tsx` update.
+## Domain conversion
+- Reframe the first screen around portfolio value, active deals, collections, payables, clients, and recent property transactions.
+- Rename major navigation concepts for real estate: Bookings → Deals, Groups → Properties, Suppliers → Vendors, Agents → Brokers.
+- Keep existing paths and calculations intact initially so saved records and workflows remain functional.
+- Update shared headers, cards, statuses, and metadata so the product consistently presents as Avery Real Estate CRM.
 
-## 2. Sections on Reports Page
+## First-screen experience
+- Add a professional command bar with universal search access, alerts, and a primary New Entry action.
+- Build an executive property-operations dashboard with key financial metrics, deal pipeline, portfolio mix, monthly performance, recent deals, and broker performance.
+- Ensure empty and populated states remain useful and visually consistent.
 
-### A. Top KPI Strip (executive summary)
-- Total Revenue, Total Cost, **Gross Profit**, **Net Profit**, **Profit Margin %**
-- Total Received, Total Pending (AR), Supplier Payable (AP), Cash on Hand
-- Total Expenses, Agent Commission (Earned vs Paid)
-- Each card **clickable** → opens `DetailDialog` showing the underlying transactions (entries + bookings) that make up that number.
-
-### B. Profitability Analytics
-- **Average Profit per Booking** (₨ + %)
-- **Average Revenue per Client**
-- **Average Ticket Size** (per Head ID)
-- **Conversion**: Confirmed vs Pending vs Cancelled bookings ratio
-- **Collection Efficiency** = Received / Booked Sales × 100
-
-### C. Profit Breakdown by Package Type (table + bar chart)
-Columns: Package Type | Bookings | Revenue | Cost | Profit | Margin % | Avg Profit/Booking
-Rows: Umrah, Hajj, Domestic Tour, International Tour, Honeymoon, Visa Only, etc. (groups by `booking.packageType`)
-
-### D. Agent Performance Report (table)
-Agent | Clients | Sales | Commission Earned | Paid | Outstanding | Avg Sale/Client
-
-### E. Supplier Spend Report (table)
-Supplier | Services | Total Payable | Paid | Outstanding | % of Total Spend
-
-### F. Monthly Trend (line chart + table)
-Revenue, Cost, Profit, Expenses month-wise (derived live from entries + bookings, not mock data). Shows margin trend line.
-
-### G. Cash Flow Statement
-- **Inflows**: Client Receipts (+ Opening)
-- **Outflows**: Supplier Payments + Expenses + Commission Paid
-- **Net Cash Flow** = Inflows − Outflows
-- Shown as a clean accountant-style statement.
-
-### H. Expense Breakdown (pie + table)
-Group expenses by category (existing expense entries `category` field) with % share.
-
-### I. Top Performers
-- Top 5 Most Profitable Bookings (Head IDs)
-- Top 5 Agents by Sales
-- Top 5 Suppliers by Spend
-- Top 5 Clients by Lifetime Value
-
-## 3. Drill-Down Behavior
-Har KPI card aur table row clickable hoga. Click karne pe ek dialog kholega jismein:
-- Filtered list of contributing records (bookings/entries/clients)
-- Date, party name, amount, running total
-- "Export PDF" button (using existing `src/lib/pdf.ts` helpers)
-
-## 4. Export
-Top-right pe **"Export Full Report (PDF)"** button — extends `src/lib/pdf.ts` with a `generateFinancialReport()` function.
-
-## 5. Filters (top of page)
-- Date range (This Month / Last Month / This Year / Custom)
-- Package Type filter
-- Agent filter
-- Apply karte hi sab numbers + charts recompute (purely client-side from `useStore`).
-
-## Technical Details
-
-**Files to create:**
-- `src/routes/reports.tsx` — main page
-- `src/components/reports/KpiCard.tsx` — clickable KPI tile
-- `src/components/reports/ReportDrillDialog.tsx` — drill-down dialog
-- `src/lib/reports.ts` — pure calculation helpers (revenue, cost, profit-by-package, monthly trend, etc.) so logic is testable & reusable
-
-**Files to edit:**
-- `src/components/AppSidebar.tsx` — add Reports nav item
-- `src/lib/pdf.ts` — add `generateFinancialReport()`
-- `src/routeTree.gen.ts` — auto-regenerated by Vite plugin
-
-**Formulas (consistent with current dashboard logic):**
-```
-totalRevenue       = Σ entries(client_receive) + opening.revenue
-totalCost          = Σ entries(purchase) + Σ booking.totalCost (where no purchase entry for that head)
-grossProfit        = totalRevenue − totalCost
-netProfit          = grossProfit − expenses − agentCommissionEarned + opening.profit
-margin %           = netProfit / totalRevenue × 100
-cashOnHand         = totalRevenue − supplierPaid − expenses − commissionPaid
-avgProfitPerBooking= netProfit / bookingsCount
-collectionEff %    = received / bookedSales × 100
-```
-
-**Reactivity:** Sab kuch live `useStore()` se aata hai — booking add/delete/edit hote hi reports auto-update.
-
-**Styling:** Existing glassmorphism (`glass-card`, `gold-text`), Recharts for charts (already used), Framer Motion for entry animations — same look as dashboard.
-
-No backend / DB changes needed — pure frontend computation over existing store data.
+## Quality and safety
+- Fix the existing entry-type build error.
+- Preserve flat, disclosed financial calculations with no interest logic.
+- Verify the result at desktop and mobile sizes and resolve visible overflow or navigation issues.
+- Add unique real-estate metadata to every existing content page without changing record behavior.
