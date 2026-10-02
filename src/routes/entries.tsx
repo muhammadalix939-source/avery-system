@@ -32,6 +32,7 @@ const typeLabels: Record<LedgerEntry["type"], string> = {
   other_sale: "Other Sale",
   gift: "Gift & Expense",
   drawing: "Owner Drawing",
+  agent_receive: "Received from Agent",
 };
 
 const typeColors: Record<LedgerEntry["type"], string> = {
@@ -46,6 +47,7 @@ const typeColors: Record<LedgerEntry["type"], string> = {
   other_sale: "text-success",
   gift: "text-destructive",
   drawing: "text-destructive",
+  agent_receive: "text-success",
 };
 
 /** Money that flows INTO the business (shown with a + sign). */

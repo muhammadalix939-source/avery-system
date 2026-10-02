@@ -78,7 +78,7 @@ function Dashboard() {
     <div className="space-y-6">
       <PageHeader title="Dashboard" subtitle="Overview of your travel business" />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-3 xl:grid-cols-6">
         <StatsCard title="Total Revenue" value={formatCurrency(totalRevenue)} icon={DollarSign} delay={0} />
         <StatsCard title="Pending" value={formatCurrency(totalPending)} icon={Clock} delay={0.05} />
         <StatsCard title="Active Bookings" value={String(totalBookings)} subtitle="Head IDs" icon={BookOpen} delay={0.1} />
