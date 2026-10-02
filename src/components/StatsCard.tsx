@@ -16,12 +16,12 @@ export default function StatsCard({ title, value, subtitle, icon: Icon, trend, d
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay }}
-      className="glass-card glass-card-hover rounded-xl p-5 transition-all duration-300"
+      className="glass-card glass-card-hover rounded-xl p-4 md:p-5 transition-all duration-300"
     >
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{title}</p>
-          <p className="gold-text text-2xl font-bold">{value}</p>
+          <p className="font-display text-base text-foreground md:text-xl">{value}</p>
           {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
           {trend && (
             <p className={`text-xs font-medium ${trend.positive ? "text-success" : "text-destructive"}`}>
