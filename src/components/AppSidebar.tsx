@@ -1,8 +1,10 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import {
-  LayoutDashboard, BookOpen, Users, UserCog, Truck, CreditCard, Search, FileText, Settings, Receipt, BarChart3, Layers, Bell, Menu, X, Plane,
+  LayoutDashboard, BookOpen, Users, UserCog, Truck, CreditCard, Search, FileText, Settings, Receipt, BarChart3, Layers, Bell, Menu, X, Plane, Wallet,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useStore } from "@/lib/store";
+import { buildAlerts } from "@/lib/alerts";
 
 const sections = [
   { title: "Overview", items: [
@@ -18,6 +20,7 @@ const sections = [
     { to: "/suppliers", icon: Truck, label: "Suppliers" },
   ]},
   { title: "Finance", items: [
+    { to: "/accounts", icon: Wallet, label: "Accounts" },
     { to: "/payments", icon: CreditCard, label: "Payments" },
     { to: "/entries", icon: FileText, label: "Entries" },
     { to: "/expenses", icon: Receipt, label: "Expenses" },
@@ -31,6 +34,13 @@ const sections = [
 export default function AppSidebar() {
   const location = useLocation();
   const [open, setOpen] = useState(false);
+  const store = useStore();
+  const unread = useMemo(() => {
+    try {
+      return buildAlerts({ clients: store.clients, bookings: store.bookings, agents: store.agents, suppliers: store.suppliers, entries: store.entries, accounts: store.accounts, settings: store.alertSettings })
+        .filter((a) => !store.readAlerts.includes(a.id)).length;
+    } catch { return 0; }
+  }, [store.clients, store.bookings, store.agents, store.suppliers, store.entries, store.accounts, store.alertSettings, store.readAlerts]);
   useEffect(() => { setOpen(false); }, [location.pathname]);
 
   return (
@@ -42,9 +52,15 @@ export default function AppSidebar() {
           </div>
           <span className="font-display text-base text-foreground">Avery Travel</span>
         </div>
+        <div className="flex items-center gap-2">
+        <Link to="/alerts" aria-label="Alerts" className="relative rounded-md border border-border p-2 text-foreground">
+          <Bell className="h-5 w-5" />
+          {unread > 0 && <span className="absolute -right-1 -top-1 rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground">{unread}</span>}
+        </Link>
         <button aria-label="Open menu" onClick={() => setOpen(true)} className="rounded-md border border-border p-2 text-foreground">
           <Menu className="h-5 w-5" />
         </button>
+        </div>
       </header>
 
       {open && <div className="fixed inset-0 z-40 bg-background/70 backdrop-blur-sm md:hidden" onClick={() => setOpen(false)} />}
@@ -74,7 +90,8 @@ export default function AppSidebar() {
                     >
                       {isActive && <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-r bg-primary" />}
                       <item.icon className={`h-4 w-4 shrink-0 ${isActive ? "text-primary" : ""}`} />
-                      <span>{item.label}</span>
+                      <span className="flex-1">{item.label}</span>
+                      {item.to === "/alerts" && unread > 0 && <span className="rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-semibold leading-none text-destructive-foreground">{unread}</span>}
                     </Link>
                   );
                 })}
