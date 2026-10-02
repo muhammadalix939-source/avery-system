@@ -21,7 +21,7 @@ export default function StatsCard({ title, value, subtitle, icon: Icon, trend, d
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{title}</p>
-          <p className="gold-text text-2xl font-bold">{value}</p>
+          <p className="font-display text-xl text-foreground">{value}</p>
           {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
           {trend && (
             <p className={`text-xs font-medium ${trend.positive ? "text-success" : "text-destructive"}`}>

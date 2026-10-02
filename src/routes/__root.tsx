@@ -61,7 +61,7 @@ function RootComponent() {
   return (
     <div className="flex min-h-screen">
       <AppSidebar />
-      <main className="ml-[260px] flex-1 p-6 transition-all duration-300">
+      <main className="min-w-0 flex-1 px-4 pb-8 pt-20 md:ml-[260px] md:px-8 md:pt-8">
         <Outlet />
       </main>
     </div>

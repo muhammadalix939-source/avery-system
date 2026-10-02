@@ -13,7 +13,9 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Dashboard — AV Travel CRM" },
-      { name: "description", content: "Enterprise Travel Agency CRM Dashboard" },
+      { name: "description", content: "Live overview of bookings, revenue, groups and dues for Avery Travel." },
+      { property: "og:title", content: "Dashboard — Avery Travel CRM" },
+      { property: "og:description", content: "Live overview of bookings, revenue, groups and dues for Avery Travel." },
     ],
   }),
 });
@@ -87,7 +89,7 @@ function Dashboard() {
 
       {hasAnyData && (
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="glass-card col-span-2 rounded-xl p-5">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="glass-card rounded-xl lg:col-span-2 p-5">
           <h3 className="mb-4 text-sm font-semibold text-foreground">Monthly Revenue</h3>
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={store.monthlyData}>
