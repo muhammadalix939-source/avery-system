@@ -97,6 +97,8 @@ function EntriesPage() {
   const [serviceCategory, setServiceCategory] = useState<string>("");
   // Extra charge / refund metadata
   const [extra, setExtra] = useState({ clientId: "", chargeCategory: "", refundOf: "", refundReason: "" });
+  // Purchase allocation: who this supplier purchase was bought for
+  const [pf, setPf] = useState({ for: "" as "" | "client" | "agent", agentId: "", clientName: "", saleAmount: "" });
   // Group management (PNR / batch) — for purchase entries
   const [groupMode, setGroupMode] = useState<"none" | "existing" | "new">("none");
   const [groupId, setGroupId] = useState<string>("");
@@ -167,7 +169,10 @@ function EntriesPage() {
       serviceCategory: serviceCategory || undefined,
       purchaseDetails: form.type === "purchase" ? buildDetailsPayload(serviceCategory, details) : undefined,
       groupId: groupTaggable ? finalGroupId : undefined,
-      agentId: refs.agentId || undefined,
+      purchasedFor: form.type === "purchase" ? (pf.for || undefined) : undefined,
+      forClientName: form.type === "purchase" && pf.for === "agent" ? (pf.clientName || undefined) : undefined,
+      saleAmount: form.type === "purchase" && pf.for === "agent" && pf.saleAmount ? Number(pf.saleAmount) : undefined,
+      agentId: form.type === "purchase" && pf.for === "agent" ? (pf.agentId || undefined) : (refs.agentId || undefined),
       paidBy: refs.paidBy || undefined,
       clientId: extra.clientId || undefined,
       chargeCategory: form.type === "client_charge" ? (extra.chargeCategory || undefined) : undefined,
@@ -175,6 +180,7 @@ function EntriesPage() {
       refundReason: extra.refundReason || undefined,
     });
     setForm({ date: "", type: "client_receive", headId: "", referenceId: "", referenceName: "", amount: "", note: "" });
+    setPf({ for: "", agentId: "", clientName: "", saleAmount: "" });
     setServiceCategory("");
     setDetails(emptyDetails);
     setExtra({ clientId: "", chargeCategory: "", refundOf: "", refundReason: "" });
@@ -205,7 +211,10 @@ function EntriesPage() {
       serviceCategory: serviceCategory || undefined,
       purchaseDetails: form.type === "purchase" ? buildDetailsPayload(serviceCategory, details) : undefined,
       groupId: groupTaggable ? finalGroupId : undefined,
-      agentId: refs.agentId || undefined,
+      purchasedFor: form.type === "purchase" ? (pf.for || undefined) : undefined,
+      forClientName: form.type === "purchase" && pf.for === "agent" ? (pf.clientName || undefined) : undefined,
+      saleAmount: form.type === "purchase" && pf.for === "agent" && pf.saleAmount ? Number(pf.saleAmount) : undefined,
+      agentId: form.type === "purchase" && pf.for === "agent" ? (pf.agentId || undefined) : (refs.agentId || undefined),
       paidBy: refs.paidBy || undefined,
       clientId: extra.clientId || undefined,
       chargeCategory: form.type === "client_charge" ? (extra.chargeCategory || undefined) : undefined,
@@ -221,6 +230,7 @@ function EntriesPage() {
     setServiceCategory(e.serviceCategory || "");
     setExtra({ clientId: e.clientId || "", chargeCategory: e.chargeCategory || "", refundOf: e.refundOf || "", refundReason: e.refundReason || "" });
     setRefs({ agentId: e.agentId || "", paidBy: e.paidBy || "" });
+    setPf({ for: e.purchasedFor || "", agentId: e.purchasedFor === "agent" ? e.agentId || "" : "", clientName: e.forClientName || "", saleAmount: e.saleAmount ? String(e.saleAmount) : "" });
     if (e.groupId) { setGroupMode("existing"); setGroupId(e.groupId); } else { setGroupMode("none"); setGroupId(""); }
     setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "", totalPax: "" });
     const d = e.purchaseDetails || {};
@@ -489,6 +499,53 @@ function EntriesPage() {
                 <Input value={refs.paidBy} onChange={(e) => setRefs({ ...refs, paidBy: e.target.value })} placeholder="Office cash / Bank transfer / Agent Ahmed" className="bg-accent/20 border-border mt-1 h-8 text-xs" />
               </div>
               <p className="text-[10px] text-muted-foreground">Group-tagged payments show up in that group's settlement progress, and the agent reference appears in the agent's ledger.</p>
+            </div>
+          )}
+          {form.type === "purchase" && (
+            <div className="space-y-3 rounded-lg border border-primary/40 bg-primary/5 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">Purchase For (whose account)</p>
+              <div className="grid grid-cols-3 gap-1 rounded-md border border-border bg-accent/10 p-1">
+                {([["", "Office / Stock"], ["client", "Client"], ["agent", "Agent"]] as const).map(([v, l]) => (
+                  <button key={v} type="button" onClick={() => { setPf({ ...pf, for: v }); if (v !== "client") setForm((f) => ({ ...f, headId: v === "agent" ? "" : f.headId })); }}
+                    className={`rounded px-2 py-1.5 text-[11px] font-semibold ${pf.for === v ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>{l}</button>
+                ))}
+              </div>
+              {pf.for === "client" && (
+                <>
+                  <div><Label className="text-[10px]">Client (Head ID / Name) *</Label>
+                    <SearchableSelect value={form.headId} onChange={(v) => { setForm({ ...form, headId: v }); setExtra({ ...extra, clientId: "" }); }}
+                      placeholder="Search client head..."
+                      options={Array.from(new Map(store.clients.map((c) => [c.headId, c])).values()).map((c) => ({ value: c.headId, label: `${c.headId} — ${getClientName(c)}`, hint: c.id }))}
+                      className="mt-1" />
+                  </div>
+                  {form.headId && (
+                    <div><Label className="text-[10px]">Member (optional)</Label>
+                      <SearchableSelect value={extra.clientId} onChange={(v) => setExtra({ ...extra, clientId: v })} placeholder="Whole head"
+                        options={store.clients.filter((c) => c.headId === form.headId).map((c) => ({ value: c.id, label: `${c.id} — ${getClientName(c)}` }))} className="mt-1" />
+                    </div>
+                  )}
+                  <p className="text-[10px] text-muted-foreground">Posts to this client's <b>Business Ledger</b> as cost (reduces booking profit). The client's personal balance is <b>not</b> changed.</p>
+                </>
+              )}
+              {pf.for === "agent" && (
+                <>
+                  <div><Label className="text-[10px]">Agent *</Label>
+                    <SearchableSelect value={pf.agentId} onChange={(v) => setPf({ ...pf, agentId: v })} placeholder="Search agent..."
+                      options={store.agents.map((a) => ({ value: a.id, label: `${a.id} — ${a.name}` }))} className="mt-1" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><Label className="text-[10px]">Client Name</Label><Input value={pf.clientName} onChange={(e) => setPf({ ...pf, clientName: e.target.value })} placeholder="Passenger / client name" className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+                    <div><Label className="text-[10px]">Sale to Agent (PKR)</Label><Input type="number" value={pf.saleAmount} onChange={(e) => setPf({ ...pf, saleAmount: e.target.value })} placeholder={form.amount || "Same as cost"} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+                  </div>
+                  {(() => { const cost = Number(form.amount) || 0; const sale = Number(pf.saleAmount) || cost; return (
+                    <div className="flex flex-wrap gap-3 rounded-md bg-accent/20 px-3 py-2 text-[11px]">
+                      <span className="text-muted-foreground">Cost: <b className="text-foreground">{formatCurrency(cost)}</b></span>
+                      <span className="text-muted-foreground">Other Sale: <b className="text-primary">{formatCurrency(sale)}</b></span>
+                      <span className="ml-auto text-muted-foreground">Profit: <b className={sale - cost >= 0 ? "text-success" : "text-destructive"}>{formatCurrency(sale - cost)}</b></span>
+                    </div>); })()}
+                  <p className="text-[10px] text-muted-foreground">Added to the agent's <b>Other Sale</b> and his Business Ledger receivable.</p>
+                </>
+              )}
             </div>
           )}
           {form.type === "purchase" && (

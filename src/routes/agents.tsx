@@ -89,7 +89,9 @@ function AgentsPage() {
       (e) =>
         (e.type === "agent_commission" && e.referenceId === selected.id) ||
         (clientTypes.has(e.type) && e.headId && agentHeads.has(e.headId)) ||
-        (e.agentId === selected.id && e.type === "supplier_payment")
+        (e.agentId === selected.id && e.type === "supplier_payment") ||
+        (e.type === "purchase" && e.purchasedFor === "agent" && e.agentId === selected.id) ||
+        (e.type === "other_sale" && e.referenceId === selected.id)
     );
   })();
 
@@ -180,7 +182,7 @@ function AgentsPage() {
             </div>
             <button onClick={() => { setSelected(a); setDetailOpen(true); }}
               className="mt-3 w-full rounded-lg border border-border/50 px-3 py-2 text-left text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary">
-              View · Clients & Business Account
+              View · Clients, Business Account & Other Sale
             </button>
           </motion.div>
         ))}

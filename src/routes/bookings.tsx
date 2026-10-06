@@ -17,6 +17,7 @@ import { computeGroupUsedPax } from "@/lib/store";
 import { getPKTDate } from "@/lib/date-utils";
 import { generateInvoice, generatePaymentHistory } from "@/lib/pdf";
 import { useState } from "react";
+import BookingViewDialog from "@/components/BookingViewDialog";
 
 export const Route = createFileRoute("/bookings")({
   component: BookingsPage,
@@ -45,6 +46,7 @@ const emptyMember: MemberForm = {
 
 function BookingsPage() {
   const store = useStore();
+  const [viewHead, setViewHead] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [selected, setSelected] = useState<Booking | null>(null);
@@ -605,6 +607,7 @@ function BookingsPage() {
 
   return (
     <div className="space-y-6">
+      <BookingViewDialog headId={viewHead} onClose={() => setViewHead(null)} />
       <PageHeader
         title="Bookings (Head IDs)"
         subtitle="Master booking management"
@@ -677,7 +680,7 @@ function BookingsPage() {
                     <td className="px-4 py-3 text-muted-foreground">{b.travelDate}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
-                        <Link to="/payments" className="rounded p-1 hover:bg-accent"><Eye className="h-3.5 w-3.5 text-primary" /></Link>
+                        <button onClick={() => setViewHead(b.headId)} className="rounded p-1 hover:bg-accent" title="View booking"><Eye className="h-3.5 w-3.5 text-primary" /></button>
                         <button onClick={() => downloadInvoice(b)} className="rounded p-1 hover:bg-accent" title="Download Invoice"><FileText className="h-3.5 w-3.5 text-success" /></button>
                         <button onClick={() => downloadPaymentHistory(b)} className="rounded p-1 hover:bg-accent" title="Payment History PDF"><Download className="h-3.5 w-3.5 text-warning" /></button>
                         <BookingServicesMenu booking={b} clients={clients} />
