@@ -46,6 +46,7 @@ const emptyMember: MemberForm = {
 
 function BookingsPage() {
   const store = useStore();
+  const [viewHead, setViewHead] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [selected, setSelected] = useState<Booking | null>(null);
@@ -606,6 +607,7 @@ function BookingsPage() {
 
   return (
     <div className="space-y-6">
+      <BookingViewDialog headId={viewHead} onClose={() => setViewHead(null)} />
       <PageHeader
         title="Bookings (Head IDs)"
         subtitle="Master booking management"
