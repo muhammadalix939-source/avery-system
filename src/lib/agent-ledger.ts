@@ -44,7 +44,10 @@ export function computeAgentBusiness(
   const headIds = new Set(bookings.map((b) => b.headId));
   const clients = data.clients.filter((c) => headIds.has(c.headId));
 
-  const grossSales = bookings.reduce((s, b) => s + (b.totalAmount || 0), 0) + (agent.openingSales || 0);
+  const otherSale = data.entries
+    .filter((e) => (e.type === "purchase" && e.purchasedFor === "agent" && e.agentId === agent.id) || (e.type === "other_sale" && e.referenceId === agent.id))
+    .reduce((s, e) => s + (e.type === "purchase" ? (e.saleAmount ?? e.amount) : e.amount), 0);
+  const grossSales = bookings.reduce((s, b) => s + (b.totalAmount || 0), 0) + (agent.openingSales || 0) + otherSale;
   const commissionEarned = bookings.reduce((s, b) => s + (b.commission || 0), 0) + (agent.openingCommission || 0);
   const commissionPaid =
     data.entries.filter((e) => e.type === "agent_commission" && e.referenceId === agent.id).reduce((s, e) => s + e.amount, 0) +

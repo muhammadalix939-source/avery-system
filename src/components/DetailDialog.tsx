@@ -21,7 +21,7 @@ interface DetailDialogProps {
 }
 
 export default function DetailDialog({ open, onOpenChange, type, data, entries = [], allClients = [], allBookings = [] }: DetailDialogProps) {
-  const [subView, setSubView] = useState<"main" | "clients" | "client-detail" | "bookings" | "statement" | "business">("main");
+  const [subView, setSubView] = useState<"main" | "clients" | "client-detail" | "bookings" | "statement" | "business" | "othersale">("main");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [includeOpening, setIncludeOpening] = useState(true);
 
@@ -70,13 +70,16 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
   function getAgentStats(a: Agent) {
     const agentBookings = allBookings.filter((b) => b.agentId === a.id);
     const agentClients = allClients.filter((c) => agentBookings.some((b) => b.headId === c.headId));
-    const totalSales = agentBookings.reduce((s, b) => s + b.totalAmount, 0) + (a.openingSales || 0);
+    const otherSaleRows = entries.filter((e) => (e.type === "purchase" && e.purchasedFor === "agent" && e.agentId === a.id) || (e.type === "other_sale" && e.referenceId === a.id));
+    const otherSaleTotal = otherSaleRows.reduce((s, e) => s + (e.type === "purchase" ? (e.saleAmount ?? e.amount) : e.amount), 0);
+    const otherSaleCost = otherSaleRows.filter((e) => e.type === "purchase").reduce((s, e) => s + e.amount, 0);
+    const totalSales = agentBookings.reduce((s, b) => s + b.totalAmount, 0) + (a.openingSales || 0) + otherSaleTotal;
     const totalCommission = agentBookings.reduce((s, b) => s + (b.commission || 0), 0) + (a.openingCommission || 0);
     const paidCommission = entries.filter((e) => e.type === "agent_commission" && e.referenceId === a.id).reduce((s, e) => s + e.amount, 0) + (a.openingPaidCommission || 0);
     const received = agentBookings.reduce((s, b) => s + (b.amountReceived || 0), 0);
     const netReceivable = Math.max(0, totalSales - totalCommission);
     return {
-      agentBookings, agentClients, totalSales, totalCommission, paidCommission,
+      agentBookings, agentClients, totalSales, totalCommission, paidCommission, otherSaleRows, otherSaleTotal, otherSaleCost,
       payable: totalCommission - paidCommission,
       received, netReceivable, outstanding: netReceivable - received,
     };
@@ -106,6 +109,7 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
               {subView === "statement" ? `Statement — ${type === "supplier" ? (data as Supplier).companyName : type === "agent" ? (data as Agent).name : getClientName(data as Client)}` :
                subView === "client-detail" && selectedClient ? `${getClientName(selectedClient)}` :
                subView === "clients" && type === "agent" ? `Clients of ${(data as Agent).name}` :
+               subView === "othersale" && type === "agent" ? `Other Sale — ${(data as Agent).name}` :
                subView === "business" && type === "agent" ? `Business Account — ${(data as Agent).name}` :
                subView === "bookings" && type === "supplier" ? `Bookings — ${(data as Supplier).companyName}` :
                type === "client" ? `Client: ${getClientName(data as Client)}` :
@@ -139,7 +143,7 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
                   <ClientChecklistPanel client={data as Client} />
                 </>
               )}
-              {type === "agent" && renderAgentFull(data as Agent, getAgentStats(data as Agent), () => setSubView("clients"), () => setSubView("business"))}
+              {type === "agent" && renderAgentFull(data as Agent, getAgentStats(data as Agent), () => setSubView("clients"), () => setSubView("business"), () => setSubView("othersale"))}
               {type === "supplier" && renderSupplierFull(data as Supplier, getSupplierStats(data as Supplier), () => setSubView("bookings"))}
               {type === "booking" && renderBooking(data as Booking)}
 
@@ -210,6 +214,40 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
             );
           })()}
 
+          {/* AGENT → OTHER SALE */}
+          {subView === "othersale" && type === "agent" && (() => {
+            const stats = getAgentStats(data as Agent);
+            return (
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-2">
+                  <StatCard label="Other Sale" value={formatCurrency(stats.otherSaleTotal)} color="text-primary" />
+                  <StatCard label="Purchase Cost" value={formatCurrency(stats.otherSaleCost)} color="text-warning" />
+                  <StatCard label="Profit" value={formatCurrency(stats.otherSaleTotal - stats.otherSaleCost)} color="text-success" />
+                </div>
+                <div className="rounded-lg border border-border/50 p-3 space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Other Sale Entries</p>
+                  {stats.otherSaleRows.map((e) => {
+                    const sale = e.type === "purchase" ? (e.saleAmount ?? e.amount) : e.amount;
+                    const cost = e.type === "purchase" ? e.amount : 0;
+                    return (
+                      <div key={e.id} className="flex items-center justify-between rounded bg-accent/20 px-3 py-2">
+                        <div>
+                          <p className="text-xs font-medium">{e.forClientName || e.note || e.referenceName}</p>
+                          <p className="text-[10px] text-muted-foreground">{[e.date, e.serviceCategory, e.type === "purchase" ? `Supplier: ${e.referenceName}` : "Direct"].filter(Boolean).join(" · ")}</p>
+                        </div>
+                        <div className="text-right text-[10px]">
+                          <p>Sale: <span className="font-semibold text-primary">{formatCurrency(sale)}</span></p>
+                          {cost > 0 && <p>Cost: {formatCurrency(cost)} · Profit: <span className="text-success">{formatCurrency(sale - cost)}</span></p>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {stats.otherSaleRows.length === 0 && <p className="py-2 text-center text-[11px] text-muted-foreground">No other sale yet. Post a Purchase entry "For Agent" to add one.</p>}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* AGENT → BUSINESS ACCOUNT */}
           {subView === "business" && type === "agent" && (() => {
             const stats = getAgentStats(data as Agent);
@@ -217,6 +255,7 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
               <div className="space-y-3">
                 <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-1.5">
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">Business Account (Receivable from Agent)</p>
+                  {stats.otherSaleTotal > 0 && <div className="flex justify-between text-xs"><span className="text-muted-foreground">incl. Other Sale</span><span className="font-medium">{formatCurrency(stats.otherSaleTotal)}</span></div>}
                   <div className="flex justify-between text-xs"><span className="text-muted-foreground">Gross Sale</span><span className="font-medium">{formatCurrency(stats.totalSales)}</span></div>
                   <div className="flex justify-between text-xs"><span className="text-muted-foreground">Less: Agent Commission</span><span className="text-destructive">− {formatCurrency(stats.totalCommission)}</span></div>
                   <div className="flex justify-between border-t border-border/50 pt-1.5 text-xs font-semibold"><span>Net Receivable</span><span className="text-primary">{formatCurrency(stats.netReceivable)}</span></div>
@@ -401,7 +440,7 @@ function renderClient(c: Client) {
   );
 }
 
-function renderAgentFull(a: Agent, stats: { agentBookings: any[]; agentClients: Client[]; totalSales: number; totalCommission: number; paidCommission: number; payable: number; received: number; netReceivable: number; outstanding: number }, onViewClients: () => void, onViewBusiness: () => void) {
+function renderAgentFull(a: Agent, stats: { agentBookings: any[]; agentClients: Client[]; totalSales: number; totalCommission: number; paidCommission: number; payable: number; received: number; netReceivable: number; outstanding: number }, onViewClients: () => void, onViewBusiness: () => void, onViewOtherSale?: () => void) {
   return (
     <>
       <Row label="Agent ID" value={a.id} />
@@ -431,6 +470,11 @@ function renderAgentFull(a: Agent, stats: { agentBookings: any[]; agentClients: 
         <Button onClick={onViewBusiness} variant="outline" className="w-full gap-2 text-xs">
           <DollarSign className="h-3.5 w-3.5" /> View Business Account <ChevronRight className="h-3.5 w-3.5 ml-auto" />
         </Button>
+        {onViewOtherSale && (
+          <Button onClick={onViewOtherSale} variant="outline" className="w-full gap-2 text-xs">
+            <DollarSign className="h-3.5 w-3.5" /> View Other Sale <ChevronRight className="h-3.5 w-3.5 ml-auto" />
+          </Button>
+        )}
       </div>
     </>
   );
