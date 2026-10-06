@@ -48,6 +48,10 @@ export interface LedgerEntry {
   reconciled?: "recorded" | "matched" | "unmatched";
   /** Purchase entry: bought for an Agent or a Client head. */
   purchasedFor?: "agent" | "client";
+  /** Purchase for agent: the end-client name this purchase was made for. */
+  forClientName?: string;
+  /** Purchase for agent: amount billed to the agent (Other Sale). Defaults to purchase amount. */
+  saleAmount?: number;
   /** Purchase entry: also post the cost to the client personal ledger. */
   reflectInClientLedger?: boolean;
   /** Gift & Expense category. */
