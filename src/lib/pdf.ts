@@ -33,7 +33,50 @@ const SUCCESS: [number, number, number]= [22, 110, 60];
 const DANGER: [number, number, number] = [170, 35, 35];
 
 // ---------- Page chrome ----------
+// ---------- Pagination safety ----------
+const PAGE_TOP = 24;      // content start on continuation pages
+const PAGE_BOTTOM = 266;  // last usable y before the footer rule (273)
+const framed = new WeakMap<jsPDF, Set<number>>();
+function markFramed(doc: jsPDF) {
+  const set = framed.get(doc) || new Set<number>();
+  set.add(doc.getCurrentPageInfo().pageNumber);
+  framed.set(doc, set);
+}
+/** Ivory background + gold double border + slim navy strip for continuation pages. */
+function pageFrame(doc: jsPDF) {
+  const n = doc.getCurrentPageInfo().pageNumber;
+  if (framed.get(doc)?.has(n)) return;
+  doc.setFillColor(...IVORY);
+  doc.rect(0, 0, 210, 297, "F");
+  doc.setDrawColor(...GOLD);
+  doc.setLineWidth(0.8);
+  doc.rect(8, 8, 194, 281);
+  doc.setLineWidth(0.2);
+  doc.rect(10, 10, 190, 277);
+  doc.setFillColor(...NAVY);
+  doc.rect(10, 10, 190, 8, "F");
+  doc.setFillColor(...GOLD);
+  doc.rect(10, 18, 190, 0.5, "F");
+  doc.setFont("times", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(...GOLD_LT);
+  doc.text(COMPANY, 14, 15.4);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  doc.text("Statement (continued)", 196, 15.4, { align: "right" });
+  doc.setTextColor(...INK);
+  markFramed(doc);
+}
+/** Start a new framed page when the next block (height `need`) would cross the footer. */
+function ensureSpace(doc: jsPDF, y: number, need: number): number {
+  if (y + need <= PAGE_BOTTOM) return y;
+  doc.addPage();
+  pageFrame(doc);
+  return PAGE_TOP;
+}
+
 function header(doc: jsPDF, title: string) {
+  markFramed(doc);
   // Ivory page background
   doc.setFillColor(...IVORY);
   doc.rect(0, 0, 210, 297, "F");
@@ -121,6 +164,7 @@ function footer(doc: jsPDF) {
 
 // ---------- Section helpers ----------
 function sectionTitle(doc: jsPDF, text: string, y: number) {
+  if (y > PAGE_BOTTOM - 30) { doc.addPage(); pageFrame(doc); y = PAGE_TOP + 4; }
   doc.setFont("times", "bold");
   doc.setFontSize(11);
   doc.setTextColor(...NAVY);
@@ -138,15 +182,22 @@ function sectionTitle(doc: jsPDF, text: string, y: number) {
 }
 
 function brandTable(doc: jsPDF, opts: Parameters<typeof autoTable>[1]) {
+  const o: any = opts || {};
+  // Never start a table in the last few mm of a page — prevents heading/table splits
+  if (typeof o.startY === "number" && o.startY > PAGE_BOTTOM - 20) o.startY = ensureSpace(doc, o.startY, 40);
   autoTable(doc, {
+    showHead: "everyPage",
+    showFoot: "lastPage",
+    rowPageBreak: "avoid",
+    willDrawPage: () => pageFrame(doc),
     theme: "grid",
     headStyles: { fillColor: NAVY, textColor: WHITE, fontSize: 8.5, fontStyle: "bold", halign: "left", cellPadding: 2.5, overflow: "linebreak", valign: "middle" },
     bodyStyles: { fontSize: 8.5, textColor: INK, cellPadding: 2.5, font: "helvetica", overflow: "linebreak", valign: "top" },
     alternateRowStyles: { fillColor: ROW_ALT },
-    styles: { lineColor: GOLD_LT, lineWidth: 0.15, overflow: "linebreak", cellWidth: "wrap" },
-    margin: { left: 14, right: 14 },
+    styles: { lineColor: GOLD_LT, lineWidth: 0.15, overflow: "linebreak", cellWidth: "auto" },
     tableWidth: "auto",
-    ...opts,
+    ...o,
+    margin: { left: 14, right: 14, top: PAGE_TOP, bottom: 297 - PAGE_BOTTOM },
   });
 }
 
@@ -190,6 +241,7 @@ function fromAndTo(doc: jsPDF, y: number, recipientLabel: string, recipientLines
 }
 
 function totalsBand(doc: jsPDF, y: number, label: string, value: string, tone: "gold" | "navy" = "gold") {
+  y = ensureSpace(doc, y, 13);
   if (tone === "gold") doc.setFillColor(...GOLD);
   else doc.setFillColor(...NAVY);
   doc.rect(14, y, 182, 11, "F");
@@ -203,6 +255,7 @@ function totalsBand(doc: jsPDF, y: number, label: string, value: string, tone: "
 }
 
 function summaryCards(doc: jsPDF, y: number, cards: Array<[string, string, "ink" | "success" | "danger" | "gold"]>) {
+  y = ensureSpace(doc, y, 22);
   const n = cards.length;
   const totalW = 182;
   const gap = 2;
@@ -715,6 +768,7 @@ function executiveSnapshot(
 function categoryHeading(doc: jsPDF, y: number, label: string, count: number, total: number, tone: "navy" | "success" = "navy"): number {
   // Elegant heading strip: gold vertical bar + serif category + count pill + right-aligned total
   const h = 8.5;
+  y = ensureSpace(doc, y, h + 28); // keep heading together with at least two table rows
   doc.setFillColor(...GOLD);
   doc.rect(14, y, 1.6, h, "F");
   doc.setFillColor(...IVORY);
@@ -760,6 +814,7 @@ function reconciliationBlock(
   doc: jsPDF, y: number,
   d: { openingPayable?: number; openingPaid?: number; totalPurchases: number; totalPaid: number; grandPayable: number; grandPaid: number }
 ): number {
+  y = ensureSpace(doc, y, 40);
   doc.setFont("times", "italic");
   doc.setFontSize(9);
   doc.setTextColor(...GOLD);
@@ -833,7 +888,7 @@ function drawReconCard(
 
 function closingHero(doc: jsPDF, y: number, remaining: number) {
   // If not enough room, add a page
-  if (y > 240) { doc.addPage(); y = 30; }
+  y = ensureSpace(doc, y, 32);
   const h = 30;
   // Navy panel
   doc.setFillColor(...NAVY);
