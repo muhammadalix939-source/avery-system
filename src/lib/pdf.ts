@@ -179,6 +179,7 @@ function sectionTitle(doc: jsPDF, text: string, y: number) {
   doc.line(14, y + 2.4, 196, y + 2.4);
 
   doc.setTextColor(...INK);
+  return y;
 }
 
 function brandTable(doc: jsPDF, opts: Parameters<typeof autoTable>[1]) {
@@ -355,7 +356,7 @@ function renderServiceSections(doc: jsPDF, y: number, bookings: Booking[]): numb
   });
 
   if (allHotels.length) {
-    sectionTitle(doc, `Hotels (${allHotels.length})`, y); y += 4;
+    y = sectionTitle(doc, `Hotels (${allHotels.length})`, y); y += 4;
     brandTable(doc, {
       startY: y + 1,
       head: [["Booking", "City", "Hotel", "Room", "Check-In", "Check-Out", "Nights"]],
@@ -365,7 +366,7 @@ function renderServiceSections(doc: jsPDF, y: number, bookings: Booking[]): numb
   }
 
   if (allFlights.length) {
-    sectionTitle(doc, `Flights (${allFlights.length})`, y); y += 4;
+    y = sectionTitle(doc, `Flights (${allFlights.length})`, y); y += 4;
     brandTable(doc, {
       startY: y + 1,
       head: [["Booking", "Date", "Flight", "From", "To", "Dep", "Arr"]],
@@ -376,7 +377,7 @@ function renderServiceSections(doc: jsPDF, y: number, bookings: Booking[]): numb
 
   if (allVisas.length) {
     const total = allVisas.reduce((s, v) => s + (v.amount || 0), 0);
-    sectionTitle(doc, `Visas (${allVisas.length})`, y); y += 4;
+    y = sectionTitle(doc, `Visas (${allVisas.length})`, y); y += 4;
     brandTable(doc, {
       startY: y + 1,
       head: [["Booking", "Type", "Country", "Reference", "Issue Date", "Amount"]],
@@ -388,7 +389,7 @@ function renderServiceSections(doc: jsPDF, y: number, bookings: Booking[]): numb
 
   if (allTransports.length) {
     const total = allTransports.reduce((s, t) => s + (t.amount || 0), 0);
-    sectionTitle(doc, `Transport (${allTransports.length})`, y); y += 4;
+    y = sectionTitle(doc, `Transport (${allTransports.length})`, y); y += 4;
     brandTable(doc, {
       startY: y + 1,
       head: [["Booking", "Service", "Route", "Vehicle", "Date", "Amount"]],
@@ -400,7 +401,7 @@ function renderServiceSections(doc: jsPDF, y: number, bookings: Booking[]): numb
 
   if (allOthers.length) {
     const total = allOthers.reduce((s, o) => s + (o.amount || 0), 0);
-    sectionTitle(doc, `Other Services (${allOthers.length})`, y); y += 4;
+    y = sectionTitle(doc, `Other Services (${allOthers.length})`, y); y += 4;
     brandTable(doc, {
       startY: y + 1,
       head: [["Booking", "Category", "Description", "Date", "Amount"]],
@@ -529,6 +530,7 @@ export function generateSupplierLedger(supplier: Supplier, entries: LedgerEntry[
 
 // ---- Supplier statement — premium helpers ----
 function supplierHeader(doc: jsPDF) {
+  markFramed(doc);
   // Ivory base
   doc.setFillColor(...IVORY);
   doc.rect(0, 0, 210, 297, "F");
@@ -1056,7 +1058,7 @@ export function generateAgentReport(agent: Agent, entries: LedgerEntry[], opts: 
   }
 
   if (filtered.length) {
-    sectionTitle(doc, "Commission History", y); y += 4;
+    y = sectionTitle(doc, "Commission History", y); y += 4;
     let running = openingComm - openingPaid;
     brandTable(doc, {
       startY: y + 1,
@@ -1130,7 +1132,7 @@ export function generateClientStatement(client: Client, entries: LedgerEntry[], 
   }
 
   if (filtered.length) {
-    sectionTitle(doc, "Payment History", y); y += 4;
+    y = sectionTitle(doc, "Payment History", y); y += 4;
     brandTable(doc, {
       startY: y + 1,
       head: [["Date", "Receipt", "Description", "Amount"]],
@@ -1167,7 +1169,7 @@ export function generatePaymentHistory(
   y = summaryCards(doc, y, cards);
   y += 2;
 
-  sectionTitle(doc, "Transaction History", y); y += 4;
+  y = sectionTitle(doc, "Transaction History", y); y += 4;
   let running = 0;
   brandTable(doc, {
     startY: y + 1,
@@ -1212,7 +1214,7 @@ export function generateInvoice(booking: Booking, clients: Client[], agent?: Age
   doc.setTextColor(...INK);
   y += 11;
 
-  sectionTitle(doc, "Client Breakdown", y); y += 4;
+  y = sectionTitle(doc, "Client Breakdown", y); y += 4;
   brandTable(doc, {
     startY: y + 1,
     head: [["#", "Client ID", "Name", "Passport", "Due", "Paid", "Status"]],
@@ -1323,7 +1325,7 @@ export function generateHotelVoucher(booking: Booking, clients: Client[], hotels
     ["Members", String(clients.length)],
   ]);
 
-  sectionTitle(doc, "Passenger Details", y); y += 4;
+  y = sectionTitle(doc, "Passenger Details", y); y += 4;
   brandTable(doc, {
     startY: y + 1,
     head: [["#", "Passenger Name", "Passport No", "Type"]],
@@ -1332,7 +1334,7 @@ export function generateHotelVoucher(booking: Booking, clients: Client[], hotels
   y = (doc as any).lastAutoTable.finalY + 6;
 
   if (hotels.length) {
-    sectionTitle(doc, "Accommodation", y); y += 4;
+    y = sectionTitle(doc, "Accommodation", y); y += 4;
     brandTable(doc, {
       startY: y + 1,
       head: [["City", "Hotel Name", "Room", "Check-In", "Check-Out", "Nights"]],
@@ -1342,7 +1344,7 @@ export function generateHotelVoucher(booking: Booking, clients: Client[], hotels
   }
 
   if (opts?.transports?.length) {
-    sectionTitle(doc, "Transport", y); y += 4;
+    y = sectionTitle(doc, "Transport", y); y += 4;
     brandTable(doc, {
       startY: y + 1,
       head: [["Service", "Route", "Vehicle", "Date"]],
@@ -1352,7 +1354,7 @@ export function generateHotelVoucher(booking: Booking, clients: Client[], hotels
   }
 
   if (opts?.flights?.length) {
-    sectionTitle(doc, "Flights", y); y += 4;
+    y = sectionTitle(doc, "Flights", y); y += 4;
     brandTable(doc, {
       startY: y + 1,
       head: [["Date", "Flight", "From", "To", "Departure", "Arrival"]],
@@ -1375,14 +1377,14 @@ export function generateFlightVoucher(booking: Booking, clients: Client[], fligh
     ["Travel Date", fmtDate(booking.travelDate)],
     ["Members", String(clients.length)],
   ]);
-  sectionTitle(doc, "Passenger Details", y); y += 4;
+  y = sectionTitle(doc, "Passenger Details", y); y += 4;
   brandTable(doc, {
     startY: y + 1,
     head: [["#", "Passenger Name", "Passport No"]],
     body: clients.map((c, i) => [String(i + 1), getClientName(c), c.passport || "—"]),
   });
   y = (doc as any).lastAutoTable.finalY + 6;
-  sectionTitle(doc, "Flights", y); y += 4;
+  y = sectionTitle(doc, "Flights", y); y += 4;
   brandTable(doc, {
     startY: y + 1,
     head: [["Date", "Flight", "From", "To", "Departure", "Arrival"]],
@@ -1402,14 +1404,14 @@ export function generateTransportVoucher(booking: Booking, clients: Client[], tr
     ["Travel Date", fmtDate(booking.travelDate)],
     ["Members", String(clients.length)],
   ]);
-  sectionTitle(doc, "Passenger Details", y); y += 4;
+  y = sectionTitle(doc, "Passenger Details", y); y += 4;
   brandTable(doc, {
     startY: y + 1,
     head: [["#", "Passenger Name", "Passport No"]],
     body: clients.map((c, i) => [String(i + 1), getClientName(c), c.passport || "—"]),
   });
   y = (doc as any).lastAutoTable.finalY + 6;
-  sectionTitle(doc, "Transport", y); y += 4;
+  y = sectionTitle(doc, "Transport", y); y += 4;
   brandTable(doc, {
     startY: y + 1,
     head: [["Service", "Route", "Vehicle", "Date"]],
