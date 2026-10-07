@@ -1010,78 +1010,211 @@ function buildPurchaseTable(category: string, rows: LedgerEntry[]): { head: any[
 // =========================================================================
 //  AGENT REPORT / STATEMENT
 // =========================================================================
-export function generateAgentReport(agent: Agent, entries: LedgerEntry[], opts: StatementOptions = {}) {
-  const doc = new jsPDF();
-  header(doc, "Agent Statement");
+export type AgentStatementScope = "client" | "other" | "both";
+export interface AgentStatementOptions extends StatementOptions {
+  scope?: AgentStatementScope;
+  clients?: Client[];
+}
 
-  const filtered = entries.filter((e) => inRange(e.date, opts.fromDate, opts.toDate));
-  const periodLabel = opts.fromDate || opts.toDate
-    ? `${fmtDate(opts.fromDate)} — ${fmtDate(opts.toDate)}`
-    : "All-time";
+/**
+ * Agent Statement — professional account statement for one agent.
+ *  • Client Business  : bookings brought by the agent → Sale − Agent Commission = Net Receivable
+ *  • Other Sale       : purchases made for the agent ("For Agent") + direct other-sale entries, by service
+ *  • Receipts         : money received against the selected business
+ *  Opening balance = everything dated before the From date (+ legacy B/F); closing = opening + period − received.
+ * `entries` should be the FULL ledger; the function picks the agent's rows itself.
+ */
+export function generateAgentReport(agent: Agent, entries: LedgerEntry[], opts: AgentStatementOptions = {}) {
+  const doc = new jsPDF();
+  header(doc, "Agent Account Statement");
+  const scope: AgentStatementScope = opts.scope || "both";
+  const incClient = scope !== "other";
+  const incOther = scope !== "client";
+  const includeOpening = opts.includeOpening !== false;
+  const from = opts.fromDate, to = opts.toDate;
+  const before = (d?: string) => !!from && !!d && new Date(d).getTime() < new Date(from).getTime();
+  const within = (d?: string) => !!d && inRange(d, from, to);
+
+  const bookings = (opts.bookings || []).filter((b) => b.agentId === agent.id);
+  const headIds = new Set(bookings.map((b) => b.headId));
+  const clients = opts.clients || [];
+  const bDate = (b: Booking) => ((b as any).createdAt ? String((b as any).createdAt).slice(0, 10) : b.travelDate);
+  const leadName = (h: string) => { const c = clients.find((x) => x.headId === h); return c ? getClientName(c) : "—"; };
+
+  const otherRows = entries.filter((e) => (e.type === "purchase" && e.purchasedFor === "agent" && e.agentId === agent.id) || (e.type === "other_sale" && e.referenceId === agent.id));
+  const otherSaleOf = (e: LedgerEntry) => (e.type === "purchase" ? (e.saleAmount ?? e.amount) : e.amount);
+  const clientReceipts = entries.filter((e) => (e.type === "client_receive" || e.type === "client_refund" || e.type === "client_charge") && e.headId && headIds.has(e.headId));
+  const agentReceipts = entries.filter((e) => e.type === "agent_receive" && (e.referenceId === agent.id || e.agentId === agent.id));
+  const commissionPaid = entries.filter((e) => e.type === "agent_commission" && e.referenceId === agent.id);
+
+  // signed movement of the agent account: + increases what he owes us, − reduces it
+  const bookingNet = (b: Booking) => (b.totalAmount || 0) - (b.commission || 0);
+  const clientMove = (e: LedgerEntry) => (e.type === "client_charge" ? e.amount : -e.amount);
+
+  // ---------- Opening balance ----------
+  let opening = 0;
+  if (includeOpening) {
+    if (incClient) {
+      opening += (agent.openingSales || 0) - (agent.openingCommission || 0);
+      opening += bookings.filter((b) => before(bDate(b))).reduce((s, b) => s + bookingNet(b), 0);
+      opening += clientReceipts.filter((e) => before(e.date)).reduce((s, e) => s + clientMove(e), 0);
+    }
+    if (incOther) opening += otherRows.filter((e) => before(e.date)).reduce((s, e) => s + otherSaleOf(e), 0);
+    opening -= agentReceipts.filter((e) => before(e.date)).reduce((s, e) => s + e.amount, 0);
+  }
+
+  const pBookings = incClient ? bookings.filter((b) => !from && !to ? true : within(bDate(b))) : [];
+  const pClientTx = incClient ? clientReceipts.filter((e) => within(e.date) || (!from && !to)) : [];
+  const pOther = incOther ? otherRows.filter((e) => within(e.date) || (!from && !to)) : [];
+  const pAgentRec = agentReceipts.filter((e) => within(e.date) || (!from && !to));
+
+  const grossSale = pBookings.reduce((s, b) => s + (b.totalAmount || 0), 0);
+  const commission = pBookings.reduce((s, b) => s + (b.commission || 0), 0);
+  const netClient = grossSale - commission;
+  const extraCharges = pClientTx.filter((e) => e.type === "client_charge").reduce((s, e) => s + e.amount, 0);
+  const refunds = pClientTx.filter((e) => e.type === "client_refund").reduce((s, e) => s + e.amount, 0);
+  const clientReceived = pClientTx.filter((e) => e.type === "client_receive").reduce((s, e) => s + e.amount, 0);
+  const otherSale = pOther.reduce((s, e) => s + otherSaleOf(e), 0);
+  const otherCost = pOther.filter((e) => e.type === "purchase").reduce((s, e) => s + e.amount, 0);
+  const agentReceived = pAgentRec.reduce((s, e) => s + e.amount, 0);
+  const totalReceived = clientReceived + agentReceived;
+  const periodBusiness = netClient + extraCharges - refunds + otherSale;
+  const closing = opening + periodBusiness - totalReceived;
+
+  const periodLabel = from || to ? `${fmtDate(from)} — ${fmtDate(to)}` : "All-time";
+  const scopeLabel = scope === "client" ? "Client Business" : scope === "other" ? "Other Sale" : "Client Business + Other Sale";
 
   let y = 44;
-  y = fromAndTo(doc, y, "Agent", [
-    ["ID", agent.id],
-    ["Name", agent.name],
-    ["Phone", agent.phone],
-    ["Status", agent.status],
-  ]);
+  y = fromAndTo(doc, y, "Agent", [["ID", agent.id], ["Name", agent.name], ["Phone", agent.phone], ["Email", agent.email]]);
 
   doc.setFillColor(...NAVY);
   doc.rect(14, y, 182, 7, "F");
-  doc.setFont("times", "bold");
-  doc.setFontSize(9);
-  doc.setTextColor(...WHITE);
-  doc.text(`Statement Period: ${periodLabel}`, 18, y + 5);
-  doc.text(`Email: ${agent.email}`, 192, y + 5, { align: "right" });
+  doc.setFont("times", "bold"); doc.setFontSize(8.5); doc.setTextColor(...WHITE);
+  doc.text(`Period: ${periodLabel}`, 18, y + 4.9);
+  doc.text(`Statement: ${scopeLabel}`, 192, y + 4.9, { align: "right" });
   doc.setTextColor(...INK);
   y += 11;
 
-  const openingComm = agent.openingCommission || 0;
-  const openingPaid = agent.openingPaidCommission || 0;
-  const totalSales = (agent.totalSales || 0) + (agent.openingSales || 0);
-  const totalClients = (agent.totalClients || 0) + (agent.openingClients || 0);
-  const totalCommission = (agent.commission || 0) + openingComm;
-  const totalPaidCommission = (agent.paidCommission || 0) + openingPaid;
-  const payable = totalCommission - totalPaidCommission;
-
   y = summaryCards(doc, y, [
-    ["Total Sales", formatCurrency(totalSales), "navy" as any],
-    ["Total Clients", String(totalClients), "ink"],
-    ["Commission", formatCurrency(totalCommission), "gold"],
-    ["Paid", formatCurrency(totalPaidCommission), "success"],
+    ["Opening Balance", formatCurrency(opening), "ink"],
+    ["Period Business", formatCurrency(periodBusiness), "gold"],
+    ["Received", formatCurrency(totalReceived), "success"],
+    ["Closing Balance", formatCurrency(closing), closing > 0 ? "danger" : "success"],
   ]);
-  y += 2;
 
-  if (opts.bookings && opts.bookings.length) {
-    y = renderServiceSections(doc, y, opts.bookings);
-  }
+  const money = (n: number, color: [number, number, number] = NAVY) => ({ content: formatCurrency(n), styles: { halign: "right" as const, textColor: color } });
+  const footRow = (label: string, span: number, val: number, color: [number, number, number] = NAVY) => [[
+    { content: label, colSpan: span, styles: { halign: "right" as const, fontStyle: "bold" as const, fillColor: ROW_ALT, textColor: NAVY } },
+    { content: formatCurrency(val), styles: { halign: "right" as const, fontStyle: "bold" as const, fillColor: ROW_ALT, textColor: color } },
+  ]];
 
-  if (filtered.length) {
-    y = sectionTitle(doc, "Commission History", y); y += 4;
-    let running = openingComm - openingPaid;
+  // ---------- Client Business ----------
+  if (incClient) {
+    y = categoryHeading(doc, y + 2, "Client Business (via agent reference)", pBookings.length, netClient);
     brandTable(doc, {
       startY: y + 1,
-      head: [["Date", "Receipt", "Note", "Amount", "Balance"]],
-      body: [
-        [{ content: "Brought Forward (B/F)", colSpan: 3, styles: { fontStyle: "bold" as const, fillColor: ROW_ALT } }, { content: formatCurrency(openingComm - openingPaid), styles: { halign: "right" as const, fillColor: ROW_ALT } }, { content: formatCurrency(running), styles: { halign: "right" as const, fillColor: ROW_ALT, textColor: NAVY } }],
-        ...filtered.map((e) => {
-          running -= e.amount;
-          return [
-            fmtDate(e.date), e.id, e.note,
-            { content: `- ${formatCurrency(e.amount)}`, styles: { halign: "right" as const, textColor: SUCCESS } },
-            { content: formatCurrency(running), styles: { halign: "right" as const, textColor: NAVY } },
-          ];
-        }),
-      ],
+      head: [["Date", "Head ID", "Lead Client", "Package", "Pax", "Sale", "Commission", "Net"]],
+      body: pBookings.length ? pBookings.map((b) => [
+        fmtDate(bDate(b)), b.headId, leadName(b.headId), b.packageType || "—",
+        String(clients.filter((c) => c.headId === b.headId).length),
+        money(b.totalAmount || 0, INK), money(b.commission || 0, DANGER), money(bookingNet(b)),
+      ]) : [[{ content: "No client bookings in this period", colSpan: 8, styles: { halign: "center" as const, textColor: MUTED } }]],
+      foot: [[
+        { content: "Totals", colSpan: 5, styles: { halign: "right" as const, fontStyle: "bold" as const, fillColor: ROW_ALT, textColor: NAVY } },
+        { content: formatCurrency(grossSale), styles: { halign: "right" as const, fontStyle: "bold" as const, fillColor: ROW_ALT } },
+        { content: formatCurrency(commission), styles: { halign: "right" as const, fontStyle: "bold" as const, fillColor: ROW_ALT, textColor: DANGER } },
+        { content: formatCurrency(netClient), styles: { halign: "right" as const, fontStyle: "bold" as const, fillColor: ROW_ALT, textColor: NAVY } },
+      ]],
     });
-    y = (doc as any).lastAutoTable.finalY + 4;
+    y = (doc as any).lastAutoTable.finalY + 7;
   }
 
-  totalsBand(doc, y, "Payable to Agent", formatCurrency(payable));
+  // ---------- Other Sale (service-wise) ----------
+  if (incOther) {
+    const groups = new Map<string, LedgerEntry[]>();
+    pOther.forEach((e) => { const k = e.serviceCategory || (e.type === "other_sale" ? "Direct Sale" : "Other"); if (!groups.has(k)) groups.set(k, []); groups.get(k)!.push(e); });
+    const order = ["Flight", "Hotel", "Visa", "Transport", "Ziyarah", "Insurance", "Other", "Direct Sale"];
+    const keys = [...order.filter((k) => groups.has(k)), ...[...groups.keys()].filter((k) => !order.includes(k))];
+    if (!keys.length) {
+      y = categoryHeading(doc, y, "Other Sale", 0, 0);
+      brandTable(doc, { startY: y + 1, head: [["Date", "Client", "Description", "Amount"]], body: [[{ content: "No other sale in this period", colSpan: 4, styles: { halign: "center" as const, textColor: MUTED } }]] });
+      y = (doc as any).lastAutoTable.finalY + 7;
+    }
+    for (const k of keys) {
+      const rows = groups.get(k)!;
+      const tot = rows.reduce((s, e) => s + otherSaleOf(e), 0);
+      y = categoryHeading(doc, y, `Other Sale — ${k}`, rows.length, tot);
+      brandTable(doc, {
+        startY: y + 1,
+        head: [["Date", "Ref", "Client", "Description", "Amount"]],
+        body: rows.map((e) => {
+          const d = e.purchaseDetails || {};
+          const desc = [d.hotelName, d.city, d.visaType, d.route, d.description, e.chargeCategory, e.note].filter(Boolean)[0] || "—";
+          return [fmtDate(e.date), e.id, e.forClientName || "—", String(desc), money(otherSaleOf(e))];
+        }),
+        foot: footRow(`Total ${k}`, 4, tot),
+      });
+      y = (doc as any).lastAutoTable.finalY + 7;
+    }
+  }
+
+  // ---------- Receipts & adjustments ----------
+  const recRows = [
+    ...pClientTx.map((e) => ({ e, label: e.type === "client_receive" ? "Client Receipt" : e.type === "client_refund" ? "Client Refund" : `Extra Charge${e.chargeCategory ? ` — ${e.chargeCategory}` : ""}`, sign: e.type === "client_charge" ? 1 : -1 })),
+    ...pAgentRec.map((e) => ({ e, label: "Received from Agent", sign: -1 })),
+  ].sort((a, b) => a.e.date.localeCompare(b.e.date));
+  y = categoryHeading(doc, y, "Receipts & Adjustments", recRows.length, totalReceived, "success");
+  let running = opening;
+  brandTable(doc, {
+    startY: y + 1,
+    head: [["Date", "Ref", "Head", "Particulars", "Debit", "Credit", "Balance"]],
+    body: [
+      [{ content: "Opening Balance", colSpan: 6, styles: { fontStyle: "bold" as const, fillColor: ROW_ALT } }, { content: formatCurrency(opening), styles: { halign: "right" as const, fontStyle: "bold" as const, fillColor: ROW_ALT, textColor: NAVY } }],
+      [{ content: "Business booked in period (net of commission)", colSpan: 4 }, money(netClient + otherSale, INK), "", money((running += netClient + otherSale))],
+      ...recRows.map(({ e, label, sign }) => {
+        running += sign * e.amount;
+        return [fmtDate(e.date), e.id, e.headId || "—", label,
+          sign > 0 ? money(e.amount, INK) : "", sign < 0 ? money(e.amount, SUCCESS) : "", money(running)];
+      }),
+    ],
+    foot: footRow("Closing Balance", 6, closing, closing > 0 ? DANGER : SUCCESS),
+  });
+  y = (doc as any).lastAutoTable.finalY + 7;
+
+  // ---------- Summary ----------
+  y = ensureSpace(doc, y, 70);
+  y = sectionTitle(doc, "Account Summary", y); y += 5;
+  const sumBody: any[] = [["Opening Balance", money(opening)]];
+  if (incClient) {
+    sumBody.push(["Client Sale (gross)", money(grossSale, INK)], ["Less: Agent Commission", money(-commission, DANGER)], ["Net Client Business", money(netClient)]);
+    if (extraCharges) sumBody.push(["Add: Extra Charges", money(extraCharges, INK)]);
+    if (refunds) sumBody.push(["Less: Client Refunds", money(-refunds, DANGER)]);
+  }
+  if (incOther) sumBody.push(["Other Sale", money(otherSale)]);
+  sumBody.push(["Less: Received", money(-totalReceived, SUCCESS)]);
+  brandTable(doc, {
+    startY: y,
+    body: sumBody,
+    columnStyles: { 0: { cellWidth: 120, fontStyle: "bold" } },
+    foot: [[{ content: closing >= 0 ? "Remaining Balance (Receivable)" : "Advance / Credit", styles: { fillColor: NAVY, textColor: WHITE, fontStyle: "bold" as const } }, { content: formatCurrency(Math.abs(closing)), styles: { fillColor: NAVY, textColor: GOLD_LT, halign: "right" as const, fontStyle: "bold" as const } }]],
+  });
+  y = (doc as any).lastAutoTable.finalY + 6;
+
+  if (incOther && otherCost > 0) {
+    y = totalsBand(doc, y, "Other Sale profit (internal)", formatCurrency(otherSale - otherCost), "navy");
+  }
+
+  // Commission account (separate)
+  const commEarned = bookings.reduce((s, b) => s + (b.commission || 0), 0) + (agent.openingCommission || 0);
+  const commPaid = commissionPaid.reduce((s, e) => s + e.amount, 0) + (agent.openingPaidCommission || 0);
+  y = summaryCards(doc, y, [
+    ["Commission Earned", formatCurrency(commEarned), "gold"],
+    ["Commission Paid", formatCurrency(commPaid), "success"],
+    ["Commission Payable", formatCurrency(commEarned - commPaid), "danger"],
+  ]);
 
   footer(doc);
-  save(doc, `Avery_Agent_Statement_${agent.id}.pdf`);
+  save(doc, `Avery_Agent_Statement_${agent.id}_${scope}.pdf`);
 }
 
 // =========================================================================
