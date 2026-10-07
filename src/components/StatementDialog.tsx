@@ -14,10 +14,14 @@ interface Props {
   title: string;
   subtitle?: string;
   groups?: StatementGroupOption[];
-  onDownload: (range: { fromDate?: string; toDate?: string; includeOpening?: boolean; groupId?: string; groupLabel?: string }) => void;
+  /** Show "Client business / Other sale" checkboxes (agent statements). */
+  showScope?: boolean;
+  onDownload: (range: { fromDate?: string; toDate?: string; includeOpening?: boolean; groupId?: string; groupLabel?: string; scope?: "client" | "other" | "both" }) => void;
 }
 
-export default function StatementDialog({ open, onOpenChange, title, subtitle, groups, onDownload }: Props) {
+export default function StatementDialog({ open, onOpenChange, title, subtitle, groups, showScope, onDownload }: Props) {
+  const [incClient, setIncClient] = useState(true);
+  const [incOther, setIncOther] = useState(true);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [includeOpening, setIncludeOpening] = useState(true);
@@ -25,9 +29,11 @@ export default function StatementDialog({ open, onOpenChange, title, subtitle, g
 
   function handle(allTime = false) {
     const g = groups?.find((x) => x.id === groupId);
+    if (showScope && !incClient && !incOther) return;
+    const scope = showScope ? (incClient && incOther ? "both" : incClient ? "client" : "other") as const : undefined;
     onDownload(allTime
-      ? { includeOpening, groupId: groupId || undefined, groupLabel: g?.label }
-      : { fromDate: fromDate || undefined, toDate: toDate || undefined, includeOpening, groupId: groupId || undefined, groupLabel: g?.label });
+      ? { includeOpening, groupId: groupId || undefined, groupLabel: g?.label, scope }
+      : { fromDate: fromDate || undefined, toDate: toDate || undefined, includeOpening, groupId: groupId || undefined, groupLabel: g?.label, scope });
     onOpenChange(false);
   }
 
@@ -76,6 +82,20 @@ export default function StatementDialog({ open, onOpenChange, title, subtitle, g
                 ))}
               </select>
               {groupId && <p className="mt-1 text-[10px] text-muted-foreground">Only purchases tagged to this group will be included. Opening balance is disabled for group-filtered statements.</p>}
+            </div>
+          )}
+          {showScope && (
+            <div className="space-y-2 rounded-lg border border-border/50 bg-accent/10 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">Include in statement</p>
+              <label className="flex items-start gap-2 text-xs">
+                <Checkbox checked={incClient} onCheckedChange={(v) => setIncClient(!!v)} />
+                <span>Client business <span className="text-muted-foreground">— clients by his reference, sale minus his commission</span></span>
+              </label>
+              <label className="flex items-start gap-2 text-xs">
+                <Checkbox checked={incOther} onCheckedChange={(v) => setIncOther(!!v)} />
+                <span>Other sale <span className="text-muted-foreground">— purchases made for this agent, service-wise</span></span>
+              </label>
+              {!incClient && !incOther && <p className="text-[10px] text-destructive">Select at least one.</p>}
             </div>
           )}
           <label className="flex items-center gap-2 rounded-lg border border-border/50 bg-accent/10 p-2 text-xs">

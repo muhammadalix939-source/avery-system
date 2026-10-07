@@ -73,10 +73,8 @@ function AgentsPage() {
   }
 
   function openStmt(a: Agent) { setStmtAgent(a); setStmtOpen(true); }
-  function downloadReport(a: Agent, range: { fromDate?: string; toDate?: string }) {
-    const entries = store.entries.filter((e) => e.referenceId === a.id);
-    const agentBookings = store.bookings.filter((b) => b.agentId === a.id);
-    generateAgentReport(a, entries, { ...range, bookings: agentBookings });
+  function downloadReport(a: Agent, range: { fromDate?: string; toDate?: string; includeOpening?: boolean; scope?: "client" | "other" | "both" }) {
+    generateAgentReport(a, store.entries, { ...range, bookings: store.bookings, clients: store.clients });
   }
 
   // Agent ledger = own commission payouts + the CLIENT transactions of heads this agent brought.
@@ -201,7 +199,8 @@ function AgentsPage() {
       <StatementDialog
         open={stmtOpen} onOpenChange={setStmtOpen}
         title={`Agent Statement — ${stmtAgent?.name || ""}`}
-        subtitle="Choose a date range or all-time. Commission, services and history included."
+        subtitle="Pick a period and what to include. Opening balance, receipts and remaining balance are calculated automatically."
+        showScope
         onDownload={(range) => stmtAgent && downloadReport(stmtAgent, range)}
       />
     </div>
