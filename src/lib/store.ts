@@ -42,6 +42,13 @@ export interface LedgerEntry {
   accountId?: string;
   /** Bank transfer / cheque / mobile wallet transaction reference number (required for non-Cash accounts). */
   txnRef?: string;
+  /** How the money moved: Cash / Cheque / Bank Transfer / Online-Wallet. */
+  paymentMethod?: "Cash" | "Cheque" | "Bank Transfer" | "Online / Wallet";
+  chequeNo?: string;
+  chequeDate?: string;
+  bankName?: string;
+  /** Who physically handed over / collected the money. */
+  collectedBy?: string;
   /** Cash direction for account posting. */
   direction?: "in" | "out";
   /** Supplier ledger reconciliation state. */
