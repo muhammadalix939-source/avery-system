@@ -30,7 +30,7 @@ export default function StatementDialog({ open, onOpenChange, title, subtitle, g
   function handle(allTime = false) {
     const g = groups?.find((x) => x.id === groupId);
     if (showScope && !incClient && !incOther) return;
-    const scope = showScope ? (incClient && incOther ? "both" : incClient ? "client" : "other") as const : undefined;
+    const scope = showScope ? ((incClient && incOther ? "both" : incClient ? "client" : "other") as "client" | "other" | "both") : undefined;
     onDownload(allTime
       ? { includeOpening, groupId: groupId || undefined, groupLabel: g?.label, scope }
       : { fromDate: fromDate || undefined, toDate: toDate || undefined, includeOpening, groupId: groupId || undefined, groupLabel: g?.label, scope });
