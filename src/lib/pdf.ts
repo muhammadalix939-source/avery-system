@@ -1121,7 +1121,7 @@ export function generateAgentReport(agent: Agent, entries: LedgerEntry[], opts: 
       ]) : [[{ content: "No client bookings in this period", colSpan: 8, styles: { halign: "center" as const, textColor: MUTED } }]],
       foot: [[
         { content: "Totals", colSpan: 5, styles: { halign: "right" as const, fontStyle: "bold" as const, fillColor: ROW_ALT, textColor: NAVY } },
-        { content: formatCurrency(grossSale), styles: { halign: "right" as const, fontStyle: "bold" as const, fillColor: ROW_ALT } },
+        { content: formatCurrency(grossSale), styles: { halign: "right" as const, fontStyle: "bold" as const, fillColor: ROW_ALT, textColor: INK } },
         { content: formatCurrency(commission), styles: { halign: "right" as const, fontStyle: "bold" as const, fillColor: ROW_ALT, textColor: DANGER } },
         { content: formatCurrency(netClient), styles: { halign: "right" as const, fontStyle: "bold" as const, fillColor: ROW_ALT, textColor: NAVY } },
       ]],
@@ -1200,9 +1200,7 @@ export function generateAgentReport(agent: Agent, entries: LedgerEntry[], opts: 
   });
   y = (doc as any).lastAutoTable.finalY + 6;
 
-  if (incOther && otherCost > 0) {
-    y = totalsBand(doc, y, "Other Sale profit (internal)", formatCurrency(otherSale - otherCost), "navy");
-  }
+  void otherCost; // internal profit is never printed on an agent-facing statement
 
   // Commission account (separate)
   const commEarned = bookings.reduce((s, b) => s + (b.commission || 0), 0) + (agent.openingCommission || 0);
