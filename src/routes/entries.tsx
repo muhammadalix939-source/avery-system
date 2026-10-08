@@ -32,7 +32,7 @@ const typeLabels: Record<LedgerEntry["type"], string> = {
   other_sale: "Other Sale",
   gift: "Gift & Expense",
   drawing: "Owner Drawing",
-  agent_receive: "Received from Agent",
+  agent_receive: "Agent Payment Received",
 };
 
 const typeColors: Record<LedgerEntry["type"], string> = {
@@ -51,7 +51,10 @@ const typeColors: Record<LedgerEntry["type"], string> = {
 };
 
 /** Money that flows INTO the business (shown with a + sign). */
-const INFLOW_TYPES: LedgerEntry["type"][] = ["client_receive", "supplier_refund", "other_sale"];
+const INFLOW_TYPES: LedgerEntry["type"][] = ["client_receive", "supplier_refund", "other_sale", "agent_receive"];
+/** Entries where real money moves — these capture account + instrument details. */
+const MONEY_TYPES: LedgerEntry["type"][] = ["client_receive", "agent_receive", "supplier_payment", "agent_commission", "expense", "client_refund", "supplier_refund", "drawing"];
+const METHODS = ["Cash", "Cheque", "Bank Transfer", "Online / Wallet"] as const;
 
 export const CHARGE_CATEGORIES = [
   "Embassy / Send-to-Embassy Fee",
@@ -104,6 +107,10 @@ function EntriesPage() {
   const [groupId, setGroupId] = useState<string>("");
   // Supplier-payment references (who paid / for which agent's business)
   const [refs, setRefs] = useState({ agentId: "", paidBy: "" });
+  // Payment instrument details (every money-in / money-out entry)
+  const emptyPay = { method: "Cash" as NonNullable<LedgerEntry["paymentMethod"]>, accountId: "", chequeNo: "", chequeDate: "", bankName: "", txnRef: "", collectedBy: "" };
+  const [pay, setPay] = useState(emptyPay);
+  const [methodFilter, setMethodFilter] = useState<string>("all");
   const [newGroup, setNewGroup] = useState({ name: "", pnr: "", flightNumber: "", date: "", description: "", totalPax: "" });
   const emptyDetails = {
     adults: "", children: "", infants: "",
@@ -146,9 +153,20 @@ function EntriesPage() {
   const groupTaggable = form.type === "purchase" || form.type === "supplier_payment" || form.type === "supplier_refund" || form.type === "expense";
 
   const sorted = [...store.entries].sort((a, b) => b.date.localeCompare(a.date));
-  const filtered = typeFilter === "all" ? sorted : sorted.filter((e) => e.type === typeFilter);
+  const filtered = (typeFilter === "all" ? sorted : sorted.filter((e) => e.type === typeFilter))
+    .filter((e) => methodFilter === "all" || (MONEY_TYPES.includes(e.type) && (e.paymentMethod || "Cash") === methodFilter));
+
+  function validatePay(): boolean {
+    if (!MONEY_TYPES.includes(form.type)) return true;
+    if (!(Number(form.amount) > 0)) { toast.error("Enter an amount"); return false; }
+    if ((form.type === "agent_receive") && !form.referenceId) { toast.error("Select the agent"); return false; }
+    if (pay.method === "Cheque" && !pay.chequeNo) { toast.error("Enter the cheque number"); return false; }
+    if ((pay.method === "Bank Transfer" || pay.method === "Online / Wallet") && !pay.txnRef) { toast.error("Enter the transaction / reference number"); return false; }
+    return true;
+  }
 
   function handleAdd() {
+    if (!validatePay()) return;
     let finalGroupId = groupMode === "existing" ? groupId : undefined;
     if (groupMode === "new" && newGroup.name.trim()) {
       finalGroupId = store.addGroup({
@@ -175,8 +193,16 @@ function EntriesPage() {
       agentId: form.type === "purchase" && pf.for === "agent" ? (pf.agentId || undefined) : (refs.agentId || undefined),
       paidBy: refs.paidBy || undefined,
       clientId: extra.clientId || undefined,
-      chargeCategory: form.type === "client_charge" ? (extra.chargeCategory || undefined) : undefined,
+      chargeCategory: form.type === "client_charge" || form.type === "drawing" ? (extra.chargeCategory || undefined) : undefined,
       refundOf: extra.refundOf || undefined,
+      paymentMethod: MONEY_TYPES.includes(form.type) ? pay.method : undefined,
+      accountId: MONEY_TYPES.includes(form.type) ? (pay.accountId || undefined) : undefined,
+      chequeNo: MONEY_TYPES.includes(form.type) && pay.method === "Cheque" ? pay.chequeNo || undefined : undefined,
+      chequeDate: MONEY_TYPES.includes(form.type) && pay.method === "Cheque" ? pay.chequeDate || undefined : undefined,
+      bankName: MONEY_TYPES.includes(form.type) && pay.method !== "Cash" ? pay.bankName || undefined : undefined,
+      txnRef: MONEY_TYPES.includes(form.type) && pay.method !== "Cash" ? pay.txnRef || undefined : undefined,
+      collectedBy: MONEY_TYPES.includes(form.type) ? pay.collectedBy || undefined : undefined,
+      direction: MONEY_TYPES.includes(form.type) ? entryDirection(form.type) : undefined,
       refundReason: extra.refundReason || undefined,
     });
     setForm({ date: "", type: "client_receive", headId: "", referenceId: "", referenceName: "", amount: "", note: "" });
@@ -186,11 +212,13 @@ function EntriesPage() {
     setExtra({ clientId: "", chargeCategory: "", refundOf: "", refundReason: "" });
     setGroupMode("none"); setGroupId(""); setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "", totalPax: "" });
     setRefs({ agentId: "", paidBy: "" });
+    setPay(emptyPay);
     setAddOpen(false);
   }
 
   function handleEdit() {
     if (!selected) return;
+    if (!validatePay()) return;
     let finalGroupId: string | undefined = groupMode === "existing" ? groupId : groupMode === "none" ? undefined : selected.groupId;
     if (groupMode === "new" && newGroup.name.trim()) {
       finalGroupId = store.addGroup({
@@ -217,8 +245,16 @@ function EntriesPage() {
       agentId: form.type === "purchase" && pf.for === "agent" ? (pf.agentId || undefined) : (refs.agentId || undefined),
       paidBy: refs.paidBy || undefined,
       clientId: extra.clientId || undefined,
-      chargeCategory: form.type === "client_charge" ? (extra.chargeCategory || undefined) : undefined,
+      chargeCategory: form.type === "client_charge" || form.type === "drawing" ? (extra.chargeCategory || undefined) : undefined,
       refundOf: extra.refundOf || undefined,
+      paymentMethod: MONEY_TYPES.includes(form.type) ? pay.method : undefined,
+      accountId: MONEY_TYPES.includes(form.type) ? (pay.accountId || undefined) : undefined,
+      chequeNo: MONEY_TYPES.includes(form.type) && pay.method === "Cheque" ? pay.chequeNo || undefined : undefined,
+      chequeDate: MONEY_TYPES.includes(form.type) && pay.method === "Cheque" ? pay.chequeDate || undefined : undefined,
+      bankName: MONEY_TYPES.includes(form.type) && pay.method !== "Cash" ? pay.bankName || undefined : undefined,
+      txnRef: MONEY_TYPES.includes(form.type) && pay.method !== "Cash" ? pay.txnRef || undefined : undefined,
+      collectedBy: MONEY_TYPES.includes(form.type) ? pay.collectedBy || undefined : undefined,
+      direction: MONEY_TYPES.includes(form.type) ? entryDirection(form.type) : undefined,
       refundReason: extra.refundReason || undefined,
     });
     setEditOpen(false);
@@ -230,6 +266,7 @@ function EntriesPage() {
     setServiceCategory(e.serviceCategory || "");
     setExtra({ clientId: e.clientId || "", chargeCategory: e.chargeCategory || "", refundOf: e.refundOf || "", refundReason: e.refundReason || "" });
     setRefs({ agentId: e.agentId || "", paidBy: e.paidBy || "" });
+    setPay({ method: e.paymentMethod || "Cash", accountId: e.accountId || "", chequeNo: e.chequeNo || "", chequeDate: e.chequeDate || "", bankName: e.bankName || "", txnRef: e.txnRef || "", collectedBy: e.collectedBy || "" });
     setPf({ for: e.purchasedFor || "", agentId: e.purchasedFor === "agent" ? e.agentId || "" : "", clientName: e.forClientName || "", saleAmount: e.saleAmount ? String(e.saleAmount) : "" });
     if (e.groupId) { setGroupMode("existing"); setGroupId(e.groupId); } else { setGroupMode("none"); setGroupId(""); }
     setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "", totalPax: "" });
@@ -253,9 +290,9 @@ function EntriesPage() {
     setEditOpen(true);
   }
 
-  const totalReceived = store.entries.filter((e) => e.type === "client_receive").reduce((s, e) => s + e.amount, 0)
+  const totalReceived = store.entries.filter((e) => e.type === "client_receive" || e.type === "agent_receive").reduce((s, e) => s + e.amount, 0)
     - store.entries.filter((e) => e.type === "client_refund").reduce((s, e) => s + e.amount, 0);
-  const totalPaid = store.entries.filter((e) => e.type === "supplier_payment" || e.type === "agent_commission" || e.type === "expense").reduce((s, e) => s + e.amount, 0)
+  const totalPaid = store.entries.filter((e) => e.type === "supplier_payment" || e.type === "agent_commission" || e.type === "expense" || e.type === "drawing").reduce((s, e) => s + e.amount, 0)
     - store.entries.filter((e) => e.type === "supplier_refund").reduce((s, e) => s + e.amount, 0);
   const totalPurchases = store.entries.filter((e) => e.type === "purchase").reduce((s, e) => s + e.amount, 0);
 
@@ -281,7 +318,7 @@ function EntriesPage() {
       const supplier = store.suppliers.find((s) => s.id === refId);
       name = supplier?.companyName || "";
       setForm({ ...form, referenceId: refId, referenceName: name || form.referenceName });
-    } else if (form.type === "agent_commission") {
+    } else if (form.type === "agent_commission" || form.type === "agent_receive") {
       const agent = store.agents.find((a) => a.id === refId);
       name = agent?.name || "";
       setForm({ ...form, referenceId: refId, referenceName: name || form.referenceName });
@@ -304,6 +341,8 @@ function EntriesPage() {
             <SelectItem value="client_charge">Extra Charge to Client (Embassy / Service Fee)</SelectItem>
             <SelectItem value="client_refund">Refund to Client</SelectItem>
             <SelectItem value="supplier_refund">Refund from Supplier</SelectItem>
+            <SelectItem value="agent_receive">Agent Payment Received</SelectItem>
+            <SelectItem value="drawing">Owner / Partner Drawing</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -730,6 +769,66 @@ function EntriesPage() {
         <div><Label>Expense Name</Label><Input value={form.referenceName} onChange={(e) => setForm({ ...form, referenceName: e.target.value })} placeholder="Office Rent, Utilities..." className="bg-accent/20 border-border mt-1" /></div>
       )}
 
+      {form.type === "agent_receive" && (
+        <div className="space-y-3 rounded-lg border border-success/40 bg-success/5 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-success">Payment received from agent</p>
+          <div><Label className="text-[10px]">Agent *</Label>
+            <SearchableSelect value={form.referenceId} onChange={(v) => updateReferenceId(v)} placeholder="Search Agent..."
+              options={store.agents.map((a) => ({ value: a.id, label: `${a.id} — ${a.name}`, hint: a.phone }))} className="mt-1" />
+          </div>
+          {form.referenceId && (
+            <div><Label className="text-[10px]">Against Head ID (optional)</Label>
+              <SearchableSelect value={form.headId} onChange={(v) => setForm({ ...form, headId: v })} placeholder="General / on-account"
+                options={store.bookings.filter((b) => b.agentId === form.referenceId).map((b) => ({ value: b.headId, label: `${b.headId} — ${b.packageType}`, hint: b.travelDate }))} className="mt-1" />
+            </div>
+          )}
+          <p className="text-[10px] text-muted-foreground">Reduces the agent's Business Account remaining balance. Shows in his statement under Receipts.</p>
+        </div>
+      )}
+
+      {form.type === "drawing" && (
+        <div className="space-y-3 rounded-lg border border-destructive/40 bg-destructive/5 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-destructive">Owner / Partner Drawing</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label className="text-[10px]">Drawn By *</Label><Input value={form.referenceName} onChange={(e) => setForm({ ...form, referenceName: e.target.value })} placeholder="Owner / Partner name" className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+            <div><Label className="text-[10px]">Purpose</Label><Input value={extra.chargeCategory} onChange={(e) => setExtra({ ...extra, chargeCategory: e.target.value })} placeholder="Personal / Household / Profit share" className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+          </div>
+          <p className="text-[10px] text-muted-foreground">A drawing is not an expense — it does not reduce business profit, it reduces cash and the owner's retained profit. See it in the Drawings report.</p>
+        </div>
+      )}
+
+      {MONEY_TYPES.includes(form.type) && (
+        <div className="space-y-3 rounded-lg border border-primary/40 bg-primary/5 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">{entryDirection(form.type) === "in" ? "Received In — payment details" : "Paid From — payment details"}</p>
+          <div className="grid grid-cols-4 gap-1 rounded-md border border-border bg-accent/10 p-1">
+            {METHODS.map((m) => (
+              <button key={m} type="button" onClick={() => setPay({ ...pay, method: m })}
+                className={`rounded px-1 py-1.5 text-[10px] font-semibold ${pay.method === m ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>{m}</button>
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label className="text-[10px]">Account</Label>
+              <SearchableSelect value={pay.accountId} onChange={(v) => setPay({ ...pay, accountId: v })} placeholder={store.accounts.length ? "Select account" : "No accounts yet"}
+                options={store.accounts.map((a) => ({ value: a.id, label: `${a.name} (${a.type})`, hint: a.number }))} className="mt-1" />
+            </div>
+            <div><Label className="text-[10px]">{entryDirection(form.type) === "in" ? "Collected By" : "Paid By / Handed To"}</Label><Input value={pay.collectedBy} onChange={(e) => setPay({ ...pay, collectedBy: e.target.value })} placeholder="Staff / person name" className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+          </div>
+          {pay.method === "Cheque" && (
+            <div className="grid grid-cols-3 gap-2">
+              <div><Label className="text-[10px]">Cheque No *</Label><Input value={pay.chequeNo} onChange={(e) => setPay({ ...pay, chequeNo: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+              <div><Label className="text-[10px]">Cheque Date</Label><Input type="date" value={pay.chequeDate} onChange={(e) => setPay({ ...pay, chequeDate: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+              <div><Label className="text-[10px]">Bank</Label><Input value={pay.bankName} onChange={(e) => setPay({ ...pay, bankName: e.target.value })} placeholder="HBL / Meezan" className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+            </div>
+          )}
+          {(pay.method === "Bank Transfer" || pay.method === "Online / Wallet") && (
+            <div className="grid grid-cols-2 gap-2">
+              <div><Label className="text-[10px]">{pay.method === "Bank Transfer" ? "Bank Name" : "Wallet (JazzCash / Easypaisa)"}</Label><Input value={pay.bankName} onChange={(e) => setPay({ ...pay, bankName: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+              <div><Label className="text-[10px]">Transaction / Ref No *</Label><Input value={pay.txnRef} onChange={(e) => setPay({ ...pay, txnRef: e.target.value })} className="bg-accent/20 border-border mt-1 h-8 text-xs" /></div>
+            </div>
+          )}
+        </div>
+      )}
+
       <div>
         <div className="flex items-center justify-between">
           <Label>Amount (PKR)</Label>
@@ -742,7 +841,7 @@ function EntriesPage() {
         </div>
         <Input type="number" value={form.amount} onChange={(e) => { setAutoTotal(false); setForm({ ...form, amount: e.target.value }); }} placeholder="100000" className="bg-accent/20 border-border mt-1" />
       </div>
-      <div><Label>Note</Label><Input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Payment note..." className="bg-accent/20 border-border mt-1" /></div>
+      <div><Label>Description</Label><Input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="What this payment is for..." className="bg-accent/20 border-border mt-1" /></div>
     </div>
   );
 
@@ -790,9 +889,31 @@ function EntriesPage() {
         </div>
       </div>
 
+      {/* Payment method cards — click to filter */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {METHODS.map((m) => {
+          const rows = store.entries.filter((e) => MONEY_TYPES.includes(e.type) && (e.paymentMethod || "Cash") === m);
+          const inn = rows.filter((e) => entryDirection(e.type) === "in").reduce((s, e) => s + e.amount, 0);
+          const out = rows.filter((e) => entryDirection(e.type) === "out").reduce((s, e) => s + e.amount, 0);
+          const active = methodFilter === m;
+          return (
+            <button key={m} onClick={() => setMethodFilter(active ? "all" : m)}
+              className={`glass-card rounded-xl p-4 text-left transition-all ${active ? "ring-1 ring-primary" : "hover:border-primary/40"}`}>
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{m}</p>
+                <span className="text-[10px] text-muted-foreground">{rows.length} entries</span>
+              </div>
+              <div className="mt-2 flex justify-between text-xs"><span className="text-muted-foreground">Received</span><span className="font-semibold text-success">{formatCurrency(inn)}</span></div>
+              <div className="flex justify-between text-xs"><span className="text-muted-foreground">Paid</span><span className="font-semibold text-destructive">{formatCurrency(out)}</span></div>
+              <div className="mt-1 flex justify-between border-t border-border/40 pt-1 text-xs"><span>Net</span><span className="font-bold text-primary">{formatCurrency(inn - out)}</span></div>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Type Filters */}
       <div className="flex flex-wrap gap-2">
-        {(["all", "client_receive", "client_charge", "purchase", "supplier_payment", "agent_commission", "expense", "client_refund", "supplier_refund"] as const).map((t) => (
+        {(["all", "client_receive", "client_charge", "purchase", "supplier_payment", "agent_commission", "expense", "client_refund", "supplier_refund", "agent_receive", "drawing"] as const).map((t) => (
           <button key={t} onClick={() => setTypeFilter(t)} className={`rounded-lg px-4 py-2 text-xs font-medium transition-all ${typeFilter === t ? "bg-primary text-primary-foreground" : "bg-accent/30 text-muted-foreground hover:bg-accent/50"}`}>
             {t === "all" ? "All" : typeLabels[t]}
           </button>
@@ -828,7 +949,10 @@ function EntriesPage() {
                   <td className={`px-4 py-3 font-semibold ${INFLOW_TYPES.includes(e.type) ? "text-success" : e.type === "client_charge" ? "text-primary" : "text-destructive"}`}>
                     {INFLOW_TYPES.includes(e.type) ? "+" : e.type === "client_charge" ? "" : "-"}{formatCurrency(e.amount)}
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs max-w-[200px] truncate">{[e.chargeCategory, e.refundReason, e.note].filter(Boolean).join(" · ")}</td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs max-w-[200px] truncate">{[e.chargeCategory, e.refundReason, e.note].filter(Boolean).join(" · ")}
+                    {MONEY_TYPES.includes(e.type) && (
+                      <p className="mt-0.5 text-[10px] text-primary/80">{[e.paymentMethod || "Cash", store.accounts.find((a) => a.id === e.accountId)?.name, e.chequeNo && `Chq ${e.chequeNo}`, e.bankName, e.txnRef && `Ref ${e.txnRef}`, e.collectedBy && `by ${e.collectedBy}`].filter(Boolean).join(" · ")}</p>
+                    )}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1">
                       <button onClick={() => generatePaymentReceipt(e)} className="rounded p-1 hover:bg-accent" title="Download Receipt"><Download className="h-3.5 w-3.5 text-success" /></button>
