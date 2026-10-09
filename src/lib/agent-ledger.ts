@@ -60,7 +60,8 @@ export function computeAgentBusiness(
     .filter((e) => e.type === "agent_commission" && e.referenceId === agent.id)
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  const received = bookings.reduce((s, b) => s + (b.amountReceived || 0), 0);
+  const received = bookings.reduce((s, b) => s + (b.amountReceived || 0), 0)
+    + data.entries.filter((e) => e.type === "agent_receive" && e.referenceId === agent.id).reduce((s, e) => s + e.amount, 0);
   const netReceivable = Math.max(0, grossSales - commissionEarned);
 
   return {

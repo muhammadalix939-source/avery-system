@@ -76,7 +76,8 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
     const totalSales = agentBookings.reduce((s, b) => s + b.totalAmount, 0) + (a.openingSales || 0) + otherSaleTotal;
     const totalCommission = agentBookings.reduce((s, b) => s + (b.commission || 0), 0) + (a.openingCommission || 0);
     const paidCommission = entries.filter((e) => e.type === "agent_commission" && e.referenceId === a.id).reduce((s, e) => s + e.amount, 0) + (a.openingPaidCommission || 0);
-    const received = agentBookings.reduce((s, b) => s + (b.amountReceived || 0), 0);
+    const received = agentBookings.reduce((s, b) => s + (b.amountReceived || 0), 0)
+      + entries.filter((e) => e.type === "agent_receive" && e.referenceId === a.id).reduce((s, e) => s + e.amount, 0);
     const netReceivable = Math.max(0, totalSales - totalCommission);
     return {
       agentBookings, agentClients, totalSales, totalCommission, paidCommission, otherSaleRows, otherSaleTotal, otherSaleCost,
@@ -149,11 +150,7 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
 
               {entries.length > 0 && type === "agent" && (
                 <>
-                  <LedgerBlock
-                    title="Commission Ledger"
-                    hint="Commission payouts settled to this agent."
-                    rows={entries.filter((e) => e.type === "agent_commission" && e.referenceId === (data as Agent).id)}
-                  />
+
                   <LedgerBlock
                     title="Client Business Ledger"
                     hint="Every client transaction of the bookings this agent brought — receipts, extra charges and refunds."
@@ -458,10 +455,11 @@ function renderAgentFull(a: Agent, stats: { agentBookings: any[]; agentClients: 
         <StatCard label="Bookings" value={String(stats.agentBookings.length)} />
       </div>
       <div className="grid grid-cols-3 gap-2">
-        <StatCard label="Total Commission" value={formatCurrency(stats.totalCommission)} color="text-warning" />
-        <StatCard label="Paid Commission" value={formatCurrency(stats.paidCommission)} color="text-success" />
-        <StatCard label="Payable" value={formatCurrency(stats.payable)} color="text-destructive" />
+        <StatCard label="Net Receivable" value={formatCurrency(stats.netReceivable)} color="text-primary" />
+        <StatCard label="Received" value={formatCurrency(stats.received)} color="text-success" />
+        <StatCard label="Remaining" value={formatCurrency(stats.outstanding)} color="text-destructive" />
       </div>
+      <AgentServices bookings={stats.agentBookings} otherRows={(stats as any).otherSaleRows || []} />
 
       <div className="space-y-2">
         <Button onClick={onViewClients} variant="outline" className="w-full gap-2 text-xs">
@@ -831,6 +829,49 @@ function OverviewRow({ label, value, bold, tone }: { label: string; value: strin
     <div className="flex justify-between items-center">
       <span className={`text-muted-foreground ${bold ? "font-semibold text-foreground" : ""}`}>{label}</span>
       <span className={`${bold ? "font-bold" : "font-medium"} ${c}`}>{value}</span>
+    </div>
+  );
+}
+
+
+/** One-by-one service breakdown for an agent (bookings' services + other-sale purchases), grouped like the supplier view. */
+function AgentServices({ bookings, otherRows }: { bookings: Booking[]; otherRows: LedgerEntry[] }) {
+  type Item = { key: string; title: string; sub: string; amount?: number; head: string };
+  const groups: Record<string, Item[]> = { Hotel: [], Flight: [], Visa: [], Transport: [], Other: [] };
+  bookings.forEach((b) => {
+    (b.hotels || []).forEach((h: any, i) => groups.Hotel.push({ key: `${b.id}h${i}`, head: b.headId, title: h.hotelName || h.name || "Hotel", sub: [h.city, h.checkIn && `${h.checkIn} → ${h.checkOut || ""}`, h.rooms && `${h.rooms} room(s)`].filter(Boolean).join(" · ") }));
+    (b.flights || []).forEach((f: any, i) => groups.Flight.push({ key: `${b.id}f${i}`, head: b.headId, title: [f.airline, f.flightNumber].filter(Boolean).join(" ") || "Flight", sub: [f.from && `${f.from} → ${f.to || ""}`, f.departureDate || f.date, f.pnr && `PNR ${f.pnr}`].filter(Boolean).join(" · ") }));
+    (b.visas || []).forEach((v: any, i) => groups.Visa.push({ key: `${b.id}v${i}`, head: b.headId, title: v.visaType || v.type || "Visa", sub: [v.country, v.status].filter(Boolean).join(" · ") }));
+    (b.transports || []).forEach((t: any, i) => groups.Transport.push({ key: `${b.id}t${i}`, head: b.headId, title: t.route || t.vehicle || "Transport", sub: [t.vehicle, t.date].filter(Boolean).join(" · ") }));
+    ((b as any).others || []).forEach((o: any, i: number) => groups.Other.push({ key: `${b.id}o${i}`, head: b.headId, title: o.name || o.description || "Service", sub: o.description || "" }));
+  });
+  otherRows.forEach((e) => {
+    const cat = e.serviceCategory && groups[e.serviceCategory] ? e.serviceCategory : "Other";
+    const d = e.purchaseDetails || {};
+    groups[cat].push({ key: e.id, head: e.forClientName || "Other Sale", title: d.hotelName || d.visaType || d.route || d.description || e.note || "Other Sale", sub: [e.date, d.city, `Other Sale`].filter(Boolean).join(" · "), amount: e.type === "purchase" ? (e.saleAmount ?? e.amount) : e.amount });
+  });
+  const keys = Object.keys(groups).filter((k) => groups[k].length);
+  if (!keys.length) return <p className="rounded-lg border border-border/50 p-3 text-center text-[11px] text-muted-foreground">No services recorded for this agent yet.</p>;
+  return (
+    <div className="space-y-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Services — one by one</p>
+      {keys.map((k) => (
+        <div key={k} className="rounded-lg border border-border/50">
+          <div className="flex items-center justify-between border-b border-border/40 bg-accent/10 px-3 py-1.5">
+            <span className="text-xs font-semibold text-primary">{k}</span>
+            <span className="text-[10px] text-muted-foreground">{groups[k].length} item(s)</span>
+          </div>
+          {groups[k].map((it) => (
+            <div key={it.key} className="flex items-center justify-between border-b border-border/20 px-3 py-1.5 last:border-0">
+              <div className="min-w-0">
+                <p className="truncate text-xs font-medium">{it.title}</p>
+                <p className="truncate text-[10px] text-muted-foreground">{it.head}{it.sub ? ` · ${it.sub}` : ""}</p>
+              </div>
+              {it.amount != null && <span className="text-xs font-semibold text-primary">{formatCurrency(it.amount)}</span>}
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
