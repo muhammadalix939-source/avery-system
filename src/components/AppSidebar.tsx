@@ -24,6 +24,7 @@ const sections = [
     { to: "/payments", icon: CreditCard, label: "Payments" },
     { to: "/entries", icon: FileText, label: "Entries" },
     { to: "/expenses", icon: Receipt, label: "Expenses" },
+    { to: "/drawings", icon: Receipt, label: "Drawings" },
     { to: "/reports", icon: BarChart3, label: "Financial Reports" },
   ]},
   { title: "System", items: [

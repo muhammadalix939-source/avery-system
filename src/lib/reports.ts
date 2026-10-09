@@ -53,7 +53,7 @@ export function computeTotals(input: ReportInput): FinancialTotals {
   const openingProfit = opening.profit || 0;
 
   // ---------- Live movement (ledger is the single source of truth) ----------
-  const grossReceived = entries.filter(e => e.type === "client_receive").reduce((s, e) => s + e.amount, 0);
+  const grossReceived = entries.filter(e => e.type === "client_receive" || e.type === "agent_receive").reduce((s, e) => s + e.amount, 0);
   const clientRefunds = entries.filter(e => e.type === "client_refund").reduce((s, e) => s + e.amount, 0);
   const supplierRefunds = entries.filter(e => e.type === "supplier_refund").reduce((s, e) => s + e.amount, 0);
   const liveReceived = Math.max(0, grossReceived - clientRefunds);
@@ -81,7 +81,8 @@ export function computeTotals(input: ReportInput): FinancialTotals {
   const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
   // Cash is strictly actual money movement: opening cash + receipts − real payouts.
   // (Purchases that are not yet paid never touch cash; opening revenue is NOT cash unless it is in opening cash.)
-  const cashOnHand = openingCash + liveReceived - supplierPaid - liveExpenses - commissionPaid;
+  const drawings = entries.filter(e => e.type === "drawing").reduce((s, e) => s + e.amount, 0);
+  const cashOnHand = openingCash + liveReceived - supplierPaid - liveExpenses - commissionPaid - drawings;
   const collectionEfficiency = bookedSales > 0 ? (liveReceived / bookedSales) * 100 : 0;
   const avgProfitPerBooking = bookings.length > 0 ? netProfit / bookings.length : 0;
   const avgRevenuePerClient = clients.length > 0 ? totalRevenue / clients.length : 0;
