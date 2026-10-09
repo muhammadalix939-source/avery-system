@@ -17,6 +17,7 @@ import { Route as PaymentsRouteImport } from './routes/payments'
 import { Route as GroupsRouteImport } from './routes/groups'
 import { Route as ExpensesRouteImport } from './routes/expenses'
 import { Route as EntriesRouteImport } from './routes/entries'
+import { Route as DrawingsRouteImport } from './routes/drawings'
 import { Route as ClientsRouteImport } from './routes/clients'
 import { Route as BookingsRouteImport } from './routes/bookings'
 import { Route as AlertsRouteImport } from './routes/alerts'
@@ -64,6 +65,11 @@ const EntriesRoute = EntriesRouteImport.update({
   path: '/entries',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DrawingsRoute = DrawingsRouteImport.update({
+  id: '/drawings',
+  path: '/drawings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ClientsRoute = ClientsRouteImport.update({
   id: '/clients',
   path: '/clients',
@@ -102,6 +108,7 @@ export interface FileRoutesByFullPath {
   '/alerts': typeof AlertsRoute
   '/bookings': typeof BookingsRoute
   '/clients': typeof ClientsRoute
+  '/drawings': typeof DrawingsRoute
   '/entries': typeof EntriesRoute
   '/expenses': typeof ExpensesRoute
   '/groups': typeof GroupsRoute
@@ -118,6 +125,7 @@ export interface FileRoutesByTo {
   '/alerts': typeof AlertsRoute
   '/bookings': typeof BookingsRoute
   '/clients': typeof ClientsRoute
+  '/drawings': typeof DrawingsRoute
   '/entries': typeof EntriesRoute
   '/expenses': typeof ExpensesRoute
   '/groups': typeof GroupsRoute
@@ -135,6 +143,7 @@ export interface FileRoutesById {
   '/alerts': typeof AlertsRoute
   '/bookings': typeof BookingsRoute
   '/clients': typeof ClientsRoute
+  '/drawings': typeof DrawingsRoute
   '/entries': typeof EntriesRoute
   '/expenses': typeof ExpensesRoute
   '/groups': typeof GroupsRoute
@@ -153,6 +162,7 @@ export interface FileRouteTypes {
     | '/alerts'
     | '/bookings'
     | '/clients'
+    | '/drawings'
     | '/entries'
     | '/expenses'
     | '/groups'
@@ -169,6 +179,7 @@ export interface FileRouteTypes {
     | '/alerts'
     | '/bookings'
     | '/clients'
+    | '/drawings'
     | '/entries'
     | '/expenses'
     | '/groups'
@@ -185,6 +196,7 @@ export interface FileRouteTypes {
     | '/alerts'
     | '/bookings'
     | '/clients'
+    | '/drawings'
     | '/entries'
     | '/expenses'
     | '/groups'
@@ -202,6 +214,7 @@ export interface RootRouteChildren {
   AlertsRoute: typeof AlertsRoute
   BookingsRoute: typeof BookingsRoute
   ClientsRoute: typeof ClientsRoute
+  DrawingsRoute: typeof DrawingsRoute
   EntriesRoute: typeof EntriesRoute
   ExpensesRoute: typeof ExpensesRoute
   GroupsRoute: typeof GroupsRoute
@@ -270,6 +283,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EntriesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/drawings': {
+      id: '/drawings'
+      path: '/drawings'
+      fullPath: '/drawings'
+      preLoaderRoute: typeof DrawingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/clients': {
       id: '/clients'
       path: '/clients'
@@ -322,6 +342,7 @@ const rootRouteChildren: RootRouteChildren = {
   AlertsRoute: AlertsRoute,
   BookingsRoute: BookingsRoute,
   ClientsRoute: ClientsRoute,
+  DrawingsRoute: DrawingsRoute,
   EntriesRoute: EntriesRoute,
   ExpensesRoute: ExpensesRoute,
   GroupsRoute: GroupsRoute,
