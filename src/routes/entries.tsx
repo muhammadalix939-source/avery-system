@@ -2235,7 +2235,7 @@ function EntriesPage() {
                       {MONEY_TYPES.includes(e.type) && !isJv && (
                         <p className="mt-0.5 text-[10px] text-primary/80">
                           {[
-                            e.paymentMethod || "Cash",
+                            e.paymentMethod || (e.accountId ? "Cash" : "Old entry (before accounts)"),
                             store.accounts.find((a) => a.id === e.accountId)?.name,
                             e.chequeNo && `Chq ${e.chequeNo}`,
                             e.bankName,
