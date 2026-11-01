@@ -1,3 +1,4 @@
+import { normalizeBooking, normalizeClient, normalizeEntry, restoreMissingAccounts } from "./legacy";
 // Centralized state management for the CRM
 import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
@@ -337,13 +338,14 @@ async function loadFromCloud() {
       fetchCollectionFromFirestore<PurchaseGroup>("groups"),
       fetchCollectionFromFirestore<Account>("accounts"),
     ]);
-    if (c?.length) clients = c;
-    if (b?.length) bookings = b;
+    if (c?.length) clients = c.map((x) => normalizeClient(x as never));
+    if (b?.length) bookings = b.map((x) => normalizeBooking(x as never));
     if (a?.length) agents = a;
     if (s?.length) suppliers = s;
-    if (e?.length) entries = e;
+    if (e?.length) entries = e.map((x, i) => normalizeEntry(x as never, i));
     if (g?.length) groups = g;
     if (acc?.length) accounts = acc;
+    accounts = restoreMissingAccounts(accounts, entries);
     resyncDerived();
     cloudSyncStatus = "synced";
     lastSyncedAt = new Date().toLocaleTimeString();
@@ -468,15 +470,16 @@ function hydrateFromStorage() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     const s = JSON.parse(raw) as PersistedState;
-    clients = s.clients || clients;
-    bookings = s.bookings || bookings;
-    agents = s.agents || agents;
-    suppliers = s.suppliers || suppliers;
-    monthlyData = s.monthlyData || monthlyData;
-    entries = s.entries || entries;
-    opening = s.opening || opening;
-    groups = s.groups || groups;
-    if (s.accounts) accounts = s.accounts;
+    if (Array.isArray(s.clients)) clients = s.clients.map((c) => normalizeClient(c as never));
+    if (Array.isArray(s.bookings)) bookings = s.bookings.map((b) => normalizeBooking(b as never));
+    if (Array.isArray(s.agents)) agents = s.agents;
+    if (Array.isArray(s.suppliers)) suppliers = s.suppliers;
+    if (Array.isArray(s.monthlyData)) monthlyData = s.monthlyData;
+    if (Array.isArray(s.entries)) entries = s.entries.map((e, i) => normalizeEntry(e as never, i));
+    opening = { ...defaultOpening, ...(s.opening || {}) };
+    if (Array.isArray(s.groups)) groups = s.groups;
+    if (Array.isArray(s.accounts)) accounts = s.accounts;
+    accounts = restoreMissingAccounts(accounts, entries);
     if (s.drawers && s.drawers.length) {
       drawers = s.drawers;
       nextDrawerNum = s.drawers.length + 1;
