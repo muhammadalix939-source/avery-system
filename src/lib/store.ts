@@ -1,3 +1,4 @@
+import { normalizeBooking, normalizeClient, normalizeEntry, restoreMissingAccounts } from "./legacy";
 // Centralized state management for the CRM
 import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
