@@ -17,8 +17,6 @@ import { computeGroupStats, type GroupStats } from "@/lib/groups";
 import { computeUrgency, sortByUrgency, urgencyLabel, urgencyTone, type GroupUrgency } from "@/lib/urgency";
 import ConfirmDelete from "@/components/ConfirmDelete";
 import { getPKTDate } from "@/lib/date-utils";
-import SortBar from "@/components/SortBar";
-import { sortEntities, type SortOptionKey } from "@/lib/sort-utils";
 
 export const Route = createFileRoute("/groups")({
   component: GroupsPage,
@@ -48,14 +46,13 @@ function GroupsPage() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [expenseFor, setExpenseFor] = useState<PurchaseGroup | null>(null);
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<SortOptionKey>("date_desc");
   const [form, setForm] = useState(emptyForm);
   const [selected, setSelected] = useState<PurchaseGroup | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PurchaseGroup | null>(null);
 
   const stats = useMemo<GroupStats[]>(
     () => store.groups.map((g) => computeGroupStats(g, store)),
-    [store]
+    [store.groups, store.bookings, store.clients, store.entries, store.suppliers]
   );
 
   const filtered = useMemo(() => {
@@ -64,13 +61,9 @@ function GroupsPage() {
       [s.group.id, s.group.name, s.group.pnr, s.group.flightNumber, s.group.category, s.supplier?.companyName]
         .filter(Boolean).join(" ").toLowerCase().includes(q)
     ) : stats;
-
-    return sortEntities(base, sortKey, {
-      date: (s) => s.group.date || s.group.createdAt,
-      amount: (s) => s.revenue || s.supplierBill,
-      name: (s) => s.group.name || s.group.id,
-    });
-  }, [stats, search, sortKey]);
+    // Nearest departure first, then lowest remaining seats — most urgent on top.
+    return sortByUrgency(base, (s) => computeUrgency(s));
+  }, [stats, search]);
 
   const activeGroups = useMemo(() => filtered.filter((s) => !computeUrgency(s).isFull), [filtered]);
   const fullGroups = useMemo(() => filtered.filter((s) => computeUrgency(s).isFull), [filtered]);
@@ -173,21 +166,10 @@ function GroupsPage() {
         <Kpi icon={TrendingUp} label="Group Profit" value={formatCurrency(totals.profit)} tone={totals.profit >= 0 ? "text-success" : "text-destructive"} />
       </div>
 
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-        <div className="glass-card flex items-center gap-2 rounded-xl px-3 py-2 flex-1">
-          <Search className="h-4 w-4 text-muted-foreground" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search group, PNR, flight, supplier..."
-            className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-          />
-        </div>
-        <SortBar
-          value={sortKey}
-          onChange={setSortKey}
-          label="Sort by:"
-        />
+      <div className="glass-card flex items-center gap-2 rounded-xl px-3 py-2">
+        <Search className="h-4 w-4 text-muted-foreground" />
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search group, PNR, flight, supplier..."
+          className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">

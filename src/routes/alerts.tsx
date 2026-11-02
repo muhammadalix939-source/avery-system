@@ -47,7 +47,7 @@ function AlertsPage() {
       return { stats, urgency: computeUrgency(stats) };
     });
     return sortByUrgency(rows, (r) => r.urgency);
-  }, [store]);
+  }, [store.groups, store.bookings, store.clients, store.entries, store.suppliers]);
 
   const q = query.trim().toLowerCase();
 

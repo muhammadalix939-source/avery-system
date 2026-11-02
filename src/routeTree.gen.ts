@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AccountsRouteImport } from './routes/accounts'
 import { Route as AgentsRouteImport } from './routes/agents'
-import { Route as AiRouteImport } from './routes/ai'
 import { Route as AlertsRouteImport } from './routes/alerts'
 import { Route as BookingsRouteImport } from './routes/bookings'
 import { Route as ClientsRouteImport } from './routes/clients'
@@ -39,11 +38,6 @@ const AccountsRoute = AccountsRouteImport.update({
 const AgentsRoute = AgentsRouteImport.update({
   id: '/agents',
   path: '/agents',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AiRoute = AiRouteImport.update({
-  id: '/ai',
-  path: '/ai',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AlertsRoute = AlertsRouteImport.update({
@@ -111,7 +105,6 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/accounts': typeof AccountsRoute
   '/agents': typeof AgentsRoute
-  '/ai': typeof AiRoute
   '/alerts': typeof AlertsRoute
   '/bookings': typeof BookingsRoute
   '/clients': typeof ClientsRoute
@@ -129,7 +122,6 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/accounts': typeof AccountsRoute
   '/agents': typeof AgentsRoute
-  '/ai': typeof AiRoute
   '/alerts': typeof AlertsRoute
   '/bookings': typeof BookingsRoute
   '/clients': typeof ClientsRoute
@@ -148,7 +140,6 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/accounts': typeof AccountsRoute
   '/agents': typeof AgentsRoute
-  '/ai': typeof AiRoute
   '/alerts': typeof AlertsRoute
   '/bookings': typeof BookingsRoute
   '/clients': typeof ClientsRoute
@@ -168,7 +159,6 @@ export interface FileRouteTypes {
     | '/'
     | '/accounts'
     | '/agents'
-    | '/ai'
     | '/alerts'
     | '/bookings'
     | '/clients'
@@ -186,7 +176,6 @@ export interface FileRouteTypes {
     | '/'
     | '/accounts'
     | '/agents'
-    | '/ai'
     | '/alerts'
     | '/bookings'
     | '/clients'
@@ -204,7 +193,6 @@ export interface FileRouteTypes {
     | '/'
     | '/accounts'
     | '/agents'
-    | '/ai'
     | '/alerts'
     | '/bookings'
     | '/clients'
@@ -223,7 +211,6 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountsRoute: typeof AccountsRoute
   AgentsRoute: typeof AgentsRoute
-  AiRoute: typeof AiRoute
   AlertsRoute: typeof AlertsRoute
   BookingsRoute: typeof BookingsRoute
   ClientsRoute: typeof ClientsRoute
@@ -259,13 +246,6 @@ declare module '@tanstack/react-router' {
       path: '/agents'
       fullPath: '/agents'
       preLoaderRoute: typeof AgentsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/ai': {
-      id: '/ai'
-      path: '/ai'
-      fullPath: '/ai'
-      preLoaderRoute: typeof AiRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/alerts': {
@@ -359,7 +339,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountsRoute: AccountsRoute,
   AgentsRoute: AgentsRoute,
-  AiRoute: AiRoute,
   AlertsRoute: AlertsRoute,
   BookingsRoute: BookingsRoute,
   ClientsRoute: ClientsRoute,

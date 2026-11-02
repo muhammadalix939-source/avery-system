@@ -116,90 +116,6 @@ export interface Booking {
   others?: OtherService[];
   /** Optional PNR / batch group linking this booking to a shared purchase group */
   groupId?: string;
-  /** Realized vs Accrued Profit status: unearned until confirmed/converted to earned */
-  profitStatus?: "unearned" | "earned";
-  /** Date when profit was converted to earned / realized */
-  profitEarnedDate?: string;
-  /** Whether the travel service has been fulfilled/completed */
-  serviceCompleted?: boolean;
-  /** Timestamp when the service was marked completed */
-  completedAt?: string;
-  /** Discount / price concession given to client / customer (PKR) */
-  discount?: number;
-  /** Discount settlement strategy: offset from agent commission or absorbed by agency */
-  discountSettlement?: "agent_commission" | "agency_absorbed";
-  /** Discount / rebate received from supplier on this booking (PKR) */
-  supplierDiscount?: number;
-}
-
-export interface BookingFinancials {
-  sale: number;
-  grossSale: number;
-  discount: number;
-  supplierDiscount: number;
-  netCost: number;
-  netCommission: number;
-  agentAbsorbedDiscount: number;
-  agencyAbsorbedDiscount: number;
-  netProfit: number;
-  isLoss: boolean;
-  lossAmount: number;
-  marginPercent: number;
-}
-
-export function computeBookingFinancials(b: Booking): BookingFinancials {
-  const sale = Number(b.totalAmount) || 0;
-  const discount = Number(b.discount) || 0;
-  const supplierDisc = Number(b.supplierDiscount) || 0;
-  const grossCost = Number(b.totalCost) || 0;
-  const netCost = Math.max(0, grossCost - supplierDisc);
-
-  const originalCommission = Number(b.commission) || 0;
-  let netCommission = originalCommission;
-  let agentAbsorbedDiscount = 0;
-  let agencyAbsorbedDiscount = 0;
-
-  // When booking has an agent and settlement is offset against agent commission:
-  if (b.agentId && b.agentId !== "Direct" && b.discountSettlement === "agent_commission") {
-    agentAbsorbedDiscount = Math.min(originalCommission, discount);
-    netCommission = Math.max(0, originalCommission - agentAbsorbedDiscount);
-    agencyAbsorbedDiscount = Math.max(0, discount - agentAbsorbedDiscount);
-  } else {
-    agencyAbsorbedDiscount = discount;
-  }
-
-  // Net agency profit: Sale revenue (after agency-absorbed discount) - net supplier cost - net commission
-  const netProfit = (sale - agencyAbsorbedDiscount) - netCost - netCommission;
-  const isLoss = netProfit < 0;
-
-  return {
-    sale,
-    grossSale: sale,
-    discount,
-    supplierDiscount: supplierDisc,
-    netCost,
-    netCommission,
-    agentAbsorbedDiscount,
-    agencyAbsorbedDiscount,
-    netProfit,
-    isLoss,
-    lossAmount: isLoss ? Math.abs(netProfit) : 0,
-    marginPercent: sale > 0 ? Math.round((netProfit / sale) * 100) : 0,
-  };
-}
-
-export function computeBookingProfit(b: Booking): number {
-  return computeBookingFinancials(b).netProfit;
-}
-
-export interface Drawer {
-  id: string;
-  name: string;
-  role?: string;
-  phone?: string;
-  sharePercent?: number;
-  openingDrawings?: number;
-  notes?: string;
 }
 
 export interface HotelService {
@@ -313,9 +229,9 @@ export const mockClients: Client[] = [
 ];
 
 export const mockBookings: Booking[] = [
-  { id: "B001", headId: "AV-HD-001", agentId: "AV-A001", supplierId: "AV-S001", totalAmount: 500000, amountReceived: 250000, totalCost: 350000, commission: 25000, clientIds: ["AV-C001", "AV-C002", "AV-C003", "AV-C004", "AV-C005"], status: "Confirmed", packageType: "Umrah", travelDate: "2026-06-15", createdAt: "2026-03-01", members: 5, destination: "Makkah / Madinah", profitStatus: "earned", profitEarnedDate: "2026-03-20", discount: 5000, discountSettlement: "agent_commission" },
-  { id: "B002", headId: "AV-HD-002", agentId: "AV-A002", supplierId: "AV-S002", totalAmount: 750000, amountReceived: 600000, totalCost: 500000, commission: 30000, clientIds: ["AV-C006", "AV-C007", "AV-C008"], status: "Confirmed", packageType: "Hajj", travelDate: "2026-07-10", createdAt: "2026-02-15", members: 3, destination: "Makkah / Madinah", profitStatus: "earned", profitEarnedDate: "2026-03-25", supplierDiscount: 10000 },
-  { id: "B003", headId: "AV-HD-003", agentId: "AV-A003", supplierId: "AV-S003", totalAmount: 160000, amountReceived: 80000, totalCost: 100000, commission: 8000, clientIds: ["AV-C009", "AV-C010"], status: "Pending", packageType: "Tour", travelDate: "2026-05-20", createdAt: "2026-04-01", members: 2, destination: "Istanbul, Turkey", profitStatus: "unearned" },
+  { id: "B001", headId: "AV-HD-001", agentId: "AV-A001", supplierId: "AV-S001", totalAmount: 500000, amountReceived: 250000, totalCost: 350000, commission: 25000, clientIds: ["AV-C001", "AV-C002", "AV-C003", "AV-C004", "AV-C005"], status: "Confirmed", packageType: "Umrah", travelDate: "2026-06-15", createdAt: "2026-03-01", members: 5, destination: "Makkah / Madinah" },
+  { id: "B002", headId: "AV-HD-002", agentId: "AV-A002", supplierId: "AV-S002", totalAmount: 750000, amountReceived: 600000, totalCost: 500000, commission: 30000, clientIds: ["AV-C006", "AV-C007", "AV-C008"], status: "Confirmed", packageType: "Hajj", travelDate: "2026-07-10", createdAt: "2026-02-15", members: 3, destination: "Makkah / Madinah" },
+  { id: "B003", headId: "AV-HD-003", agentId: "AV-A003", supplierId: "AV-S003", totalAmount: 160000, amountReceived: 80000, totalCost: 100000, commission: 8000, clientIds: ["AV-C009", "AV-C010"], status: "Pending", packageType: "Tour", travelDate: "2026-05-20", createdAt: "2026-04-01", members: 2, destination: "Istanbul, Turkey" },
 ];
 
 export const mockMonthlyData = [
@@ -343,9 +259,7 @@ export function distributePayment(clients: Client[], totalReceived: number): Cli
 }
 
 export function formatCurrency(amount: number): string {
-  const n = Math.round(Number(amount) || 0);
-  const formatted = Math.abs(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return n < 0 ? `-Rs ${formatted}` : `Rs ${formatted}`;
+  return new Intl.NumberFormat("en-PK", { style: "currency", currency: "PKR", minimumFractionDigits: 0 }).format(amount);
 }
 
 export function generateId(prefix: string, num: number): string {
