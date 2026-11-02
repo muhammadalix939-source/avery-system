@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { DollarSign, Users, BookOpen, TrendingUp, Clock, Receipt } from "lucide-react";
 import StatsCard from "@/components/StatsCard";
@@ -32,8 +31,6 @@ const pieData = [
 const monthOrder = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function Dashboard() {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
   const store = useStore();
   const o = store.opening;
   // Revenue = booking.amountReceived (authoritative for each head) + non-booking client_receive entries.
@@ -95,50 +92,29 @@ function Dashboard() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="glass-card rounded-xl lg:col-span-2 p-5">
           <h3 className="mb-4 text-sm font-semibold text-foreground">Monthly Revenue</h3>
-          {mounted ? (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={store.monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.28 0.01 260)" />
-                <XAxis dataKey="month" stroke="oklch(0.6 0.02 260)" fontSize={12} />
-                <YAxis stroke="oklch(0.6 0.02 260)" fontSize={12} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
-                <Tooltip contentStyle={{ background: "oklch(0.17 0.01 260)", border: "1px solid oklch(0.28 0.01 260)", borderRadius: "8px", color: "oklch(0.95 0.01 80)" }} />
-                <Bar dataKey="revenue" fill="oklch(0.8 0.12 80)" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="profit" fill="oklch(0.7 0.15 155)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-[260px] w-full rounded-lg bg-accent/10 animate-pulse flex items-center justify-center text-xs text-muted-foreground">Loading chart...</div>
-          )}
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={store.monthlyData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.28 0.01 260)" />
+              <XAxis dataKey="month" stroke="oklch(0.6 0.02 260)" fontSize={12} />
+              <YAxis stroke="oklch(0.6 0.02 260)" fontSize={12} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
+              <Tooltip contentStyle={{ background: "oklch(0.17 0.01 260)", border: "1px solid oklch(0.28 0.01 260)", borderRadius: "8px", color: "oklch(0.95 0.01 80)" }} />
+              <Bar dataKey="revenue" fill="oklch(0.8 0.12 80)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="profit" fill="oklch(0.7 0.15 155)" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </motion.div>
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="glass-card rounded-xl p-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold text-foreground">Package Distribution</h3>
-            <span className="text-[11px] font-medium text-muted-foreground">{totalBookings} Active</span>
-          </div>
-          {mounted ? (
-            <div className="relative flex items-center justify-center">
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={54} outerRadius={78} paddingAngle={4} dataKey="value" stroke="none">
-                    {pieData.map((entry, index) => (<Cell key={index} fill={entry.color} />))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-                <span className="font-display text-xl font-bold text-foreground tracking-tight leading-none">{totalBookings || 100}</span>
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1 font-medium">Bookings</span>
-              </div>
-            </div>
-          ) : (
-            <div className="h-[200px] w-full rounded-lg bg-accent/10 animate-pulse flex items-center justify-center text-xs text-muted-foreground">Loading chart...</div>
-          )}
-          <div className="mt-2 flex justify-center gap-2.5 flex-wrap">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="glass-card rounded-xl p-5">
+          <h3 className="mb-4 text-sm font-semibold text-foreground">Package Distribution</h3>
+          <ResponsiveContainer width="100%" height={200}>
+            <PieChart><Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" stroke="none">
+              {pieData.map((entry, index) => (<Cell key={index} fill={entry.color} />))}
+            </Pie></PieChart>
+          </ResponsiveContainer>
+          <div className="mt-2 flex justify-center gap-4">
             {pieData.map((entry) => (
-              <div key={entry.name} className="flex items-center gap-1.5 text-xs text-muted-foreground bg-accent/25 px-2.5 py-1 rounded-full border border-border/40">
-                <div className="h-2 w-2 rounded-full shrink-0" style={{ background: entry.color }} />
-                <span className="font-medium text-foreground">{entry.name}</span>
-                <span className="text-muted-foreground font-mono">({entry.value}%)</span>
+              <div key={entry.name} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <div className="h-2 w-2 rounded-full" style={{ background: entry.color }} />{entry.name} ({entry.value}%)
               </div>
             ))}
           </div>
@@ -149,76 +125,23 @@ function Dashboard() {
       {/* Monthly Records — current month first */}
       {hasAnyData && sortedMonthly.length > 0 && (
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="glass-card rounded-xl p-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-foreground">Monthly Financial Records</h3>
-              <span className="rounded-full bg-primary/10 border border-primary/30 px-2 py-0.5 text-[10px] font-semibold text-primary">FY 2026</span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-0.5">Month-by-month revenue, client throughput, and gross profit breakdown</p>
-          </div>
-          <div className="flex items-center gap-2 text-xs">
-            <div className="rounded-lg border border-border/60 bg-card/60 px-3 py-1.5">
-              <span className="text-muted-foreground text-[10px] uppercase block">Year-to-date Revenue</span>
-              <span className="font-bold text-foreground font-display text-sm">{formatCurrency(sortedMonthly.reduce((s, m) => s + m.revenue, 0))}</span>
-            </div>
-            <div className="rounded-lg border border-border/60 bg-card/60 px-3 py-1.5">
-              <span className="text-muted-foreground text-[10px] uppercase block">Net Profit</span>
-              <span className="font-bold text-success font-display text-sm">{formatCurrency(sortedMonthly.reduce((s, m) => s + m.profit, 0))}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto rounded-lg border border-border/50">
+        <h3 className="mb-4 text-sm font-semibold text-foreground">Monthly Records</h3>
+        <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border bg-muted/30 text-left text-xs uppercase tracking-wider text-muted-foreground">
-                <th className="px-4 py-3">Month</th>
-                <th className="px-4 py-3">Clients</th>
-                <th className="px-4 py-3">Volume Share</th>
-                <th className="px-4 py-3 text-right">Revenue</th>
-                <th className="px-4 py-3 text-right">Profit</th>
-                <th className="px-4 py-3 text-right">Margin</th>
+              <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
+                <th className="px-4 py-3">Month</th><th className="px-4 py-3">Clients</th><th className="px-4 py-3">Revenue</th><th className="px-4 py-3">Profit</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border/40">
-              {sortedMonthly.map((m, i) => {
-                const maxRev = Math.max(...sortedMonthly.map((x) => x.revenue), 1);
-                const pctOfMax = Math.round((m.revenue / maxRev) * 100);
-                const margin = m.revenue > 0 ? Math.round((m.profit / m.revenue) * 100) : 0;
-                return (
-                  <tr key={m.month} className={`transition-colors hover:bg-accent/40 ${i === 0 ? "bg-primary/5 font-medium" : ""}`}>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-foreground">{m.month} 2026</span>
-                        {i === 0 && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[9px] font-bold text-emerald-400">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            CURRENT
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center rounded-md bg-secondary/60 px-2 py-0.5 text-xs text-foreground font-medium">
-                        {m.clients} pax
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="w-24 sm:w-32 bg-secondary/50 rounded-full h-1.5 overflow-hidden">
-                        <div className="bg-primary h-full rounded-full transition-all" style={{ width: `${pctOfMax}%` }} />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold text-primary font-mono tabular-nums">{formatCurrency(m.revenue)}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-success font-mono tabular-nums">{formatCurrency(m.profit)}</td>
-                    <td className="px-4 py-3 text-right">
-                      <span className="inline-block rounded px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground bg-muted font-mono">
-                        {margin}%
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
+            <tbody>
+              {sortedMonthly.map((m, i) => (
+                <tr key={m.month} className={`border-b border-border/50 transition-colors hover:bg-accent/30 ${i === 0 ? "bg-primary/5" : ""}`}>
+                  <td className="px-4 py-3 font-medium">{m.month} 2026 {i === 0 && <span className="ml-2 text-[10px] text-primary font-bold">CURRENT</span>}</td>
+                  <td className="px-4 py-3">{m.clients}</td>
+                  <td className="px-4 py-3 text-primary">{formatCurrency(m.revenue)}</td>
+                  <td className="px-4 py-3 text-success">{formatCurrency(m.profit)}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

@@ -17,7 +17,7 @@ export default function GroupSeatStrip() {
     const all = store.groups.map((g) => ({ stats: computeGroupStats(g, store), urgency: computeUrgency(computeGroupStats(g, store)) }));
     const active = all.filter((r) => !r.urgency.isFull);
     return sortByUrgency(active, (r) => r.urgency);
-  }, [store]);
+  }, [store.groups, store.bookings, store.clients, store.entries, store.suppliers]);
 
   const quick = quickId ? store.groups.find((g) => g.id === quickId) : null;
   const quickStats = quick ? computeGroupStats(quick, store) : null;

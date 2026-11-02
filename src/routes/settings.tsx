@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { useState, useEffect } from "react";
-import { Save, Settings as SettingsIcon, Trash2, AlertTriangle, Database, Cloud, RefreshCw, CheckCircle2, LogIn, LogOut, Download, Upload } from "lucide-react";
+import { useState } from "react";
+import { Save, Settings as SettingsIcon, Trash2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +10,6 @@ import PageHeader from "@/components/PageHeader";
 import { useStore } from "@/lib/store";
 import { formatCurrency } from "@/lib/data";
 import { toast } from "sonner";
-import { auth, onAuthStateChanged, signInWithGoogle, logOut, testConnection, type User } from "@/lib/firebase";
 
 export const Route = createFileRoute("/settings")({
   component: SettingsPage,
@@ -19,17 +18,6 @@ export const Route = createFileRoute("/settings")({
 
 function SettingsPage() {
   const store = useStore();
-  const [user, setUser] = useState<User | null>(null);
-  const [mounted, setMounted] = useState(false);
-  const [testingConn, setTestingConn] = useState(false);
-  const [connStatus, setConnStatus] = useState<string | null>(null);
-
-  useEffect(() => {
-    setMounted(true);
-    const unsub = onAuthStateChanged(auth, (u) => setUser(u));
-    return () => unsub();
-  }, []);
-
   const [form, setForm] = useState({
     revenue: String(store.opening.revenue || 0),
     pending: String(store.opening.pending || 0),
@@ -167,223 +155,6 @@ function SettingsPage() {
           <span className="text-primary font-medium"> clients</span> are set inside each record's edit form
           (Previous Commission, Previous Payable, etc). These flow into their statements automatically.
         </p>
-      </motion.div>
-
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-        className="glass-card rounded-xl p-6 space-y-4 border-primary/30">
-        <div className="flex items-center justify-between border-b border-border/50 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <Database className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-semibold">Cloud Database (Google Cloud Firestore)</h3>
-                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${mounted && user ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30" : "bg-amber-500/10 text-amber-400 border border-amber-500/30"}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${mounted && user ? "bg-emerald-400" : "bg-amber-400"}`} />
-                  {mounted && user ? "Cloud Synced" : "Provisioned & Ready"}
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Persistent enterprise cloud storage enabled for multi-user and real-time CRM updates.
-              </p>
-            </div>
-          </div>
-
-          <div>
-            {mounted && user ? (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground hidden sm:inline">Signed in as <strong className="text-foreground">{user.email}</strong></span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={async () => {
-                    await logOut();
-                    setUser(null);
-                    toast.info("Signed out of Cloud DB");
-                  }}
-                  className="gap-1.5 text-xs h-8"
-                >
-                  <LogOut className="h-3.5 w-3.5" /> Sign Out
-                </Button>
-              </div>
-            ) : (
-              <Button
-                size="sm"
-                onClick={async () => {
-                  try {
-                    const u = await signInWithGoogle();
-                    setUser(u);
-                    toast.success(`Connected as ${u.email}`);
-                    await store.syncToCloud();
-                  } catch (err: unknown) {
-                    toast.error(err instanceof Error ? err.message : "Sign-in failed");
-                  }
-                }}
-                className="gap-1.5 text-xs h-8"
-              >
-                <LogIn className="h-3.5 w-3.5" /> Connect with Google
-              </Button>
-            )}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 text-xs">
-          <div className="rounded-lg bg-background/50 p-3 border border-border/40">
-            <p className="text-[10px] uppercase font-semibold text-muted-foreground">Cloud Project</p>
-            <p className="font-mono text-xs text-foreground mt-0.5">xanthic-indexer-c01dl</p>
-          </div>
-          <div className="rounded-lg bg-background/50 p-3 border border-border/40">
-            <p className="text-[10px] uppercase font-semibold text-muted-foreground">Database Engine</p>
-            <p className="text-xs text-foreground mt-0.5">Firestore (Enterprise Free Tier)</p>
-          </div>
-          <div className="rounded-lg bg-background/50 p-3 border border-border/40">
-            <p className="text-[10px] uppercase font-semibold text-muted-foreground">Last Cloud Sync</p>
-            <p className="text-xs text-foreground mt-0.5">{mounted && store.lastSyncedAt ? store.lastSyncedAt : "Pending manual/auto sync"}</p>
-          </div>
-        </div>
-
-        {connStatus && (
-          <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
-            <span>{connStatus}</span>
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center gap-2 pt-2">
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={testingConn}
-            onClick={async () => {
-              setTestingConn(true);
-              try {
-                const res = await testConnection();
-                setConnStatus(res.message);
-                toast.success(res.message);
-              } catch (e: unknown) {
-                toast.error(e instanceof Error ? e.message : "Connection failed");
-              } finally {
-                setTestingConn(false);
-              }
-            }}
-            className="gap-2 text-xs"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${testingConn ? "animate-spin" : ""}`} />
-            Test Connection
-          </Button>
-
-          <Button
-            size="sm"
-            disabled={store.cloudSyncStatus === "syncing"}
-            onClick={async () => {
-              if (!user) {
-                toast.info("Please connect your Google Account first to authenticate cloud writes");
-                return;
-              }
-              try {
-                toast.loading("Uploading CRM state to Firestore...", { id: "sync-toast" });
-                await store.syncToCloud();
-                toast.success("All data uploaded and backed up to Firestore!", { id: "sync-toast" });
-              } catch (e: unknown) {
-                toast.error(e instanceof Error ? e.message : "Upload failed", { id: "sync-toast" });
-              }
-            }}
-            className="gap-2 text-xs"
-          >
-            <Cloud className="h-3.5 w-3.5" />
-            Upload Local Data to Cloud DB
-          </Button>
-
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={store.cloudSyncStatus === "syncing"}
-            onClick={async () => {
-              if (!user) {
-                toast.info("Please connect your Google Account first to authenticate cloud reads");
-                return;
-              }
-              try {
-                toast.loading("Fetching latest data from Firestore...", { id: "load-toast" });
-                const res = await store.loadFromCloud();
-                toast.success(`Pulled ${res?.count || 0} records from Cloud DB!`, { id: "load-toast" });
-              } catch (e: unknown) {
-                toast.error(e instanceof Error ? e.message : "Pull failed", { id: "load-toast" });
-              }
-            }}
-            className="gap-2 text-xs"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${store.cloudSyncStatus === "syncing" ? "animate-spin" : ""}`} />
-            Pull from Cloud DB
-          </Button>
-
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              const data = {
-                clients: store.clients,
-                bookings: store.bookings,
-                agents: store.agents,
-                suppliers: store.suppliers,
-                entries: store.entries,
-                groups: store.groups,
-                accounts: store.accounts,
-                opening: store.opening,
-                alertSettings: store.alertSettings,
-                exportedAt: new Date().toISOString(),
-              };
-              const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `avery-crm-backup-${new Date().toISOString().slice(0, 10)}.json`;
-              a.click();
-              URL.revokeObjectURL(url);
-              toast.success("Offline backup downloaded (JSON)");
-            }}
-            className="gap-2 text-xs"
-          >
-            <Download className="h-3.5 w-3.5" />
-            Download Backup (JSON)
-          </Button>
-
-          <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent transition-colors">
-            <Upload className="h-3.5 w-3.5" />
-            <span>Restore Backup (JSON)</span>
-            <input
-              type="file"
-              accept=".json"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (evt) => {
-                  try {
-                    const parsed = JSON.parse(evt.target?.result as string);
-                    localStorage.setItem("av-crm-store-v1", JSON.stringify(parsed));
-                    toast.success("Backup loaded successfully! Refreshing...");
-                    setTimeout(() => window.location.reload(), 600);
-                  } catch {
-                    toast.error("Invalid JSON file");
-                  }
-                };
-                reader.readAsText(file);
-              }}
-            />
-          </label>
-
-          <a
-            href="/avery-system-source-code.tar.gz"
-            download="avery-system-source-code.tar.gz"
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
-          >
-            <Download className="h-3.5 w-3.5" />
-            <span>Download Full Codebase (.tar.gz)</span>
-          </a>
-        </div>
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
