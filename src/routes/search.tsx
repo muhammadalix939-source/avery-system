@@ -53,7 +53,7 @@ function SearchPage() {
   const [selectedType, setSelectedType] = useState<Exclude<ResultType, "group">>("client");
   const [selectedData, setSelectedData] = useState<Client | Agent | Supplier | Booking | null>(null);
 
-  const results = useMemo(() => searchAll(debounced, store), [debounced, store.bookings, store.clients, store.agents, store.suppliers, store.groups, store.entries]);
+  const results = useMemo(() => searchAll(debounced, store), [debounced, store]);
   const filtered = useMemo(() => typeFilter === "all" ? results : results.filter((r) => r.type === typeFilter), [results, typeFilter]);
 
   function handleClick(r: SearchResult) {

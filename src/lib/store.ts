@@ -1,9 +1,12 @@
+import { normalizeBooking, normalizeClient, normalizeEntry, restoreMissingAccounts } from "./legacy";
 // Centralized state management for the CRM
 import { useState, useCallback, useEffect } from "react";
-import type { Client, Booking, Agent, Supplier, HotelService, FlightService, TransportService, VisaService, OtherService, ChecklistItem } from "./data";
+import { toast } from "sonner";
+import type { Client, Booking, Agent, Supplier, HotelService, FlightService, TransportService, VisaService, OtherService, ChecklistItem, Drawer } from "./data";
 import { mockClients, mockBookings, mockAgents, mockSuppliers, mockMonthlyData as defaultMonthlyData, generateId } from "./data";
 import { defaultChecklist } from "./checklist";
 import { getPKTDate } from "./date-utils";
+import { pushFullStateToFirestore, fetchCollectionFromFirestore, auth } from "./firebase";
 
 export interface LedgerEntry {
   id: string;
@@ -20,13 +23,26 @@ export interface LedgerEntry {
     | "supplier_refund"
     | "other_sale"
     | "gift"
-    | "drawing";
+    | "drawing"
+    | "client_discount"
+    | "supplier_discount"
+    | "jv";
   headId: string;
   referenceId: string; // client/supplier/agent ID
   referenceName: string;
   amount: number;
   note: string;
   createdAt: string;
+  /** Partner / Owner drawer ID for drawing entries */
+  drawerId?: string;
+  /** Partner / Owner drawer name for drawing entries */
+  drawerName?: string;
+  /** JV settlement sub-type: "account_transfer" | "reconciliation_adjustment" | "party_settlement" */
+  jvType?: "account_transfer" | "reconciliation_adjustment" | "party_settlement";
+  /** For JV / Account-to-Account transfer: the target destination account */
+  toAccountId?: string;
+  /** Target / counted balance recorded during reconciliation */
+  targetBalance?: number;
   /** Optional PNR / batch group linking multiple purchases (typically flights or hotel rooming) */
   groupId?: string;
   /** Optional agent reference — which agent this money relates to (supplier payment, receipt, refund) */
@@ -75,28 +91,61 @@ export interface LedgerEntry {
   serviceCategory?: string;
   // Category-specific breakdown captured on purchase entries
   purchaseDetails?: {
-    // Flight
-    adults?: number;
-    children?: number;
-    infants?: number;
-    adultPrice?: number;
-    childPrice?: number;
-    infantPrice?: number;
+    // Flight / Ticket
+    ticketNumber?: string;
+    pnr?: string;
+    sector?: string;
+    tripType?: "One Way" | "Round Trip" | "Multi-City";
+    departureDate?: string;
+    returnDate?: string;
+    multiCityRoute?: string;
+    airline?: string;
+    flightNumber?: string;
+    cabinClass?: string;
     // Hotel
     rooms?: number;
+    roomType?: string;
     perNight?: number;
     nights?: number;
     checkIn?: string;
     checkOut?: string;
     hotelName?: string;
     city?: string;
+    mealPlan?: string;
+    confirmationNo?: string;
     // Visa
     visaType?: string;
     country?: string;
     reference?: string;
+    applicantNames?: string;
     // Transport
     route?: string;
     vehicle?: string;
+    pickupDate?: string;
+    driverName?: string;
+    driverPhone?: string;
+    voucherNo?: string;
+    // Package (Domestic & International Tours / Umrah)
+    packageName?: string;
+    packageType?: "Domestic" | "International";
+    destinationCountry?: string;
+    destinationCity?: string;
+    isMultiCity?: boolean;
+    packageDurationDays?: number;
+    packageDurationNights?: number;
+    packageInclusions?: string[];
+    startDate?: string;
+    endDate?: string;
+    // Passenger Breakdown (Flight, Visa, Package, etc.)
+    adults?: number;
+    children?: number;
+    infants?: number;
+    adultPrice?: number;
+    childPrice?: number;
+    infantPrice?: number;
+    // Ziyarah & Tours
+    ziyarahSites?: string;
+    guideName?: string;
     // Common
     description?: string;
   };
@@ -188,9 +237,15 @@ interface PersistedState {
   opening?: OpeningBalances;
   groups?: PurchaseGroup[];
   accounts?: Account[];
+  drawers?: Drawer[];
   alertSettings?: AlertSettings;
   readAlerts?: string[];
 }
+
+export const defaultDrawers: Drawer[] = [
+  { id: "DR-001", name: "Muhammad Ali", role: "Managing Partner", phone: "0330-2793701", sharePercent: 60, notes: "Lead Operations & Agency Strategy" },
+  { id: "DR-002", name: "Executive Partner", role: "Partner / Director", sharePercent: 40, notes: "Investment & Capital Partner" },
+];
 
 const defaultEntries: LedgerEntry[] = [
   { id: "E001", date: "2026-03-15", type: "client_receive", headId: "AV-HD-001", referenceId: "AV-C001", referenceName: "Muhammad Ali", amount: 100000, note: "Initial deposit", createdAt: "2026-03-15T10:00:00" },
@@ -207,6 +262,7 @@ function loadState(): PersistedState {
   return {
     clients: [...mockClients], bookings: [...mockBookings], agents: [...mockAgents],
     suppliers: [...mockSuppliers], monthlyData: [...defaultMonthlyData], entries: defaultEntries,
+    drawers: defaultDrawers,
     counters: { client: 11, agent: 4, supplier: 5, booking: 4, head: 4, entry: 7 },
   };
 }
@@ -223,9 +279,11 @@ let groups: PurchaseGroup[] = initial.groups || [];
 let accounts: Account[] = initial.accounts || [
   { id: "AC-001", name: "Main Cash", type: "Cash", openingBalance: 0, openingDate: "2026-01-01" },
 ];
+let drawers: Drawer[] = initial.drawers || defaultDrawers;
 let alertSettings: AlertSettings = initial.alertSettings || { ...defaultAlertSettings };
 let readAlerts: string[] = initial.readAlerts || [];
 let nextAccountNum = 2;
+let nextDrawerNum = (initial.drawers?.length || 2) + 1;
 let nextClientNum = initial.counters.client;
 let nextAgentNum = initial.counters.agent;
 let nextSupplierNum = initial.counters.supplier;
@@ -235,6 +293,71 @@ let nextEntryNum = initial.counters.entry;
 let nextGroupNum = initial.counters.group || 1;
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let cloudDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let cloudSyncStatus: "idle" | "syncing" | "synced" | "error" = "idle";
+let lastSyncedAt: string | null = null;
+
+async function syncToCloud() {
+  if (typeof window === "undefined" || !auth.currentUser) return { success: false, reason: "not_authenticated" };
+  cloudSyncStatus = "syncing";
+  listeners.forEach((l) => l());
+  try {
+    await pushFullStateToFirestore({
+      clients,
+      bookings,
+      agents,
+      suppliers,
+      entries,
+      groups,
+      accounts,
+      opening,
+      alertSettings,
+    });
+    cloudSyncStatus = "synced";
+    lastSyncedAt = new Date().toLocaleTimeString();
+    listeners.forEach((l) => l());
+    return { success: true };
+  } catch (err) {
+    cloudSyncStatus = "error";
+    listeners.forEach((l) => l());
+    throw err;
+  }
+}
+
+async function loadFromCloud() {
+  if (typeof window === "undefined" || !auth.currentUser) return { success: false, reason: "not_authenticated" };
+  cloudSyncStatus = "syncing";
+  listeners.forEach((l) => l());
+  try {
+    const [c, b, a, s, e, g, acc] = await Promise.all([
+      fetchCollectionFromFirestore<Client>("clients"),
+      fetchCollectionFromFirestore<Booking>("bookings"),
+      fetchCollectionFromFirestore<Agent>("agents"),
+      fetchCollectionFromFirestore<Supplier>("suppliers"),
+      fetchCollectionFromFirestore<LedgerEntry>("entries"),
+      fetchCollectionFromFirestore<PurchaseGroup>("groups"),
+      fetchCollectionFromFirestore<Account>("accounts"),
+    ]);
+    if (c?.length) clients = c.map((x) => normalizeClient(x as never));
+    if (b?.length) bookings = b.map((x) => normalizeBooking(x as never));
+    if (a?.length) agents = a;
+    if (s?.length) suppliers = s;
+    if (e?.length) entries = e.map((x, i) => normalizeEntry(x as never, i));
+    if (g?.length) groups = g;
+    if (acc?.length) accounts = acc;
+    accounts = restoreMissingAccounts(accounts, entries);
+    resyncDerived();
+    cloudSyncStatus = "synced";
+    lastSyncedAt = new Date().toLocaleTimeString();
+    notify();
+    return { success: true, count: (c?.length || 0) + (b?.length || 0) };
+  } catch (err) {
+    cloudSyncStatus = "error";
+    listeners.forEach((l) => l());
+    throw err;
+  }
+}
+
 function persist() {
   if (typeof window === "undefined") return;
   if (!hydrated) return;
@@ -242,11 +365,97 @@ function persist() {
   saveTimer = setTimeout(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        clients, bookings, agents, suppliers, monthlyData, entries, opening, groups, accounts, alertSettings, readAlerts,
+        clients, bookings, agents, suppliers, monthlyData, entries, opening, groups, accounts, drawers, alertSettings, readAlerts,
         counters: { client: nextClientNum, agent: nextAgentNum, supplier: nextSupplierNum, booking: nextBookingNum, head: nextHeadNum, entry: nextEntryNum, group: nextGroupNum },
       }));
     } catch {}
   }, 150);
+
+  if (auth.currentUser) {
+    if (cloudDebounceTimer) clearTimeout(cloudDebounceTimer);
+    cloudDebounceTimer = setTimeout(() => {
+      syncToCloud().catch(() => {});
+    }, 2500);
+  }
+}
+
+// ---------- Global Undo / Revert Snapshot Engine (8-10s window) ----------
+export interface StateSnapshot {
+  clients: Client[];
+  bookings: Booking[];
+  agents: Agent[];
+  suppliers: Supplier[];
+  entries: LedgerEntry[];
+  accounts: Account[];
+  drawers: Drawer[];
+  groups: PurchaseGroup[];
+}
+
+export function takeStateSnapshot(): StateSnapshot {
+  return {
+    clients: JSON.parse(JSON.stringify(clients)),
+    bookings: JSON.parse(JSON.stringify(bookings)),
+    agents: JSON.parse(JSON.stringify(agents)),
+    suppliers: JSON.parse(JSON.stringify(suppliers)),
+    entries: JSON.parse(JSON.stringify(entries)),
+    accounts: JSON.parse(JSON.stringify(accounts)),
+    drawers: JSON.parse(JSON.stringify(drawers)),
+    groups: JSON.parse(JSON.stringify(groups)),
+  };
+}
+
+export function restoreStateSnapshot(s: StateSnapshot) {
+  clients = s.clients;
+  bookings = s.bookings;
+  agents = s.agents;
+  suppliers = s.suppliers;
+  entries = s.entries;
+  accounts = s.accounts;
+  drawers = s.drawers;
+  groups = s.groups;
+  resyncDerived();
+  notify();
+}
+
+let lastUndoAction: { description: string; rollback: () => void } | null = null;
+let undoExpiryTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function registerUndoableAction(description: string, rollback: () => void) {
+  lastUndoAction = { description, rollback };
+  if (undoExpiryTimer) clearTimeout(undoExpiryTimer);
+  undoExpiryTimer = setTimeout(() => {
+    lastUndoAction = null;
+    listeners.forEach((l) => l());
+  }, 9000);
+
+  toast.success(description, {
+    duration: 8500,
+    action: {
+      label: "Undo (8s)",
+      onClick: () => {
+        rollback();
+        lastUndoAction = null;
+        if (undoExpiryTimer) clearTimeout(undoExpiryTimer);
+        toast.info("Action reverted successfully!", { duration: 3000 });
+      },
+    },
+  });
+  listeners.forEach((l) => l());
+}
+
+export function undoLastAction() {
+  if (lastUndoAction) {
+    lastUndoAction.rollback();
+    lastUndoAction = null;
+    if (undoExpiryTimer) clearTimeout(undoExpiryTimer);
+    toast.info("Action reverted successfully!", { duration: 3000 });
+  } else {
+    toast.info("No action available to undo", { duration: 2500 });
+  }
+}
+
+export function hasUndo() {
+  return !!lastUndoAction;
 }
 
 const listeners = new Set<() => void>();
@@ -261,15 +470,20 @@ function hydrateFromStorage() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     const s = JSON.parse(raw) as PersistedState;
-    clients = s.clients || clients;
-    bookings = s.bookings || bookings;
-    agents = s.agents || agents;
-    suppliers = s.suppliers || suppliers;
-    monthlyData = s.monthlyData || monthlyData;
-    entries = s.entries || entries;
-    opening = s.opening || opening;
-    groups = s.groups || groups;
-    if (s.accounts) accounts = s.accounts;
+    if (Array.isArray(s.clients)) clients = s.clients.map((c) => normalizeClient(c as never));
+    if (Array.isArray(s.bookings)) bookings = s.bookings.map((b) => normalizeBooking(b as never));
+    if (Array.isArray(s.agents)) agents = s.agents;
+    if (Array.isArray(s.suppliers)) suppliers = s.suppliers;
+    if (Array.isArray(s.monthlyData)) monthlyData = s.monthlyData;
+    if (Array.isArray(s.entries)) entries = s.entries.map((e, i) => normalizeEntry(e as never, i));
+    opening = { ...defaultOpening, ...(s.opening || {}) };
+    if (Array.isArray(s.groups)) groups = s.groups;
+    if (Array.isArray(s.accounts)) accounts = s.accounts;
+    accounts = restoreMissingAccounts(accounts, entries);
+    if (s.drawers && s.drawers.length) {
+      drawers = s.drawers;
+      nextDrawerNum = s.drawers.length + 1;
+    }
     if (s.alertSettings) alertSettings = { ...defaultAlertSettings, ...s.alertSettings };
     if (s.readAlerts) readAlerts = s.readAlerts;
     nextAccountNum = accounts.length + 1;
@@ -305,24 +519,38 @@ function resyncAgents() {
     const ab = bookings.filter((b) => b.agentId === a.id);
     const heads = new Set(ab.map((b) => b.headId));
     const memberCount = clients.filter((c) => heads.has(c.headId)).length;
+    // Calculate net commission: if discount is settled from agent commission, agent absorbs up to the original commission
+    const totalCommission = ab.reduce((s, b) => {
+      const orig = b.commission || 0;
+      if (b.discount && b.discountSettlement === "agent_commission") {
+        const agentAbsorbed = Math.min(orig, b.discount);
+        return s + Math.max(0, orig - agentAbsorbed);
+      }
+      return s + orig;
+    }, 0);
     return {
       ...a,
       totalSales: ab.reduce((s, b) => s + (b.totalAmount || 0), 0),
       totalClients: memberCount || ab.reduce((s, b) => s + (b.members || 0), 0),
-      commission: ab.reduce((s, b) => s + (b.commission || 0), 0),
+      commission: totalCommission,
       paidCommission: entries.filter((e) => e.type === "agent_commission" && e.referenceId === a.id).reduce((s, e) => s + e.amount, 0),
     };
   });
 }
 
-/** Suppliers are derived from purchases / refunds / payments (booking cost as fallback). */
+/** Suppliers are derived from purchases / refunds / discounts / payments (booking cost as fallback). */
 function resyncSuppliers() {
   suppliers = suppliers.map((s) => {
     const purchases = entries.filter((e) => e.type === "purchase" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
     const refunds = entries.filter((e) => e.type === "supplier_refund" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
+    const discounts = entries.filter((e) => e.type === "supplier_discount" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
     const payments = entries.filter((e) => e.type === "supplier_payment" && e.referenceId === s.id).reduce((sum, e) => sum + e.amount, 0);
-    const bookingCost = bookings.filter((b) => b.supplierId === s.id).reduce((sum, b) => sum + (b.totalCost || 0), 0);
-    return { ...s, totalPayable: Math.max(0, Math.max(purchases, bookingCost) - refunds), totalPaid: payments };
+    const bookingCost = bookings.filter((b) => b.supplierId === s.id).reduce((sum, b) => {
+      const baseCost = b.totalCost || 0;
+      const bSupDisc = b.supplierDiscount || 0;
+      return sum + Math.max(0, baseCost - bSupDisc);
+    }, 0);
+    return { ...s, totalPayable: Math.max(0, Math.max(purchases, bookingCost) - refunds - discounts), totalPaid: payments };
   });
 }
 
@@ -343,6 +571,8 @@ function resyncFromEntries(refIds: { supplierIds?: string[]; agentIds?: string[]
       const gross = entries.filter((e) => e.type === "client_receive" && e.headId === headId).reduce((s, e) => s + e.amount, 0);
       const refundList = entries.filter((e) => e.type === "client_refund" && e.headId === headId);
       const refunded = refundList.reduce((s, e) => s + e.amount, 0);
+      const discountList = entries.filter((e) => e.type === "client_discount" && e.headId === headId);
+      const discountTotal = discountList.reduce((s, e) => s + e.amount, 0);
       const charges = entries.filter((e) => e.type === "client_charge" && e.headId === headId);
       const chargeTotal = charges.reduce((s, e) => s + e.amount, 0);
       const totalReceived = Math.max(0, gross - refunded);
@@ -350,16 +580,16 @@ function resyncFromEntries(refIds: { supplierIds?: string[]; agentIds?: string[]
       bookings = bookings.map((b) => {
         if (b.headId !== headId) return b;
         const base = b.baseAmount ?? b.totalAmount;
-        // A refund reduces the NET sale value of the booking (200,000 − 6,000 = 194,000)
+        // A refund or discount reduces the NET sale value of the booking
         return {
           ...b, baseAmount: base, extraCharges: chargeTotal, refunded,
-          totalAmount: Math.max(0, base + chargeTotal - refunded),
+          totalAmount: Math.max(0, base + chargeTotal - refunded - discountTotal),
           amountReceived: totalReceived,
         };
       });
 
-      // Push each extra charge / refund onto the member it belongs to
-      // (unassigned ones hit the head/lead member). Refunds reduce that member's net due.
+      // Push each extra charge / refund / discount onto the member it belongs to
+      // (unassigned ones hit the head/lead member). Refunds and discounts reduce that member's net due.
       const headClients = clients.filter((c) => c.headId === headId);
       const leadId = headClients[0]?.id;
       clients = clients.map((c) => {
@@ -370,8 +600,11 @@ function resyncFromEntries(refIds: { supplierIds?: string[]; agentIds?: string[]
         const refund = refundList
           .filter((e) => (e.clientId ? e.clientId === c.id : c.id === leadId))
           .reduce((s, e) => s + e.amount, 0);
+        const discount = discountList
+          .filter((e) => (e.clientId ? e.clientId === c.id : c.id === leadId))
+          .reduce((s, e) => s + e.amount, 0);
         const base = c.baseDue ?? c.amountDue;
-        return { ...c, baseDue: base, extraCharges: extra, refunded: refund, amountDue: Math.max(0, base + extra - refund) };
+        return { ...c, baseDue: base, extraCharges: extra, refunded: refund, amountDue: Math.max(0, base + extra - refund - discount) };
       });
 
       let remaining = totalReceived;
@@ -388,113 +621,91 @@ function resyncFromEntries(refIds: { supplierIds?: string[]; agentIds?: string[]
   resyncAgents();
 }
 
-/** Live balance of an account: opening ± every posted transaction. */
+/** Live balance of an account: opening balance + transactions on or after openingDate. */
 export function computeAccountBalance(accountId: string): number {
-  const acc = accounts.find((a) => a.id === accountId);
+  const acc = (accounts || []).find((a) => a.id === accountId);
   if (!acc) return 0;
-  return entries.filter((e) => e.accountId === accountId).reduce((bal, e) => {
-    const dir = e.direction || entryDirection(e.type);
-    return dir === "in" ? bal + e.amount : bal - e.amount;
-  }, acc.openingBalance || 0);
+  const minDate = acc.openingDate || "";
+
+  return (entries || []).reduce((bal, e) => {
+    if (!e) return bal;
+    const eDate = e.date || "";
+    // Exclude any transactions dated prior to the account's opening date
+    if (minDate && eDate < minDate) return bal;
+
+    const amt = Number(e.amount) || 0;
+
+    // Direct account transaction
+    if (e.accountId === accountId) {
+      const dir = e.direction || entryDirection(e.type);
+      return dir === "in" ? bal + amt : bal - amt;
+    }
+
+    // Inflow from a JV account-to-account transfer
+    if (e.type === "jv" && e.toAccountId === accountId) {
+      return bal + amt;
+    }
+
+    return bal;
+  }, Number(acc.openingBalance) || 0);
 }
 
-/** Immutable, chronologically running ledger for one account. */
+/** Immutable, chronologically running ledger for one account strictly starting from openingDate. */
 export function buildAccountLedger(accountId: string): AccountLedgerRow[] {
-  const acc = accounts.find((a) => a.id === accountId);
-  let running = acc?.openingBalance || 0;
-  return entries
-    .filter((e) => e.accountId === accountId)
-    .slice()
-    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id < b.id ? -1 : 1))
-    .map((e) => {
-      const direction = e.direction || entryDirection(e.type);
-      running = direction === "in" ? running + e.amount : running - e.amount;
-      return {
-        id: e.id, date: e.date,
-        description: `${e.note || e.chargeCategory || e.type.replace(/_/g, " ")}${e.referenceName ? ` — ${e.referenceName}` : ""}`,
-        transactionType: e.type, amount: e.amount, direction, runningBalanceAfter: running,
-      };
-    });
-}
+  const acc = (accounts || []).find((a) => a.id === accountId);
+  if (!acc) return [];
+  const minDate = acc.openingDate || "";
+  let running = Number(acc.openingBalance) || 0;
 
-// ---------- Backup / Restore ----------
-/** Full snapshot of the live data, ready to save as a .json file. */
-export function exportBackup(): string {
-  return JSON.stringify({
-    system: "Avery CRM", version: 1, exportedAt: new Date().toISOString(),
-    data: {
-      clients, bookings, agents, suppliers, monthlyData, entries, opening, groups, accounts, alertSettings, readAlerts,
-      counters: { client: nextClientNum, agent: nextAgentNum, supplier: nextSupplierNum, booking: nextBookingNum, head: nextHeadNum, entry: nextEntryNum, group: nextGroupNum },
-    },
-  }, null, 2);
-}
+  const relevant: Array<{ e: LedgerEntry; direction: "in" | "out"; desc: string }> = [];
 
-export interface BackupSummary { clients: number; bookings: number; entries: number; agents: number; suppliers: number; groups: number; accounts: number }
+  for (const e of (entries || [])) {
+    if (!e) continue;
+    const eDate = e.date || "";
+    if (minDate && eDate < minDate) continue;
 
-/** Accepts every backup shape we've produced (plain store, {data}, {primaryStore}, {allStorage}). */
-function extractStore(parsed: any): Partial<PersistedState> | null {
-  if (!parsed || typeof parsed !== "object") return null;
-  const looks = (o: any) => o && typeof o === "object" && ["clients", "bookings", "entries", "agents", "suppliers", "accounts", "groups"].some((k) => Array.isArray(o[k]));
-  if (looks(parsed.data)) return parsed.data;
-  if (looks(parsed.primaryStore)) return parsed.primaryStore;
-  if (typeof parsed.primaryStore === "string") { try { const p = JSON.parse(parsed.primaryStore); if (looks(p)) return p; } catch {} }
-  if (parsed.allStorage && typeof parsed.allStorage[STORAGE_KEY] === "string") {
-    try { const p = JSON.parse(parsed.allStorage[STORAGE_KEY]); if (looks(p)) return p; } catch {}
+    if (e.accountId === accountId) {
+      const dir = e.direction || entryDirection(e.type);
+      let desc = e.note || e.chargeCategory || (e.type ? e.type.replace(/_/g, " ") : "Transaction");
+      if (e.type === "jv") {
+        if (e.toAccountId) {
+          const dest = (accounts || []).find((a) => a.id === e.toAccountId);
+          desc = `JV Transfer → ${dest ? dest.name : e.toAccountId}${e.note ? ` (${e.note})` : ""}`;
+        } else {
+          desc = `JV Adjustment: ${e.note || "Settlement"}`;
+        }
+      } else if (e.referenceName) {
+        desc = `${desc} — ${e.referenceName}`;
+      }
+      relevant.push({ e, direction: dir, desc });
+    } else if (e.type === "jv" && e.toAccountId === accountId) {
+      const src = (accounts || []).find((a) => a.id === e.accountId);
+      const desc = `JV Transfer ← ${src ? src.name : e.accountId || "Source"}${e.note ? ` (${e.note})` : ""}`;
+      relevant.push({ e, direction: "in", desc });
+    }
   }
-  if (looks(parsed)) return parsed;
-  return null;
-}
 
-export function summarizeBackup(text: string): BackupSummary | null {
-  try {
-    const s = extractStore(JSON.parse(text));
-    if (!s) return null;
-    const n = (a: unknown) => (Array.isArray(a) ? a.length : 0);
-    return { clients: n(s.clients), bookings: n(s.bookings), entries: n(s.entries), agents: n(s.agents), suppliers: n(s.suppliers), groups: n(s.groups), accounts: n(s.accounts) };
-  } catch { return null; }
-}
+  // Sort chronologically
+  relevant.sort((a, b) => {
+    const da = a.e.date || "";
+    const db = b.e.date || "";
+    if (da !== db) return da.localeCompare(db);
+    return (a.e.id || "").localeCompare(b.e.id || "");
+  });
 
-/**
- * Restore a backup. mode "replace" = backup becomes the full data (missing sections become EMPTY, never demo data).
- * mode "merge" = only adds records whose ID isn't already present (safe for partial files like accounts-only).
- */
-export function importBackup(text: string, mode: "replace" | "merge"): BackupSummary {
-  const s = extractStore(JSON.parse(text));
-  if (!s) throw new Error("This file has no CRM data in it.");
-  const mergeById = <T extends { id: string }>(cur: T[], inc?: T[]) => {
-    if (!Array.isArray(inc)) return cur;
-    const ids = new Set(cur.map((x) => x.id));
-    return [...cur, ...inc.filter((x) => x && !ids.has(x.id))];
-  };
-  if (mode === "replace") {
-    clients = s.clients || []; bookings = s.bookings || []; agents = s.agents || []; suppliers = s.suppliers || [];
-    entries = s.entries || []; groups = s.groups || []; accounts = s.accounts || [];
-    monthlyData = s.monthlyData || monthlyData; opening = s.opening || { ...defaultOpening };
-    if (s.alertSettings) alertSettings = { ...defaultAlertSettings, ...s.alertSettings };
-    readAlerts = s.readAlerts || [];
-  } else {
-    clients = mergeById(clients, s.clients); bookings = mergeById(bookings, s.bookings); agents = mergeById(agents, s.agents);
-    suppliers = mergeById(suppliers, s.suppliers); entries = mergeById(entries, s.entries); groups = mergeById(groups, s.groups);
-    accounts = mergeById(accounts, s.accounts);
-    if (s.opening) opening = s.opening;
-  }
-  // Counters: never go below what the data already uses, so new IDs never collide.
-  const maxNum = (arr: { id: string }[]) => arr.reduce((m, x) => Math.max(m, Number(String(x.id).match(/(\d+)\D*$/)?.[1] || 0)), 0);
-  const c = s.counters;
-  nextClientNum = Math.max(c?.client || 0, maxNum(clients) + 1, mode === "merge" ? nextClientNum : 0);
-  nextAgentNum = Math.max(c?.agent || 0, maxNum(agents) + 1, mode === "merge" ? nextAgentNum : 0);
-  nextSupplierNum = Math.max(c?.supplier || 0, maxNum(suppliers) + 1, mode === "merge" ? nextSupplierNum : 0);
-  nextBookingNum = Math.max(c?.booking || 0, maxNum(bookings) + 1, mode === "merge" ? nextBookingNum : 0);
-  nextHeadNum = Math.max(c?.head || 0, bookings.reduce((m, b) => Math.max(m, Number(String(b.headId).match(/(\d+)$/)?.[1] || 0)), 0) + 1, mode === "merge" ? nextHeadNum : 0);
-  nextEntryNum = Math.max(c?.entry || 0, maxNum(entries) + 1, mode === "merge" ? nextEntryNum : 0);
-  nextGroupNum = Math.max(c?.group || 0, maxNum(groups) + 1, mode === "merge" ? nextGroupNum : 0, 1);
-  nextAccountNum = maxNum(accounts) + 1;
-  hydrated = true;
-  resyncDerived();
-  notify();
-  // Write immediately (not debounced) so a refresh right after restore keeps the data.
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(JSON.parse(exportBackup()).data)); } catch {}
-  return summarizeBackup(exportBackup())!;
+  return relevant.map(({ e, direction, desc }) => {
+    const amt = Number(e.amount) || 0;
+    running = direction === "in" ? running + amt : running - amt;
+    return {
+      id: e.id,
+      date: e.date,
+      description: desc,
+      transactionType: e.type,
+      amount: amt,
+      direction,
+      runningBalanceAfter: running,
+    };
+  });
 }
 
 export function useStore() {
@@ -517,23 +728,94 @@ export function useStore() {
     opening,
     groups,
     accounts,
+    drawers,
     alertSettings,
     readAlerts,
 
+    // Drawer / Partner CRUD
+    addDrawer: (data: Omit<Drawer, "id">) => {
+      const snap = takeStateSnapshot();
+      const id = `DR-${String(nextDrawerNum++).padStart(3, "0")}`;
+      drawers = [...drawers, { ...data, id }];
+      notify();
+      registerUndoableAction(`Drawer ${data.name} added`, () => restoreStateSnapshot(snap));
+      return id;
+    },
+    updateDrawer: (id: string, data: Partial<Drawer>) => {
+      const snap = takeStateSnapshot();
+      const target = drawers.find((d) => d.id === id);
+      drawers = drawers.map((d) => (d.id === id ? { ...d, ...data } : d));
+      notify();
+      registerUndoableAction(`Drawer ${target?.name || id} updated`, () => restoreStateSnapshot(snap));
+    },
+    deleteDrawer: (id: string) => {
+      const snap = takeStateSnapshot();
+      const target = drawers.find((d) => d.id === id);
+      drawers = drawers.filter((d) => d.id !== id);
+      notify();
+      registerUndoableAction(`Drawer ${target?.name || id} deleted`, () => restoreStateSnapshot(snap));
+    },
+
+    // Profit Realization Actions
+    setBookingProfitStatus: (bookingId: string, status: "unearned" | "earned") => {
+      const snap = takeStateSnapshot();
+      bookings = bookings.map((b) => (b.id === bookingId ? { ...b, profitStatus: status, profitEarnedDate: status === "earned" ? getPKTDate() : undefined } : b));
+      notify();
+      registerUndoableAction(`Booking ${bookingId} profit marked as ${status}`, () => restoreStateSnapshot(snap));
+    },
+    toggleBookingProfitStatus: (bookingId: string) => {
+      const snap = takeStateSnapshot();
+      let nextStatus = "earned";
+      bookings = bookings.map((b) => {
+        if (b.id !== bookingId) return b;
+        nextStatus = b.profitStatus === "earned" ? "unearned" : "earned";
+        return { ...b, profitStatus: nextStatus as "unearned" | "earned", profitEarnedDate: nextStatus === "earned" ? getPKTDate() : undefined };
+      });
+      notify();
+      registerUndoableAction(`Booking ${bookingId} profit changed to ${nextStatus}`, () => restoreStateSnapshot(snap));
+    },
+
+    // Booking Service Fulfillment (Active vs Completed)
+    setBookingCompleted: (bookingId: string, completed: boolean) => {
+      const snap = takeStateSnapshot();
+      bookings = bookings.map((b) => (b.id === bookingId ? { ...b, serviceCompleted: completed, completedAt: completed ? new Date().toISOString() : undefined } : b));
+      notify();
+      registerUndoableAction(`Booking ${bookingId} marked as ${completed ? "Completed" : "Active"}`, () => restoreStateSnapshot(snap));
+    },
+    toggleBookingCompleted: (bookingId: string) => {
+      const snap = takeStateSnapshot();
+      let nextCompleted = true;
+      bookings = bookings.map((b) => {
+        if (b.id !== bookingId) return b;
+        nextCompleted = !b.serviceCompleted;
+        return { ...b, serviceCompleted: nextCompleted, completedAt: nextCompleted ? new Date().toISOString() : undefined };
+      });
+      notify();
+      registerUndoableAction(`Booking ${bookingId} status toggled`, () => restoreStateSnapshot(snap));
+    },
+
     // Accounts (Chart of Accounts) CRUD
     addAccount: (data: Omit<Account, "id">) => {
+      const snap = takeStateSnapshot();
       const id = `AC-${String(nextAccountNum++).padStart(3, "0")}`;
       accounts = [...accounts, { ...data, id }];
       notify();
+      registerUndoableAction(`Account ${data.name} created`, () => restoreStateSnapshot(snap));
       return id;
     },
     updateAccount: (id: string, data: Partial<Account>) => {
+      const snap = takeStateSnapshot();
+      const target = accounts.find((a) => a.id === id);
       accounts = accounts.map((a) => (a.id === id ? { ...a, ...data } : a));
       notify();
+      registerUndoableAction(`Account ${target?.name || id} updated`, () => restoreStateSnapshot(snap));
     },
     deleteAccount: (id: string) => {
+      const snap = takeStateSnapshot();
+      const target = accounts.find((a) => a.id === id);
       accounts = accounts.filter((a) => a.id !== id);
       notify();
+      registerUndoableAction(`Account ${target?.name || id} deleted`, () => restoreStateSnapshot(snap));
     },
     setAlertSettings: (data: Partial<AlertSettings>) => {
       alertSettings = { ...alertSettings, ...data };
@@ -555,31 +837,42 @@ export function useStore() {
 
     // Purchase Groups CRUD
     addGroup: (data: Omit<PurchaseGroup, "id" | "createdAt">) => {
+      const snap = takeStateSnapshot();
       const id = `AV-G-${String(nextGroupNum++).padStart(3, "0")}`;
       const g: PurchaseGroup = { ...data, id, createdAt: new Date().toISOString() };
       groups = [...groups, g];
       notify();
+      registerUndoableAction(`Purchase Group ${data.pnr || id} created`, () => restoreStateSnapshot(snap));
       return id;
     },
     updateGroup: (id: string, data: Partial<PurchaseGroup>) => {
+      const snap = takeStateSnapshot();
       groups = groups.map((g) => (g.id === id ? { ...g, ...data } : g));
       notify();
+      registerUndoableAction(`Purchase Group ${id} updated`, () => restoreStateSnapshot(snap));
     },
     deleteGroup: (id: string) => {
+      const snap = takeStateSnapshot();
       groups = groups.filter((g) => g.id !== id);
       entries = entries.map((e) => (e.groupId === id ? { ...e, groupId: undefined } : e));
       notify();
+      registerUndoableAction(`Purchase Group ${id} deleted`, () => restoreStateSnapshot(snap));
     },
 
     // Client CRUD
     addClient: (data: Omit<Client, "id">) => {
+      const snap = takeStateSnapshot();
       const id = generateId("AV-C", nextClientNum++);
       clients = [...clients, { ...data, id, baseDue: data.amountDue, extraCharges: 0 }];
       resyncAgents();
       notify();
+      const clientName = `${data.firstName || ""} ${data.lastName || ""}`.trim() || id;
+      registerUndoableAction(`Client ${clientName} added`, () => restoreStateSnapshot(snap));
       return id;
     },
     updateClient: (id: string, data: Partial<Client>) => {
+      const snap = takeStateSnapshot();
+      const target = clients.find((c) => c.id === id);
       clients = clients.map((c) => {
         if (c.id !== id) return c;
         const next = { ...c, ...data };
@@ -590,12 +883,18 @@ export function useStore() {
         return next;
       });
       notify();
+      const clientName = target ? `${target.firstName} ${target.lastName}`.trim() : id;
+      registerUndoableAction(`Client ${clientName} updated`, () => restoreStateSnapshot(snap));
     },
     deleteClient: (id: string) => {
+      const snap = takeStateSnapshot();
+      const target = clients.find((c) => c.id === id);
       clients = clients.filter((c) => c.id !== id);
       bookings = bookings.map((b) => ({ ...b, clientIds: b.clientIds.filter((cid) => cid !== id) }));
       resyncAgents();
       notify();
+      const clientName = target ? `${target.firstName} ${target.lastName}`.trim() : id;
+      registerUndoableAction(`Client ${clientName} deleted`, () => restoreStateSnapshot(snap));
     },
 
     // ---- Service Checklist CRUD (per client) ----
@@ -628,45 +927,64 @@ export function useStore() {
 
     // Agent CRUD
     addAgent: (data: Omit<Agent, "id">) => {
+      const snap = takeStateSnapshot();
       const id = generateId("AV-A", nextAgentNum++);
       agents = [...agents, { ...data, id }];
       notify();
+      registerUndoableAction(`Agent ${data.name || id} added`, () => restoreStateSnapshot(snap));
       return id;
     },
     updateAgent: (id: string, data: Partial<Agent>) => {
+      const snap = takeStateSnapshot();
+      const target = agents.find((a) => a.id === id);
       agents = agents.map((a) => (a.id === id ? { ...a, ...data } : a));
       notify();
+      registerUndoableAction(`Agent ${target?.name || id} updated`, () => restoreStateSnapshot(snap));
     },
     deleteAgent: (id: string) => {
+      const snap = takeStateSnapshot();
+      const target = agents.find((a) => a.id === id);
       agents = agents.filter((a) => a.id !== id);
       notify();
+      registerUndoableAction(`Agent ${target?.name || id} deleted`, () => restoreStateSnapshot(snap));
     },
 
     // Supplier CRUD
     addSupplier: (data: Omit<Supplier, "id">) => {
+      const snap = takeStateSnapshot();
       const id = generateId("AV-S", nextSupplierNum++);
       suppliers = [...suppliers, { ...data, id }];
       notify();
+      registerUndoableAction(`Supplier ${data.companyName || id} added`, () => restoreStateSnapshot(snap));
       return id;
     },
     updateSupplier: (id: string, data: Partial<Supplier>) => {
+      const snap = takeStateSnapshot();
+      const target = suppliers.find((s) => s.id === id);
       suppliers = suppliers.map((s) => (s.id === id ? { ...s, ...data } : s));
       notify();
+      registerUndoableAction(`Supplier ${target?.companyName || id} updated`, () => restoreStateSnapshot(snap));
     },
     deleteSupplier: (id: string) => {
+      const snap = takeStateSnapshot();
+      const target = suppliers.find((s) => s.id === id);
       suppliers = suppliers.filter((s) => s.id !== id);
       notify();
+      registerUndoableAction(`Supplier ${target?.companyName || id} deleted`, () => restoreStateSnapshot(snap));
     },
 
     // Booking CRUD
     addBooking: (data: Omit<Booking, "id">) => {
+      const snap = takeStateSnapshot();
       const id = `B${String(nextBookingNum++).padStart(3, "0")}`;
       bookings = [...bookings, { ...data, id, baseAmount: data.totalAmount, extraCharges: 0 }];
       resyncDerived();
       notify();
+      registerUndoableAction(`Booking ${id} (${data.packageType || "Custom"}) created`, () => restoreStateSnapshot(snap));
       return id;
     },
     updateBooking: (id: string, data: Partial<Booking>) => {
+      const snap = takeStateSnapshot();
       const before = bookings.find((b) => b.id === id);
       bookings = bookings.map((b) => {
         if (b.id !== id) return b;
@@ -714,8 +1032,10 @@ export function useStore() {
       // Agents & suppliers are fully derived from bookings + ledger
       resyncDerived();
       notify();
+      registerUndoableAction(`Booking ${id} updated`, () => restoreStateSnapshot(snap));
     },
     deleteBooking: (id: string) => {
+      const snap = takeStateSnapshot();
       const b = bookings.find((x) => x.id === id);
       if (!b) { notify(); return; }
       // Cascade: delete clients under this head + related ledger entries
@@ -725,22 +1045,26 @@ export function useStore() {
       bookings = bookings.filter((x) => x.id !== id);
       resyncDerived();
       notify();
+      registerUndoableAction(`Booking ${id} deleted`, () => restoreStateSnapshot(snap));
     },
 
     // Entries CRUD
     addEntry: (data: Omit<LedgerEntry, "id" | "createdAt">) => {
+      const snap = takeStateSnapshot();
       const id = `E${String(nextEntryNum++).padStart(3, "0")}`;
       const entry = { ...data, id, createdAt: new Date().toLocaleString("en-PK", { timeZone: "Asia/Karachi" }) };
       entries = [...entries, entry];
       resyncFromEntries({
-        supplierIds: (data.type === "purchase" || data.type === "supplier_payment" || data.type === "supplier_refund") ? [data.referenceId] : [],
+        supplierIds: (data.type === "purchase" || data.type === "supplier_payment" || data.type === "supplier_refund" || data.type === "supplier_discount") ? [data.referenceId] : [],
         agentIds: data.type === "agent_commission" ? [data.referenceId] : [],
-        headIds: (data.type === "client_receive" || data.type === "client_charge" || data.type === "client_refund") && data.headId ? [data.headId] : [],
+        headIds: (data.type === "client_receive" || data.type === "client_charge" || data.type === "client_refund" || data.type === "client_discount") && data.headId ? [data.headId] : [],
       });
       notify();
+      registerUndoableAction(`Entry ${id} (${data.type.replace(/_/g, " ")}) recorded`, () => restoreStateSnapshot(snap));
       return id;
     },
     updateEntry: (id: string, data: Partial<LedgerEntry>) => {
+      const snap = takeStateSnapshot();
       const before = entries.find((e) => e.id === id);
       entries = entries.map((e) => (e.id === id ? { ...e, ...data } : e));
       const after = entries.find((e) => e.id === id);
@@ -750,24 +1074,27 @@ export function useStore() {
       const headIds = new Set<string>();
       [before, after].forEach((e) => {
         if (!e) return;
-        if (e.type === "purchase" || e.type === "supplier_payment" || e.type === "supplier_refund") { if (e.referenceId) supplierIds.add(e.referenceId); }
+        if (e.type === "purchase" || e.type === "supplier_payment" || e.type === "supplier_refund" || e.type === "supplier_discount") { if (e.referenceId) supplierIds.add(e.referenceId); }
         if (e.type === "agent_commission") { if (e.referenceId) agentIds.add(e.referenceId); }
-        if (e.type === "client_receive" || e.type === "client_charge" || e.type === "client_refund") { if (e.headId) headIds.add(e.headId); }
+        if (e.type === "client_receive" || e.type === "client_charge" || e.type === "client_refund" || e.type === "client_discount") { if (e.headId) headIds.add(e.headId); }
       });
       resyncFromEntries({ supplierIds: [...supplierIds], agentIds: [...agentIds], headIds: [...headIds] });
       notify();
+      registerUndoableAction(`Entry ${id} updated`, () => restoreStateSnapshot(snap));
     },
     deleteEntry: (id: string) => {
+      const snap = takeStateSnapshot();
       const e = entries.find((x) => x.id === id);
       entries = entries.filter((x) => x.id !== id);
       if (e) {
         resyncFromEntries({
-          supplierIds: (e.type === "purchase" || e.type === "supplier_payment" || e.type === "supplier_refund") && e.referenceId ? [e.referenceId] : [],
+          supplierIds: (e.type === "purchase" || e.type === "supplier_payment" || e.type === "supplier_refund" || e.type === "supplier_discount") && e.referenceId ? [e.referenceId] : [],
           agentIds: e.type === "agent_commission" && e.referenceId ? [e.referenceId] : [],
-          headIds: (e.type === "client_receive" || e.type === "client_charge" || e.type === "client_refund") && e.headId ? [e.headId] : [],
+          headIds: (e.type === "client_receive" || e.type === "client_charge" || e.type === "client_refund" || e.type === "client_discount") && e.headId ? [e.headId] : [],
         });
       }
       notify();
+      registerUndoableAction(`Entry ${id} deleted`, () => restoreStateSnapshot(snap));
     },
 
     generateHeadId: () => {
@@ -833,6 +1160,10 @@ export function useStore() {
       notify();
     },
 
+    // Global Undo / Revert
+    undoLastAction,
+    hasUndo,
+
     // Wipe everything to a true blank slate (keeps opening balances editable in settings)
     resetAllData: (opts?: { keepOpening?: boolean }) => {
       clients = [];
@@ -848,5 +1179,11 @@ export function useStore() {
       nextBookingNum = 1; nextHeadNum = 1; nextEntryNum = 1; nextGroupNum = 1;
       notify();
     },
+
+    // Cloud Database (Firestore) synchronization
+    cloudSyncStatus,
+    lastSyncedAt,
+    syncToCloud,
+    loadFromCloud,
   };
 }

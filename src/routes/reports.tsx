@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { DollarSign, TrendingUp, Wallet, Receipt, Users, BookOpen, Percent, PiggyBank, Activity, Award } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import { formatCurrency } from "@/lib/data";
@@ -51,6 +51,8 @@ function KpiCard({ title, value, sub, icon: Icon, accent, onClick, delay = 0 }: 
 }
 
 function ReportsPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const store = useStore();
   const [drill, setDrill] = useState<Drill | null>(null);
   const [pkgFilter, setPkgFilter] = useState<string>("All");
@@ -67,7 +69,14 @@ function ReportsPage() {
     return store.entries.filter(e => !e.headId || headFilter.has(e.headId));
   }, [store.entries, headFilter, pkgFilter, agentFilter]);
 
-  const input = { bookings: filteredBookings, clients: store.clients, agents: store.agents, suppliers: store.suppliers, entries: filteredEntries, opening: store.opening };
+  const input = useMemo(() => ({
+    bookings: filteredBookings,
+    clients: store.clients,
+    agents: store.agents,
+    suppliers: store.suppliers,
+    entries: filteredEntries,
+    opening: store.opening,
+  }), [filteredBookings, store.clients, store.agents, store.suppliers, filteredEntries, store.opening]);
   const t = useMemo(() => computeTotals(input), [input]);
   const byPkg = useMemo(() => profitByPackage(input), [input]);
   const trend = useMemo(() => monthlyTrend(input), [input]);
@@ -151,18 +160,22 @@ function ReportsPage() {
         <h3 className="mb-4 text-sm font-semibold">Profit Breakdown by Package Type</h3>
         {byPkg.length === 0 ? <p className="text-xs text-muted-foreground">No bookings yet.</p> : (
           <>
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={byPkg}>
-                <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.28 0.01 260)" />
-                <XAxis dataKey="packageType" stroke="oklch(0.6 0.02 260)" fontSize={11} />
-                <YAxis stroke="oklch(0.6 0.02 260)" fontSize={11} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
-                <Tooltip contentStyle={{ background: "oklch(0.17 0.01 260)", border: "1px solid oklch(0.28 0.01 260)", borderRadius: 8 }} formatter={(v: any) => formatCurrency(Number(v))} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="revenue" fill="oklch(0.8 0.12 80)" name="Revenue" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="cost" fill="oklch(0.6 0.15 280)" name="Cost" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="profit" fill="oklch(0.7 0.15 155)" name="Profit" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {mounted ? (
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={byPkg}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.28 0.01 260)" />
+                  <XAxis dataKey="packageType" stroke="oklch(0.6 0.02 260)" fontSize={11} />
+                  <YAxis stroke="oklch(0.6 0.02 260)" fontSize={11} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip contentStyle={{ background: "oklch(0.17 0.01 260)", border: "1px solid oklch(0.28 0.01 260)", borderRadius: 8 }} formatter={(v: any) => formatCurrency(Number(v))} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="revenue" fill="oklch(0.8 0.12 80)" name="Revenue" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="cost" fill="oklch(0.6 0.15 280)" name="Cost" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="profit" fill="oklch(0.7 0.15 155)" name="Profit" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[260px] w-full rounded-lg bg-accent/10 animate-pulse flex items-center justify-center text-xs text-muted-foreground">Loading chart...</div>
+            )}
             <div className="mt-4 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -195,7 +208,7 @@ function ReportsPage() {
       {/* Monthly Trend */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-xl p-5">
         <h3 className="mb-4 text-sm font-semibold">Monthly Performance Trend</h3>
-        {trend.length === 0 ? <p className="text-xs text-muted-foreground">No transactions yet.</p> : (
+        {trend.length === 0 ? <p className="text-xs text-muted-foreground">No transactions yet.</p> : mounted ? (
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={trend}>
               <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.28 0.01 260)" />
@@ -209,6 +222,8 @@ function ReportsPage() {
               <Line type="monotone" dataKey="expenses" stroke="oklch(0.7 0.18 30)" strokeWidth={2} dot={false} name="Expenses" />
             </LineChart>
           </ResponsiveContainer>
+        ) : (
+          <div className="h-[280px] w-full rounded-lg bg-accent/10 animate-pulse flex items-center justify-center text-xs text-muted-foreground">Loading trend...</div>
         )}
       </motion.div>
 
@@ -252,14 +267,18 @@ function ReportsPage() {
           <h3 className="mb-4 text-sm font-semibold">Expense Breakdown</h3>
           {expCats.length === 0 ? <p className="text-xs text-muted-foreground">No expenses recorded.</p> : (
             <>
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie data={expCats} dataKey="amount" nameKey="category" cx="50%" cy="50%" innerRadius={45} outerRadius={75} stroke="none">
-                    {expCats.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip contentStyle={{ background: "oklch(0.17 0.01 260)", border: "1px solid oklch(0.28 0.01 260)", borderRadius: 8 }} formatter={(v: any) => formatCurrency(Number(v))} />
-                </PieChart>
-              </ResponsiveContainer>
+              {mounted ? (
+                <ResponsiveContainer width="100%" height={200}>
+                  <PieChart>
+                    <Pie data={expCats} dataKey="amount" nameKey="category" cx="50%" cy="50%" innerRadius={45} outerRadius={75} stroke="none">
+                      {expCats.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip contentStyle={{ background: "oklch(0.17 0.01 260)", border: "1px solid oklch(0.28 0.01 260)", borderRadius: 8 }} formatter={(v: any) => formatCurrency(Number(v))} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[200px] w-full rounded-lg bg-accent/10 animate-pulse flex items-center justify-center text-xs text-muted-foreground">Loading chart...</div>
+              )}
               <table className="mt-3 w-full text-sm">
                 <tbody>
                   {expCats.map((r, i) => (

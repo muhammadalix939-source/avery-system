@@ -1,9 +1,12 @@
 import { createRouter, useRouter, type ErrorComponentProps } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
 
-function DefaultErrorComponent({ error, reset }: ErrorComponentProps) {
-  const err = error as Error;
+function DefaultErrorComponent({
+  error,
+  reset,
+}: ErrorComponentProps) {
   const router = useRouter();
+  const errorMessage = error instanceof Error ? error.message : typeof error === "string" ? error : "";
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -30,9 +33,9 @@ function DefaultErrorComponent({ error, reset }: ErrorComponentProps) {
         <p className="mt-2 text-sm text-muted-foreground">
           An unexpected error occurred. Please try again.
         </p>
-        {import.meta.env.DEV && err.message && (
+        {import.meta.env.DEV && errorMessage && (
           <pre className="mt-4 max-h-40 overflow-auto rounded-md bg-muted p-3 text-left font-mono text-xs text-destructive">
-            {err.message}
+            {errorMessage}
           </pre>
         )}
         <div className="mt-6 flex items-center justify-center gap-3">
@@ -55,6 +58,21 @@ function DefaultErrorComponent({ error, reset }: ErrorComponentProps) {
       </div>
     </div>
   );
+}
+
+// Ensure window.$_TSR is initialized if client loads without SSR bootstrap (e.g. static preview / SPA on Lovable)
+if (typeof window !== "undefined") {
+  const w = window as any;
+  if (!w.$_TSR) {
+    w.$_TSR = {
+      h() { this.hydrated = true; this.c(); },
+      e() { this.streamEnded = true; this.c(); },
+      c() { if (this.hydrated && this.streamEnded) delete w.$_TSR; },
+      p(s: any) { if (this.initialized) s(); else this.buffer.push(s); },
+      buffer: [],
+      router: { manifest: {}, dehydratedData: null, matches: [] },
+    };
+  }
 }
 
 export const getRouter = () => {
