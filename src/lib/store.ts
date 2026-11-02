@@ -481,7 +481,7 @@ export function importBackup(text: string, mode: "replace" | "merge"): BackupSum
   // Counters: never go below what the data already uses, so new IDs never collide.
   const maxNum = (arr: { id: string }[]) => arr.reduce((m, x) => Math.max(m, Number(String(x.id).match(/(\d+)\D*$/)?.[1] || 0)), 0);
   const c = s.counters;
-  nextClientNum = Math.max(c?.client || 0, maxNum(clients) + 1, nextClientNum * (mode === "merge" ? 1 : 0));
+  nextClientNum = Math.max(c?.client || 0, maxNum(clients) + 1, mode === "merge" ? nextClientNum : 0);
   nextAgentNum = Math.max(c?.agent || 0, maxNum(agents) + 1, mode === "merge" ? nextAgentNum : 0);
   nextSupplierNum = Math.max(c?.supplier || 0, maxNum(suppliers) + 1, mode === "merge" ? nextSupplierNum : 0);
   nextBookingNum = Math.max(c?.booking || 0, maxNum(bookings) + 1, mode === "merge" ? nextBookingNum : 0);
@@ -493,7 +493,7 @@ export function importBackup(text: string, mode: "replace" | "merge"): BackupSum
   resyncDerived();
   notify();
   // Write immediately (not debounced) so a refresh right after restore keeps the data.
-  try { localStorage.setItem(STORAGE_KEY, JSON.parse(JSON.stringify(exportBackup())) && JSON.stringify(JSON.parse(exportBackup()).data)); } catch {}
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(JSON.parse(exportBackup()).data)); } catch {}
   return summarizeBackup(exportBackup())!;
 }
 
