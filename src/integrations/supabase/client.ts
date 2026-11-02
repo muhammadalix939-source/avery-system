@@ -9,13 +9,10 @@ function createSupabaseClient() {
   const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
 
-  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
-    throw new Error(
-      'Missing Supabase environment variables. Ensure SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY (or VITE_ prefixed versions) are set in your .env file.'
-    );
-  }
+  const url = SUPABASE_URL || 'https://placeholder.supabase.co';
+  const key = SUPABASE_PUBLISHABLE_KEY || 'placeholder-anon-key';
 
-  return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  return createClient<Database>(url, key, {
     auth: {
       storage: brokeredPreviewStorage(),
       persistSession: true,
