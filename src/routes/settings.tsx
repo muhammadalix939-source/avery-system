@@ -10,7 +10,6 @@ import PageHeader from "@/components/PageHeader";
 import { useStore } from "@/lib/store";
 import { formatCurrency } from "@/lib/data";
 import { toast } from "sonner";
-import BackupPanel from "@/components/BackupPanel";
 
 export const Route = createFileRoute("/settings")({
   component: SettingsPage,
@@ -80,7 +79,6 @@ function SettingsPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Settings" subtitle="Edit dashboard opening balances and business defaults" />
-      <BackupPanel />
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-xl p-6 space-y-6">
         <div className="flex items-center gap-3 border-b border-border/50 pb-4">
