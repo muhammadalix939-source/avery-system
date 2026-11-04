@@ -248,6 +248,29 @@ export interface OtherService {
   amount?: number;
 }
 
+export interface ZiyarahService {
+  id: string;
+  city: string;        // Makkah / Madinah / custom
+  sector: string;      // sector name(s) — e.g. Masjid Quba, Mount Uhud
+  date: string;
+  vehicle: string;     // Bus (Sharing) / Private Car / Luxury Coach...
+  notes?: string;
+}
+
+/** Full package detail captured on a booking (Umrah / Hajj / Tour). */
+export interface PackageInfo {
+  name?: string;
+  scope?: "Domestic" | "International";
+  destinationCountry?: string;
+  destinationCity?: string;
+  durationDays?: number;
+  durationNights?: number;
+  startDate?: string;
+  endDate?: string;
+  /** Selected inclusions (labels from the package inclusion catalog). */
+  inclusions: string[];
+}
+
 export interface Agent {
   id: string;
   name: string;
