@@ -741,6 +741,8 @@ export function useStore() {
     drawers,
     alertSettings,
     readAlerts,
+    customInclusions,
+    customCombos,
 
     // Drawer / Partner CRUD
     addDrawer: (data: Omit<Drawer, "id">) => {
