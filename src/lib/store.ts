@@ -240,6 +240,10 @@ interface PersistedState {
   drawers?: Drawer[];
   alertSettings?: AlertSettings;
   readAlerts?: string[];
+  /** Reusable package inclusions added by the user (purchase builder + booking package). */
+  customInclusions?: string[];
+  /** Reusable city / route combos added by the user. */
+  customCombos?: string[];
 }
 
 export const defaultDrawers: Drawer[] = [
@@ -282,6 +286,8 @@ let accounts: Account[] = initial.accounts || [
 let drawers: Drawer[] = initial.drawers || defaultDrawers;
 let alertSettings: AlertSettings = initial.alertSettings || { ...defaultAlertSettings };
 let readAlerts: string[] = initial.readAlerts || [];
+let customInclusions: string[] = initial.customInclusions || [];
+let customCombos: string[] = initial.customCombos || [];
 let nextAccountNum = 2;
 let nextDrawerNum = (initial.drawers?.length || 2) + 1;
 let nextClientNum = initial.counters.client;
@@ -366,6 +372,7 @@ function persist() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         clients, bookings, agents, suppliers, monthlyData, entries, opening, groups, accounts, drawers, alertSettings, readAlerts,
+        customInclusions, customCombos,
         counters: { client: nextClientNum, agent: nextAgentNum, supplier: nextSupplierNum, booking: nextBookingNum, head: nextHeadNum, entry: nextEntryNum, group: nextGroupNum },
       }));
     } catch {}
@@ -486,6 +493,8 @@ function hydrateFromStorage() {
     }
     if (s.alertSettings) alertSettings = { ...defaultAlertSettings, ...s.alertSettings };
     if (s.readAlerts) readAlerts = s.readAlerts;
+    if (Array.isArray(s.customInclusions)) customInclusions = s.customInclusions;
+    if (Array.isArray(s.customCombos)) customCombos = s.customCombos;
     nextAccountNum = accounts.length + 1;
     if (s.counters) {
       nextClientNum = s.counters.client; nextAgentNum = s.counters.agent;
