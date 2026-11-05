@@ -41,6 +41,10 @@ export function normalizeBooking(b: Partial<Booking> & Record<string, unknown>):
     transports: arr(b.transports),
     visas: arr(b.visas),
     others: arr(b.others),
+    ziyarahs: arr(b.ziyarahs),
+    packageInfo: b.packageInfo
+      ? { ...(b.packageInfo as unknown as Record<string, unknown>), inclusions: arr<string>((b.packageInfo as { inclusions?: unknown }).inclusions) } as Booking["packageInfo"]
+      : undefined,
   } as Booking;
 }
 

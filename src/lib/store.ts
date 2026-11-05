@@ -2,8 +2,9 @@ import { normalizeBooking, normalizeClient, normalizeEntry, restoreMissingAccoun
 // Centralized state management for the CRM
 import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
-import type { Client, Booking, Agent, Supplier, HotelService, FlightService, TransportService, VisaService, OtherService, ChecklistItem, Drawer } from "./data";
+import type { Client, Booking, Agent, Supplier, HotelService, FlightService, TransportService, VisaService, OtherService, ZiyarahService, ChecklistItem, Drawer, PackageInfo } from "./data";
 import { mockClients, mockBookings, mockAgents, mockSuppliers, mockMonthlyData as defaultMonthlyData, generateId } from "./data";
+import { DEFAULT_INCLUSIONS } from "./packages";
 import { defaultChecklist } from "./checklist";
 import { getPKTDate } from "./date-utils";
 import { pushFullStateToFirestore, fetchCollectionFromFirestore, auth } from "./firebase";
@@ -240,6 +241,10 @@ interface PersistedState {
   drawers?: Drawer[];
   alertSettings?: AlertSettings;
   readAlerts?: string[];
+  /** Reusable package inclusions added by the user (purchase builder + booking package). */
+  customInclusions?: string[];
+  /** Reusable city / route combos added by the user. */
+  customCombos?: string[];
 }
 
 export const defaultDrawers: Drawer[] = [
@@ -282,6 +287,8 @@ let accounts: Account[] = initial.accounts || [
 let drawers: Drawer[] = initial.drawers || defaultDrawers;
 let alertSettings: AlertSettings = initial.alertSettings || { ...defaultAlertSettings };
 let readAlerts: string[] = initial.readAlerts || [];
+let customInclusions: string[] = initial.customInclusions || [];
+let customCombos: string[] = initial.customCombos || [];
 let nextAccountNum = 2;
 let nextDrawerNum = (initial.drawers?.length || 2) + 1;
 let nextClientNum = initial.counters.client;
@@ -366,6 +373,7 @@ function persist() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         clients, bookings, agents, suppliers, monthlyData, entries, opening, groups, accounts, drawers, alertSettings, readAlerts,
+        customInclusions, customCombos,
         counters: { client: nextClientNum, agent: nextAgentNum, supplier: nextSupplierNum, booking: nextBookingNum, head: nextHeadNum, entry: nextEntryNum, group: nextGroupNum },
       }));
     } catch {}
@@ -486,6 +494,8 @@ function hydrateFromStorage() {
     }
     if (s.alertSettings) alertSettings = { ...defaultAlertSettings, ...s.alertSettings };
     if (s.readAlerts) readAlerts = s.readAlerts;
+    if (Array.isArray(s.customInclusions)) customInclusions = s.customInclusions;
+    if (Array.isArray(s.customCombos)) customCombos = s.customCombos;
     nextAccountNum = accounts.length + 1;
     if (s.counters) {
       nextClientNum = s.counters.client; nextAgentNum = s.counters.agent;
@@ -731,6 +741,8 @@ export function useStore() {
     drawers,
     alertSettings,
     readAlerts,
+    customInclusions,
+    customCombos,
 
     // Drawer / Partner CRUD
     addDrawer: (data: Omit<Drawer, "id">) => {
@@ -1152,6 +1164,63 @@ export function useStore() {
     deleteOther: (bookingId: string, otherId: string) => {
       bookings = bookings.map((b) => b.id === bookingId ? { ...b, others: (b.others || []).filter((o) => o.id !== otherId) } : b);
       notify();
+    },
+    addZiyarah: (bookingId: string, data: Omit<ZiyarahService, "id">) => {
+      const id = `Z${Date.now().toString(36)}`;
+      bookings = bookings.map((b) => b.id === bookingId ? { ...b, ziyarahs: [...(b.ziyarahs || []), { ...data, id }] } : b);
+      notify();
+      return id;
+    },
+    updateZiyarah: (bookingId: string, zId: string, data: Partial<ZiyarahService>) => {
+      bookings = bookings.map((b) => b.id === bookingId ? { ...b, ziyarahs: (b.ziyarahs || []).map((z) => z.id === zId ? { ...z, ...data } : z) } : b);
+      notify();
+    },
+    deleteZiyarah: (bookingId: string, zId: string) => {
+      bookings = bookings.map((b) => b.id === bookingId ? { ...b, ziyarahs: (b.ziyarahs || []).filter((z) => z.id !== zId) } : b);
+      notify();
+    },
+    // Inline edits for existing booking services (professional edit-in-place)
+    updateHotel: (bookingId: string, hotelId: string, data: Partial<HotelService>) => {
+      bookings = bookings.map((b) => b.id === bookingId ? { ...b, hotels: (b.hotels || []).map((h) => h.id === hotelId ? { ...h, ...data } : h) } : b);
+      notify();
+    },
+    updateFlight: (bookingId: string, flightId: string, data: Partial<FlightService>) => {
+      bookings = bookings.map((b) => b.id === bookingId ? { ...b, flights: (b.flights || []).map((f) => f.id === flightId ? { ...f, ...data } : f) } : b);
+      notify();
+    },
+    updateTransport: (bookingId: string, transportId: string, data: Partial<TransportService>) => {
+      bookings = bookings.map((b) => b.id === bookingId ? { ...b, transports: (b.transports || []).map((t) => t.id === transportId ? { ...t, ...data } : t) } : b);
+      notify();
+    },
+    updateVisa: (bookingId: string, visaId: string, data: Partial<VisaService>) => {
+      bookings = bookings.map((b) => b.id === bookingId ? { ...b, visas: (b.visas || []).map((v) => v.id === visaId ? { ...v, ...data } : v) } : b);
+      notify();
+    },
+    updateOther: (bookingId: string, otherId: string, data: Partial<OtherService>) => {
+      bookings = bookings.map((b) => b.id === bookingId ? { ...b, others: (b.others || []).map((o) => o.id === otherId ? { ...o, ...data } : o) } : b);
+      notify();
+    },
+
+    // Package info & reusable catalogs
+    setPackageInfo: (bookingId: string, info: Partial<PackageInfo>) => {
+      bookings = bookings.map((b) => b.id === bookingId
+        ? { ...b, packageInfo: { ...(b.packageInfo || { inclusions: [] }), ...info, inclusions: info.inclusions ?? b.packageInfo?.inclusions ?? [] } }
+        : b);
+      notify();
+    },
+    addCustomInclusion: (label: string) => {
+      const l = label.trim();
+      if (!l) return false;
+      if ([...DEFAULT_INCLUSIONS.map((i) => i.label), ...customInclusions].includes(l)) return false;
+      customInclusions = [...customInclusions, l];
+      notify();
+      return true;
+    },
+    addCustomCombo: (label: string) => {
+      const l = label.trim();
+      if (!l) return false;
+      if (!customCombos.includes(l)) { customCombos = [...customCombos, l]; notify(); }
+      return true;
     },
 
     // Opening balances (dashboard baseline)
