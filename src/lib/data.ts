@@ -114,6 +114,9 @@ export interface Booking {
   transports?: TransportService[];
   visas?: VisaService[];
   others?: OtherService[];
+  ziyarahs?: ZiyarahService[];
+  /** Full package detail (name, cities, duration, inclusions). */
+  packageInfo?: PackageInfo;
   /** Optional PNR / batch group linking this booking to a shared purchase group */
   groupId?: string;
   /** Realized vs Accrued Profit status: unearned until confirmed/converted to earned */
