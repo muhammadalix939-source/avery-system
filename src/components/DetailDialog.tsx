@@ -8,6 +8,7 @@ import type { Client, Booking, Agent, Supplier } from "@/lib/data";
 import type { LedgerEntry } from "@/lib/store";
 import { generateClientStatement, generateSupplierLedger, generateAgentReport, generatePaymentHistory } from "@/lib/pdf";
 import { formatCurrency as fc } from "@/lib/data";
+import { agentOtherSaleRows } from "@/lib/allocations";
 import { useState } from "react";
 
 interface DetailDialogProps {
@@ -70,9 +71,9 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
   function getAgentStats(a: Agent) {
     const agentBookings = allBookings.filter((b) => b.agentId === a.id);
     const agentClients = allClients.filter((c) => agentBookings.some((b) => b.headId === c.headId));
-    const otherSaleRows = entries.filter((e) => (e.type === "purchase" && e.purchasedFor === "agent" && e.agentId === a.id) || (e.type === "other_sale" && e.referenceId === a.id));
-    const otherSaleTotal = otherSaleRows.reduce((s, e) => s + (e.type === "purchase" ? (e.saleAmount ?? e.amount) : e.amount), 0);
-    const otherSaleCost = otherSaleRows.filter((e) => e.type === "purchase").reduce((s, e) => s + e.amount, 0);
+    const otherSaleList = agentOtherSaleRows(entries, a.id);
+    const otherSaleTotal = otherSaleList.reduce((s, r) => s + r.sale, 0);
+    const otherSaleCost = otherSaleList.reduce((s, r) => s + r.cost, 0);
     const totalSales = agentBookings.reduce((s, b) => s + b.totalAmount, 0) + (a.openingSales || 0) + otherSaleTotal;
     const totalCommission = agentBookings.reduce((s, b) => s + (b.commission || 0), 0) + (a.openingCommission || 0);
     const paidCommission = entries.filter((e) => e.type === "agent_commission" && e.referenceId === a.id).reduce((s, e) => s + e.amount, 0) + (a.openingPaidCommission || 0);
@@ -80,7 +81,7 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
       + entries.filter((e) => e.type === "agent_receive" && e.referenceId === a.id).reduce((s, e) => s + e.amount, 0);
     const netReceivable = Math.max(0, totalSales - totalCommission);
     return {
-      agentBookings, agentClients, totalSales, totalCommission, paidCommission, otherSaleRows, otherSaleTotal, otherSaleCost,
+      agentBookings, agentClients, totalSales, totalCommission, paidCommission, otherSaleList, otherSaleTotal, otherSaleCost,
       payable: totalCommission - paidCommission,
       received, netReceivable, outstanding: netReceivable - received,
     };
@@ -223,14 +224,23 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
                 </div>
                 <div className="rounded-lg border border-border/50 p-3 space-y-2">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Other Sale Entries</p>
-                  {stats.otherSaleRows.map((e) => {
-                    const sale = e.type === "purchase" ? (e.saleAmount ?? e.amount) : e.amount;
-                    const cost = e.type === "purchase" ? e.amount : 0;
+                  {stats.otherSaleList.map((row, idx) => {
+                    const e = row.entry;
+                    const sale = row.sale;
+                    const cost = row.cost;
+                    const isSplit = row.line && row.line.amount !== e.amount;
                     return (
-                      <div key={e.id} className="flex items-center justify-between rounded bg-accent/20 px-3 py-2">
+                      <div key={`${e.id}-${row.line?.id || idx}`} className="flex items-center justify-between rounded bg-accent/20 px-3 py-2">
                         <div>
-                          <p className="text-xs font-medium">{e.forClientName || e.note || e.referenceName}</p>
-                          <p className="text-[10px] text-muted-foreground">{[e.date, e.serviceCategory, e.type === "purchase" ? `Supplier: ${e.referenceName}` : "Direct"].filter(Boolean).join(" · ")}</p>
+                          <p className="text-xs font-medium">{row.line?.forClientName || e.forClientName || e.note || e.referenceName}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {[e.date, e.serviceCategory, e.type === "purchase" ? `Supplier: ${e.referenceName}` : "Direct"].filter(Boolean).join(" · ")}
+                            {isSplit && (
+                              <span className="block text-[9.5px] text-primary/80">
+                                Share of {e.id} ({formatCurrency(row.line!.amount)} of {formatCurrency(e.amount)} cost)
+                              </span>
+                            )}
+                          </p>
                         </div>
                         <div className="text-right text-[10px]">
                           <p>Sale: <span className="font-semibold text-primary">{formatCurrency(sale)}</span></p>
@@ -239,7 +249,7 @@ export default function DetailDialog({ open, onOpenChange, type, data, entries =
                       </div>
                     );
                   })}
-                  {stats.otherSaleRows.length === 0 && <p className="py-2 text-center text-[11px] text-muted-foreground">No other sale yet. Post a Purchase entry "For Agent" to add one.</p>}
+                  {stats.otherSaleList.length === 0 && <p className="py-2 text-center text-[11px] text-muted-foreground">No other sale yet. Post a Purchase entry "For Agent" to add one.</p>}
                 </div>
               </div>
             );

@@ -35,14 +35,40 @@ export default function HeadBusinessCard({ headId, open, onOpenChange }: { headI
 
         <div className="max-h-[70vh] overflow-y-auto p-6">
           <Row label="Total Members" value={hb.members} muted />
-          <Row label="Per Person Amount" value={hb.perPerson} />
-          <Row label="Other Costs (visa / hotel / transport)" value={hb.otherCosts} />
+          <Row label="Per Person Base Amount" value={hb.perPerson} />
+          {hb.otherCosts > 0 && <Row label="Other Costs (visa / hotel / transport)" value={hb.otherCosts} />}
           <div className="my-2 border-t border-border/60" />
-          <Row label="Total Sale Amount" value={hb.totalSale} />
-          <Row label="(–) Refunds" value={hb.refunds} sign="–" />
-          <Row label="= Net Receivable" value={hb.netReceivable} />
+          <Row label="Gross Sale Amount" value={hb.grossSale} />
+          {hb.discount > 0 && <Row label="(–) Client Discount / Concession" value={hb.discount} sign="–" />}
+          <Row label="= Total Net Sale" value={hb.totalSale} />
+          {hb.refunds > 0 && <Row label="(–) Refunds" value={hb.refunds} sign="–" />}
+          <Row label="= Net Customer Receivable" value={hb.netReceivable} />
           <div className="my-2 border-t border-border/60" />
           <Row label="Total Purchase (Cost)" value={hb.totalPurchase} />
+          {hb.allocatedPurchases && hb.allocatedPurchases.length > 0 && (
+            <div className="mb-2 mt-1 rounded-md bg-accent/15 p-2 text-[11px] border border-border/40">
+              <div className="flex items-center justify-between text-muted-foreground font-semibold mb-1">
+                <span>Allocated Supplier Purchases</span>
+                <span>{hb.allocatedPurchases.length} items</span>
+              </div>
+              <div className="space-y-1">
+                {hb.allocatedPurchases.map((p, idx) => (
+                  <div key={`${p.entryId}-${idx}`} className="flex items-center justify-between text-xs py-0.5 border-t border-border/30">
+                    <div>
+                      <span className="font-semibold text-primary">{p.entryId}</span> · <span>{p.service}</span>
+                      <span className="block text-[10px] text-muted-foreground">{p.date} · {p.supplier}</span>
+                    </div>
+                    <div className="text-right font-mono">
+                      <span className="font-bold text-foreground">{formatCurrency(p.share)}</span>
+                      {p.share !== p.ofTotal && (
+                        <span className="block text-[9.5px] text-muted-foreground">of {formatCurrency(p.ofTotal)}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <Row label="Commission" value={hb.commission} />
           <div className="my-2 border-t border-border/60" />
           <div className="flex items-baseline justify-between rounded-lg bg-primary/5 px-3 py-3">

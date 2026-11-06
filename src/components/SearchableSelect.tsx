@@ -64,3 +64,5 @@ export function SearchableSelect({ options, value, onChange, placeholder = "Sele
     </Popover>
   );
 }
+
+export default SearchableSelect;

@@ -213,11 +213,17 @@ function BookingsPage() {
       });
     }
 
+    const custDiscount = Number(form.discount) || 0;
+    const grossTotal = computedTotal;
+    const netCustomerTotal = Math.max(0, grossTotal - custDiscount);
+
     const bookingId = store.addBooking({
       headId, agentId: form.agentId, supplierId: form.supplierId,
-      totalAmount: computedTotal, amountReceived: Number(form.amountReceived) || 0,
+      baseAmount: grossTotal,
+      totalAmount: netCustomerTotal,
+      amountReceived: Number(form.amountReceived) || 0,
       totalCost: Number(form.totalCost) || 0, commission: Number(form.commission) || 0,
-      discount: Number(form.discount) || 0,
+      discount: custDiscount,
       discountSettlement: form.discountSettlement,
       supplierDiscount: Number(form.supplierDiscount) || 0,
       clientIds: [], status: form.status, packageType: form.packageType, travelDate: form.travelDate,
@@ -227,11 +233,34 @@ function BookingsPage() {
     });
 
     const clientIds: string[] = [];
+    const membersCount = memberForms.length || 1;
+    const childTotal = childPrice * childrenCount;
+    const infantTotal = infantPrice * infantsCount;
+    const adultNetPortion = Math.max(0, netCustomerTotal - childTotal - infantTotal);
+    const adultNetPrice = adultsCount > 0 ? Math.floor(adultNetPortion / adultsCount) : 0;
+    const adultRemainder = adultsCount > 0 ? adultNetPortion - (adultNetPrice * adultsCount) : 0;
+
+    let adultIdx = 0;
     memberForms.forEach((m, i) => {
-      const due =
-        m.ageCategory === "Child" ? childPrice :
-        m.ageCategory === "Infant" ? infantPrice :
-        adultPrice;
+      let due = 0;
+      let baseDue = 0;
+      if (m.ageCategory === "Child") {
+        due = childPrice;
+        baseDue = childPrice;
+      } else if (m.ageCategory === "Infant") {
+        due = infantPrice;
+        baseDue = infantPrice;
+      } else {
+        due = adultNetPrice + (adultIdx === 0 ? adultRemainder : 0);
+        baseDue = adultPrice;
+        adultIdx++;
+      }
+      if (adultsCount === 0) {
+        const perMember = Math.floor(netCustomerTotal / membersCount);
+        const rem = netCustomerTotal - (perMember * membersCount);
+        due = perMember + (i === 0 ? rem : 0);
+        baseDue = Math.floor(grossTotal / membersCount);
+      }
       const cid = store.addClient({
         headId,
         firstName: m.firstName || `Member`,
@@ -248,6 +277,7 @@ function BookingsPage() {
         email: m.email || memberForms[0]?.email || "",
         packageType: form.packageType,
         paymentStatus: "Unpaid",
+        baseDue,
         amountDue: due,
         amountPaid: 0,
         isVip: false,
@@ -366,11 +396,17 @@ function BookingsPage() {
       });
     }
 
+    const custDiscount = Number(form.discount) || 0;
+    const grossTotal = computedTotal;
+    const netCustomerTotal = Math.max(0, grossTotal - custDiscount);
+
     store.updateBooking(selected.id, {
       agentId: form.agentId, supplierId: form.supplierId,
-      totalAmount: computedTotal, amountReceived: Number(form.amountReceived) || 0,
+      baseAmount: grossTotal,
+      totalAmount: netCustomerTotal,
+      amountReceived: Number(form.amountReceived) || 0,
       totalCost: Number(form.totalCost) || 0, commission: Number(form.commission) || 0,
-      discount: Number(form.discount) || 0,
+      discount: custDiscount,
       discountSettlement: form.discountSettlement,
       supplierDiscount: Number(form.supplierDiscount) || 0,
       packageType: form.packageType, status: form.status, travelDate: form.travelDate,
@@ -380,18 +416,47 @@ function BookingsPage() {
       clientIds: cs.map((c) => c.id),
     });
     // Override per-category dues and redistribute the payment
+    const childTotal = childPrice * children.length;
+    const infantTotal = infantPrice * infants.length;
+    const adultNetPortion = Math.max(0, netCustomerTotal - childTotal - infantTotal);
+    const adultNetPrice = adults.length > 0 ? Math.floor(adultNetPortion / adults.length) : 0;
+    const adultRemainder = adults.length > 0 ? adultNetPortion - (adultNetPrice * adults.length) : 0;
+
     let remaining = Number(form.amountReceived) || 0;
     const ordered = [...adults, ...children, ...infants];
-    ordered.forEach((c) => {
-      const due = c.ageCategory === "Child" ? childPrice : c.ageCategory === "Infant" ? infantPrice : adultPrice;
+    let adultIdx = 0;
+    ordered.forEach((c, idx) => {
+      let due = 0;
+      let baseDue = 0;
+      if (c.ageCategory === "Child") {
+        due = childPrice;
+        baseDue = childPrice;
+      } else if (c.ageCategory === "Infant") {
+        due = infantPrice;
+        baseDue = infantPrice;
+      } else {
+        due = adultNetPrice + (adultIdx === 0 ? adultRemainder : 0);
+        baseDue = adultPrice;
+        adultIdx++;
+      }
+      if (adults.length === 0) {
+        const perMember = Math.floor(netCustomerTotal / (ordered.length || 1));
+        const rem = netCustomerTotal - (perMember * (ordered.length || 1));
+        due = perMember + (idx === 0 ? rem : 0);
+        baseDue = Math.floor(grossTotal / (ordered.length || 1));
+      }
       let paid = 0;
       let status: "Paid" | "Partial" | "Unpaid" = "Unpaid";
       if (due <= 0) { paid = 0; status = "Paid"; }
       else if (remaining >= due) { paid = due; remaining -= due; status = "Paid"; }
       else if (remaining > 0) { paid = remaining; remaining = 0; status = "Partial"; }
       store.updateClient(c.id, {
-        amountDue: due, amountPaid: paid, paymentStatus: status,
-        packageType: form.packageType, destination: form.destination,
+        baseDue: c.baseDue ?? baseDue,
+        amountDue: due,
+        amountPaid: paid,
+        paymentStatus: status,
+        packageType: form.packageType,
+        destination: form.destination,
       });
     });
     setEditOpen(false);
@@ -403,8 +468,9 @@ function BookingsPage() {
     const children = cs.filter((c) => c.ageCategory === "Child");
     const infants = cs.filter((c) => c.ageCategory === "Infant");
     setSelected(b);
+    const grossSale = b.baseAmount ?? (b.discount ? b.totalAmount + b.discount : b.totalAmount);
     setForm({
-      agentId: b.agentId, supplierId: b.supplierId, totalAmount: String(b.baseAmount ?? b.totalAmount),
+      agentId: b.agentId, supplierId: b.supplierId, totalAmount: String(grossSale),
       amountReceived: String(b.amountReceived), totalCost: String(b.totalCost || 0),
       commission: String(b.commission || 0),
       discount: b.discount ? String(b.discount) : "",
@@ -434,17 +500,24 @@ function BookingsPage() {
   }
 
   function downloadPaymentHistory(b: Booking) {
+    const fin = computeBookingFinancials(b);
     const related = store.entries.filter((e) => e.headId === b.headId && e.type === "client_receive");
     const totalReceived = related.reduce((s, e) => s + e.amount, 0);
+    const stats: [string, string, "ink" | "success" | "destructive"][] = [
+      ["Gross Package Price", formatCurrency(fin.grossSale), "ink"],
+    ];
+    if (fin.discount > 0) {
+      stats.push(["Client Discount", `-${formatCurrency(fin.discount)}`, "destructive"]);
+      stats.push(["Net Customer Due", formatCurrency(fin.clientPayable), "ink"]);
+    }
+    stats.push(["Received", formatCurrency(totalReceived), "success"]);
+    stats.push(["Pending Balance", formatCurrency(Math.max(0, fin.clientPayable - totalReceived)), "destructive"]);
+
     generatePaymentHistory(
       `Booking ${b.headId}`,
       [["Head ID", b.headId], ["Package", b.packageType], ["Travel Date", b.travelDate], ["Members", String(b.members)]],
       related,
-      [
-        ["Total Amount", formatCurrency(b.totalAmount), "ink"],
-        ["Received", formatCurrency(totalReceived), "success"],
-        ["Pending", formatCurrency(b.totalAmount - totalReceived), "destructive"],
-      ]
+      stats
     );
   }
 
@@ -1018,7 +1091,12 @@ function BookingsPage() {
                     <td className="px-4 py-3">{b.packageType}</td>
                     <td className="px-4 py-3">{clients.length}</td>
                     <td className="px-4 py-3 text-muted-foreground">{b.agentId || "Direct"}</td>
-                    <td className="px-4 py-3 font-mono">{formatCurrency(b.totalAmount)}</td>
+                    <td className="px-4 py-3 font-mono">
+                      <div>{formatCurrency(b.totalAmount)}</div>
+                      {b.discount ? (
+                        <div className="text-[10px] text-amber-400 font-sans">Disc: -{formatCurrency(b.discount)}</div>
+                      ) : null}
+                    </td>
                     <td className="px-4 py-3 text-success font-mono">{formatCurrency(b.amountReceived)}</td>
                     <td className="px-4 py-3 text-destructive font-mono">{formatCurrency(pending)}</td>
                     <td className="px-4 py-3">

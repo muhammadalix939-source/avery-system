@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
-import { Save, Settings as SettingsIcon, Trash2, AlertTriangle, Database, Cloud, RefreshCw, CheckCircle2, LogIn, LogOut, Download, Upload } from "lucide-react";
+import { Save, Settings as SettingsIcon, Trash2, AlertTriangle, Database, Cloud, RefreshCw, CheckCircle2, LogIn, LogOut, Download, Upload, Copy, ExternalLink, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -243,6 +243,35 @@ function SettingsPage() {
           </div>
         </div>
 
+        <div className="rounded-lg border border-border/60 bg-muted/20 p-3.5 space-y-2.5 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0" />
+              <span className="font-semibold text-foreground">Authorized System Admins:</span>
+              <span className="font-mono text-[11px] text-muted-foreground">alianus09x@gmail.com</span>
+              <span className="text-muted-foreground">•</span>
+              <span className="font-mono text-[11px] text-emerald-400 font-medium">anusshahid016@gmail.com</span>
+            </div>
+            {mounted && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-[11px] gap-1 px-2.5"
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.hostname);
+                  toast.success(`Copied current host (${window.location.hostname}) to clipboard!`);
+                }}
+              >
+                <Copy className="h-3 w-3" />
+                Copy Domain ({window.location.hostname})
+              </Button>
+            )}
+          </div>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            <strong className="text-foreground">Lovable / Multi-device Setup:</strong> To allow signing in inside Lovable or custom preview URLs, ensure your domain (e.g. <code className="bg-background/80 px-1 py-0.5 rounded text-foreground font-mono">lovable.app</code>, <code className="bg-background/80 px-1 py-0.5 rounded text-foreground font-mono">lovableproject.com</code>) is added to <strong className="text-foreground">Firebase Console → Authentication → Settings tab → Authorized domains</strong>.
+          </p>
+        </div>
+
         {connStatus && (
           <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
@@ -283,8 +312,12 @@ function SettingsPage() {
               }
               try {
                 toast.loading("Uploading CRM state to Firestore...", { id: "sync-toast" });
-                await store.syncToCloud();
-                toast.success("All data uploaded and backed up to Firestore!", { id: "sync-toast" });
+                const res = await store.syncToCloud();
+                if (res && res.success === false) {
+                  toast.error(`Upload aborted: ${res.reason || "Not authenticated"}`, { id: "sync-toast" });
+                } else {
+                  toast.success("All data uploaded and backed up to Firestore!", { id: "sync-toast" });
+                }
               } catch (e: unknown) {
                 toast.error(e instanceof Error ? e.message : "Upload failed", { id: "sync-toast" });
               }

@@ -139,6 +139,7 @@ export interface BookingFinancials {
   sale: number;
   grossSale: number;
   discount: number;
+  clientPayable: number;
   supplierDiscount: number;
   netCost: number;
   netCommission: number;
@@ -151,8 +152,11 @@ export interface BookingFinancials {
 }
 
 export function computeBookingFinancials(b: Booking): BookingFinancials {
-  const sale = Number(b.totalAmount) || 0;
   const discount = Number(b.discount) || 0;
+  const grossSale = Number(b.baseAmount !== undefined ? b.baseAmount : (discount > 0 && b.totalAmount ? (b.totalAmount < 1000000 && b.totalAmount !== (b.baseAmount || b.totalAmount) ? b.totalAmount + discount : b.totalAmount) : b.totalAmount)) || 0;
+  const netSale = b.baseAmount !== undefined ? (Number(b.totalAmount) || 0) : Math.max(0, grossSale - discount);
+  const clientPayable = netSale;
+  const sale = netSale;
   const supplierDisc = Number(b.supplierDiscount) || 0;
   const grossCost = Number(b.totalCost) || 0;
   const netCost = Math.max(0, grossCost - supplierDisc);
@@ -171,14 +175,15 @@ export function computeBookingFinancials(b: Booking): BookingFinancials {
     agencyAbsorbedDiscount = discount;
   }
 
-  // Net agency profit: Sale revenue (after agency-absorbed discount) - net supplier cost - net commission
-  const netProfit = (sale - agencyAbsorbedDiscount) - netCost - netCommission;
+  // Net agency profit: Net sale revenue - net cost - net commission
+  const netProfit = (grossSale - agencyAbsorbedDiscount) - netCost - netCommission;
   const isLoss = netProfit < 0;
 
   return {
     sale,
-    grossSale: sale,
+    grossSale,
     discount,
+    clientPayable,
     supplierDiscount: supplierDisc,
     netCost,
     netCommission,
@@ -326,11 +331,11 @@ export const mockSuppliers: Supplier[] = [
 ];
 
 export const mockClients: Client[] = [
-  { id: "AV-C001", headId: "AV-HD-001", firstName: "Muhammad", lastName: "Ali", gender: "Male", nationality: "Pakistani", passport: "AB1234567", phone: "03001111111", packageType: "Umrah", paymentStatus: "Paid", amountDue: 100000, amountPaid: 100000, isVip: true },
-  { id: "AV-C002", headId: "AV-HD-001", firstName: "Fatima", lastName: "Ali", gender: "Female", nationality: "Pakistani", passport: "AB1234568", phone: "03001111112", packageType: "Umrah", paymentStatus: "Paid", amountDue: 100000, amountPaid: 100000, isVip: false },
-  { id: "AV-C003", headId: "AV-HD-001", firstName: "Hassan", lastName: "Ali", gender: "Male", nationality: "Pakistani", passport: "AB1234569", phone: "03001111113", packageType: "Umrah", paymentStatus: "Partial", amountDue: 100000, amountPaid: 50000, isVip: false },
-  { id: "AV-C004", headId: "AV-HD-001", firstName: "Aisha", lastName: "Ali", gender: "Female", nationality: "Pakistani", passport: "AB1234570", phone: "03001111114", packageType: "Umrah", paymentStatus: "Unpaid", amountDue: 100000, amountPaid: 0, isVip: false },
-  { id: "AV-C005", headId: "AV-HD-001", firstName: "Omar", lastName: "Ali", gender: "Male", nationality: "Pakistani", passport: "AB1234571", phone: "03001111115", packageType: "Umrah", paymentStatus: "Unpaid", amountDue: 100000, amountPaid: 0, isVip: false },
+  { id: "AV-C001", headId: "AV-HD-001", firstName: "Muhammad", lastName: "Ali", gender: "Male", nationality: "Pakistani", passport: "AB1234567", phone: "03001111111", packageType: "Umrah", paymentStatus: "Paid", baseDue: 100000, amountDue: 99000, amountPaid: 99000, isVip: true },
+  { id: "AV-C002", headId: "AV-HD-001", firstName: "Fatima", lastName: "Ali", gender: "Female", nationality: "Pakistani", passport: "AB1234568", phone: "03001111112", packageType: "Umrah", paymentStatus: "Paid", baseDue: 100000, amountDue: 99000, amountPaid: 99000, isVip: false },
+  { id: "AV-C003", headId: "AV-HD-001", firstName: "Hassan", lastName: "Ali", gender: "Male", nationality: "Pakistani", passport: "AB1234569", phone: "03001111113", packageType: "Umrah", paymentStatus: "Partial", baseDue: 100000, amountDue: 99000, amountPaid: 52000, isVip: false },
+  { id: "AV-C004", headId: "AV-HD-001", firstName: "Aisha", lastName: "Ali", gender: "Female", nationality: "Pakistani", passport: "AB1234570", phone: "03001111114", packageType: "Umrah", paymentStatus: "Unpaid", baseDue: 100000, amountDue: 99000, amountPaid: 0, isVip: false },
+  { id: "AV-C005", headId: "AV-HD-001", firstName: "Omar", lastName: "Ali", gender: "Male", nationality: "Pakistani", passport: "AB1234571", phone: "03001111115", packageType: "Umrah", paymentStatus: "Unpaid", baseDue: 100000, amountDue: 99000, amountPaid: 0, isVip: false },
   { id: "AV-C006", headId: "AV-HD-002", firstName: "Zainab", lastName: "Raza", gender: "Female", nationality: "Pakistani", passport: "CD5678901", phone: "03002222221", packageType: "Hajj", paymentStatus: "Paid", amountDue: 250000, amountPaid: 250000, isVip: true },
   { id: "AV-C007", headId: "AV-HD-002", firstName: "Aamir", lastName: "Raza", gender: "Male", nationality: "Pakistani", passport: "CD5678902", phone: "03002222222", packageType: "Hajj", paymentStatus: "Paid", amountDue: 250000, amountPaid: 250000, isVip: false },
   { id: "AV-C008", headId: "AV-HD-002", firstName: "Nadia", lastName: "Raza", gender: "Female", nationality: "Pakistani", passport: "CD5678903", phone: "03002222223", packageType: "Hajj", paymentStatus: "Partial", amountDue: 250000, amountPaid: 100000, isVip: false },
@@ -339,7 +344,7 @@ export const mockClients: Client[] = [
 ];
 
 export const mockBookings: Booking[] = [
-  { id: "B001", headId: "AV-HD-001", agentId: "AV-A001", supplierId: "AV-S001", totalAmount: 500000, amountReceived: 250000, totalCost: 350000, commission: 25000, clientIds: ["AV-C001", "AV-C002", "AV-C003", "AV-C004", "AV-C005"], status: "Confirmed", packageType: "Umrah", travelDate: "2026-06-15", createdAt: "2026-03-01", members: 5, destination: "Makkah / Madinah", profitStatus: "earned", profitEarnedDate: "2026-03-20", discount: 5000, discountSettlement: "agent_commission" },
+  { id: "B001", headId: "AV-HD-001", agentId: "AV-A001", supplierId: "AV-S001", baseAmount: 500000, totalAmount: 495000, amountReceived: 250000, totalCost: 350000, commission: 25000, clientIds: ["AV-C001", "AV-C002", "AV-C003", "AV-C004", "AV-C005"], status: "Confirmed", packageType: "Umrah", travelDate: "2026-06-15", createdAt: "2026-03-01", members: 5, destination: "Makkah / Madinah", profitStatus: "earned", profitEarnedDate: "2026-03-20", discount: 5000, discountSettlement: "agent_commission" },
   { id: "B002", headId: "AV-HD-002", agentId: "AV-A002", supplierId: "AV-S002", totalAmount: 750000, amountReceived: 600000, totalCost: 500000, commission: 30000, clientIds: ["AV-C006", "AV-C007", "AV-C008"], status: "Confirmed", packageType: "Hajj", travelDate: "2026-07-10", createdAt: "2026-02-15", members: 3, destination: "Makkah / Madinah", profitStatus: "earned", profitEarnedDate: "2026-03-25", supplierDiscount: 10000 },
   { id: "B003", headId: "AV-HD-003", agentId: "AV-A003", supplierId: "AV-S003", totalAmount: 160000, amountReceived: 80000, totalCost: 100000, commission: 8000, clientIds: ["AV-C009", "AV-C010"], status: "Pending", packageType: "Tour", travelDate: "2026-05-20", createdAt: "2026-04-01", members: 2, destination: "Istanbul, Turkey", profitStatus: "unearned" },
 ];

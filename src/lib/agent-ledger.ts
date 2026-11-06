@@ -5,6 +5,8 @@
 import type { Agent, Booking, Client } from "./data";
 import type { LedgerEntry } from "./store";
 
+import { agentOtherSaleRows } from "./allocations";
+
 /** Entry types that belong to an agent's client-business ledger (never supplier / office costs). */
 export const AGENT_BUSINESS_TYPES: LedgerEntry["type"][] = [
   "client_receive",
@@ -44,9 +46,8 @@ export function computeAgentBusiness(
   const headIds = new Set(bookings.map((b) => b.headId));
   const clients = data.clients.filter((c) => headIds.has(c.headId));
 
-  const otherSale = data.entries
-    .filter((e) => (e.type === "purchase" && e.purchasedFor === "agent" && e.agentId === agent.id) || (e.type === "other_sale" && e.referenceId === agent.id))
-    .reduce((s, e) => s + (e.type === "purchase" ? (e.saleAmount ?? e.amount) : e.amount), 0);
+  const otherSaleList = agentOtherSaleRows(data.entries, agent.id);
+  const otherSale = otherSaleList.reduce((s, r) => s + r.sale, 0);
   const grossSales = bookings.reduce((s, b) => s + (b.totalAmount || 0), 0) + (agent.openingSales || 0) + otherSale;
   const commissionEarned = bookings.reduce((s, b) => s + (b.commission || 0), 0) + (agent.openingCommission || 0);
   const commissionPaid =

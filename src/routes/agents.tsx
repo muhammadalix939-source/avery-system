@@ -12,6 +12,7 @@ import DetailDialog from "@/components/DetailDialog";
 import { formatCurrency, type Agent } from "@/lib/data";
 import { useStore } from "@/lib/store";
 import { generateAgentReport } from "@/lib/pdf";
+import { purchaseAllocations, paymentAllocations } from "@/lib/allocations";
 import { useState } from "react";
 import StatementDialog from "@/components/StatementDialog";
 
@@ -87,8 +88,8 @@ function AgentsPage() {
       (e) =>
         (e.type === "agent_commission" && e.referenceId === selected.id) ||
         (clientTypes.has(e.type) && e.headId && agentHeads.has(e.headId)) ||
-        (e.agentId === selected.id && e.type === "supplier_payment") ||
-        (e.type === "purchase" && e.purchasedFor === "agent" && e.agentId === selected.id) ||
+        (e.type === "supplier_payment" && paymentAllocations(e).some((l) => l.target === "agent" && l.agentId === selected.id)) ||
+        (e.type === "purchase" && purchaseAllocations(e).some((l) => l.target === "agent" && l.agentId === selected.id)) ||
         (e.type === "other_sale" && e.referenceId === selected.id)
     );
   })();

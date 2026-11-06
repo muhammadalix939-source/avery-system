@@ -16,11 +16,13 @@ import { SearchableSelect } from "@/components/SearchableSelect";
 import SortBar from "@/components/SortBar";
 import { sortEntities, type SortOptionKey } from "@/lib/sort-utils";
 import { formatCurrency, getClientName } from "@/lib/data";
-import { useStore, computeGroupUsedPax, entryDirection, computeAccountBalance, type LedgerEntry, type Account } from "@/lib/store";
+import { useStore, computeGroupUsedPax, entryDirection, computeAccountBalance, type LedgerEntry, type Account, type CostAllocation, type PaymentAllocation } from "@/lib/store";
 import { toast } from "sonner";
 import { getPKTDate } from "@/lib/date-utils";
 import { generatePaymentReceipt } from "@/lib/pdf";
 import { useMemo, useState } from "react";
+import AllocationEditor from "@/components/AllocationEditor";
+import { purchaseAllocations, paymentAllocations, validateAllocations } from "@/lib/allocations";
 
 export const Route = createFileRoute("/entries")({
   component: EntriesPage,
@@ -193,7 +195,13 @@ function EntriesPage() {
   // Extra charge / refund metadata
   const [extra, setExtra] = useState({ clientId: "", chargeCategory: "", refundOf: "", refundReason: "" });
   // Purchase allocation: who this supplier purchase was bought for
-  const [pf, setPf] = useState({ for: "" as "" | "client" | "agent", agentId: "", clientName: "", saleAmount: "" });
+  const [pf, setPf] = useState<{ for: "" | "client" | "agent" | "split"; agentId: string; clientName: string; saleAmount: string }>({ for: "", agentId: "", clientName: "", saleAmount: "" });
+  const [purchaseAllocationsState, setPurchaseAllocationsState] = useState<CostAllocation[]>([]);
+  const [purchaseAllocMode, setPurchaseAllocMode] = useState<"equal" | "manual">("equal");
+  // Supplier-payment allocation
+  const [payAllocMode, setPayAllocMode] = useState<"simple" | "split">("simple");
+  const [paymentAllocationsState, setPaymentAllocationsState] = useState<PaymentAllocation[]>([]);
+  const [splitViewEntry, setSplitViewEntry] = useState<LedgerEntry | null>(null);
   // Group management (PNR / batch) — for purchase entries
   const [groupMode, setGroupMode] = useState<"none" | "existing" | "new">("none");
   const [groupId, setGroupId] = useState<string>("");
@@ -279,6 +287,21 @@ function EntriesPage() {
     if (!form.referenceId) return store.groups;
     return store.groups.filter((g) => !g.supplierId || g.supplierId === form.referenceId);
   }, [store.groups, form.referenceId]);
+
+  const validationCtx = useMemo(() => {
+    const headsSet = new Set(store.clients.map((c) => c.headId));
+    const agentsSet = new Set(store.agents.map((a) => a.id));
+    const membersMap = new Map<string, Set<string>>();
+    store.clients.forEach((c) => {
+      if (!membersMap.has(c.headId)) membersMap.set(c.headId, new Set());
+      membersMap.get(c.headId)!.add(c.id);
+    });
+    return {
+      heads: headsSet,
+      agents: agentsSet,
+      membersOf: (headId: string) => membersMap.get(headId) || new Set<string>(),
+    };
+  }, [store.clients, store.agents]);
 
   // Auto-compute purchase amount when details change (Flight / Hotel / Package / Visa / etc.)
   function computeAutoAmount(cat: string, d: typeof emptyDetails): number | null {
@@ -370,17 +393,108 @@ function EntriesPage() {
         totalPax: newGroup.totalPax ? Number(newGroup.totalPax) : undefined,
       });
     }
+
+    let finalAllocations: CostAllocation[] | undefined = undefined;
+    let finalAllocMode: "equal" | "manual" | undefined = undefined;
+
+    if (form.type === "purchase") {
+      const amt = Number(form.amount) || 0;
+      if (pf.for === "split") {
+        const valRes = validateAllocations(purchaseAllocationsState, amt, validationCtx);
+        if (!valRes.ok) {
+          toast.error(valRes.errors[0] || "Invalid allocations");
+          return;
+        }
+        finalAllocations = purchaseAllocationsState;
+        finalAllocMode = purchaseAllocMode;
+      } else if (pf.for === "client") {
+        if (!form.headId) {
+          toast.error("Please select a client head");
+          return;
+        }
+        finalAllocations = [
+          {
+            id: "A1",
+            target: "head",
+            headId: form.headId,
+            ...(extra.clientId ? { clientId: extra.clientId } : {}),
+            amount: amt,
+          },
+        ];
+        finalAllocMode = "manual";
+      } else if (pf.for === "agent") {
+        if (!pf.agentId) {
+          toast.error("Please select an agent");
+          return;
+        }
+        const saleAmt = pf.saleAmount ? Number(pf.saleAmount) : amt;
+        finalAllocations = [
+          {
+            id: "A1",
+            target: "agent",
+            agentId: pf.agentId,
+            ...(pf.clientName ? { forClientName: pf.clientName } : {}),
+            amount: amt,
+            saleAmount: saleAmt,
+          },
+        ];
+        finalAllocMode = "manual";
+      } else {
+        finalAllocations = [
+          {
+            id: "A1",
+            target: "office",
+            amount: amt,
+          },
+        ];
+        finalAllocMode = "manual";
+      }
+    }
+
+    if (form.type === "supplier_payment" && payAllocMode === "split") {
+      const amt = Number(form.amount) || 0;
+      const sum = paymentAllocationsState.reduce((s, p) => s + (p.amount || 0), 0);
+      if (sum !== amt) {
+        toast.error(`Payment allocations sum (${formatCurrency(sum)}) must equal total payment (${formatCurrency(amt)})`);
+        return;
+      }
+    }
+
+    const nonOffice = (finalAllocations || []).filter((a) => a.target !== "office");
+    let singlePurchasedFor: "client" | "agent" | undefined = undefined;
+    let singleHeadId: string | undefined = undefined;
+    let singleAgentId: string | undefined = undefined;
+    let singleForClientName: string | undefined = undefined;
+    let singleSaleAmount: number | undefined = undefined;
+
+    if (form.type === "purchase" && nonOffice.length === 1) {
+      const one = nonOffice[0];
+      if (one.target === "head") {
+        singlePurchasedFor = "client";
+        singleHeadId = one.headId;
+      } else if (one.target === "agent") {
+        singlePurchasedFor = "agent";
+        singleAgentId = one.agentId;
+        singleForClientName = one.forClientName;
+        singleSaleAmount = one.saleAmount;
+      }
+    }
+
     store.addEntry({
-      date: form.date || getPKTDate(), type: form.type, headId: form.headId,
+      date: form.date || getPKTDate(), type: form.type,
+      headId: form.type === "purchase" ? (singleHeadId || "") : form.headId,
       referenceId: form.referenceId, referenceName: form.referenceName,
       amount: Number(form.amount) || 0, note: form.note,
       serviceCategory: serviceCategory || undefined,
       purchaseDetails: form.type === "purchase" ? buildDetailsPayload(serviceCategory, details) : undefined,
       groupId: groupTaggable ? finalGroupId : undefined,
-      purchasedFor: form.type === "purchase" ? (pf.for || undefined) : undefined,
-      forClientName: form.type === "purchase" && pf.for === "agent" ? (pf.clientName || undefined) : undefined,
-      saleAmount: form.type === "purchase" && pf.for === "agent" && pf.saleAmount ? Number(pf.saleAmount) : undefined,
-      agentId: form.type === "purchase" && pf.for === "agent" ? (pf.agentId || undefined) : (refs.agentId || undefined),
+      purchasedFor: form.type === "purchase" ? singlePurchasedFor : undefined,
+      forClientName: form.type === "purchase" ? singleForClientName : undefined,
+      saleAmount: form.type === "purchase" ? singleSaleAmount : undefined,
+      agentId: form.type === "purchase" ? singleAgentId : (refs.agentId || undefined),
+      allocations: form.type === "purchase" ? finalAllocations : undefined,
+      allocationMode: form.type === "purchase" ? finalAllocMode : undefined,
+      paymentAllocations: form.type === "supplier_payment" && payAllocMode === "split" ? paymentAllocationsState : undefined,
       paidBy: refs.paidBy || undefined,
       clientId: extra.clientId || undefined,
       drawerId: form.type === "drawing" ? (form.referenceId || undefined) : undefined,
@@ -402,6 +516,10 @@ function EntriesPage() {
     });
     setForm({ date: "", type: "client_receive", headId: "", referenceId: "", referenceName: "", amount: "", note: "" });
     setPf({ for: "", agentId: "", clientName: "", saleAmount: "" });
+    setPurchaseAllocationsState([]);
+    setPurchaseAllocMode("equal");
+    setPayAllocMode("simple");
+    setPaymentAllocationsState([]);
     setServiceCategory("");
     setDetails(emptyDetails);
     setExtra({ clientId: "", chargeCategory: "", refundOf: "", refundReason: "" });
@@ -428,17 +546,108 @@ function EntriesPage() {
         totalPax: newGroup.totalPax ? Number(newGroup.totalPax) : undefined,
       });
     }
+
+    let finalAllocations: CostAllocation[] | undefined = undefined;
+    let finalAllocMode: "equal" | "manual" | undefined = undefined;
+
+    if (form.type === "purchase") {
+      const amt = Number(form.amount) || 0;
+      if (pf.for === "split") {
+        const valRes = validateAllocations(purchaseAllocationsState, amt, validationCtx);
+        if (!valRes.ok) {
+          toast.error(valRes.errors[0] || "Invalid allocations");
+          return;
+        }
+        finalAllocations = purchaseAllocationsState;
+        finalAllocMode = purchaseAllocMode;
+      } else if (pf.for === "client") {
+        if (!form.headId) {
+          toast.error("Please select a client head");
+          return;
+        }
+        finalAllocations = [
+          {
+            id: "A1",
+            target: "head",
+            headId: form.headId,
+            ...(extra.clientId ? { clientId: extra.clientId } : {}),
+            amount: amt,
+          },
+        ];
+        finalAllocMode = "manual";
+      } else if (pf.for === "agent") {
+        if (!pf.agentId) {
+          toast.error("Please select an agent");
+          return;
+        }
+        const saleAmt = pf.saleAmount ? Number(pf.saleAmount) : amt;
+        finalAllocations = [
+          {
+            id: "A1",
+            target: "agent",
+            agentId: pf.agentId,
+            ...(pf.clientName ? { forClientName: pf.clientName } : {}),
+            amount: amt,
+            saleAmount: saleAmt,
+          },
+        ];
+        finalAllocMode = "manual";
+      } else {
+        finalAllocations = [
+          {
+            id: "A1",
+            target: "office",
+            amount: amt,
+          },
+        ];
+        finalAllocMode = "manual";
+      }
+    }
+
+    if (form.type === "supplier_payment" && payAllocMode === "split") {
+      const amt = Number(form.amount) || 0;
+      const sum = paymentAllocationsState.reduce((s, p) => s + (p.amount || 0), 0);
+      if (sum !== amt) {
+        toast.error(`Payment allocations sum (${formatCurrency(sum)}) must equal total payment (${formatCurrency(amt)})`);
+        return;
+      }
+    }
+
+    const nonOffice = (finalAllocations || []).filter((a) => a.target !== "office");
+    let singlePurchasedFor: "client" | "agent" | undefined = undefined;
+    let singleHeadId: string | undefined = undefined;
+    let singleAgentId: string | undefined = undefined;
+    let singleForClientName: string | undefined = undefined;
+    let singleSaleAmount: number | undefined = undefined;
+
+    if (form.type === "purchase" && nonOffice.length === 1) {
+      const one = nonOffice[0];
+      if (one.target === "head") {
+        singlePurchasedFor = "client";
+        singleHeadId = one.headId;
+      } else if (one.target === "agent") {
+        singlePurchasedFor = "agent";
+        singleAgentId = one.agentId;
+        singleForClientName = one.forClientName;
+        singleSaleAmount = one.saleAmount;
+      }
+    }
+
     store.updateEntry(selected.id, {
-      date: form.date, type: form.type, headId: form.headId,
+      date: form.date, type: form.type,
+      headId: form.type === "purchase" ? (singleHeadId || "") : form.headId,
       referenceId: form.referenceId, referenceName: form.referenceName,
       amount: Number(form.amount) || 0, note: form.note,
       serviceCategory: serviceCategory || undefined,
       purchaseDetails: form.type === "purchase" ? buildDetailsPayload(serviceCategory, details) : undefined,
       groupId: groupTaggable ? finalGroupId : undefined,
-      purchasedFor: form.type === "purchase" ? (pf.for || undefined) : undefined,
-      forClientName: form.type === "purchase" && pf.for === "agent" ? (pf.clientName || undefined) : undefined,
-      saleAmount: form.type === "purchase" && pf.for === "agent" && pf.saleAmount ? Number(pf.saleAmount) : undefined,
-      agentId: form.type === "purchase" && pf.for === "agent" ? (pf.agentId || undefined) : (refs.agentId || undefined),
+      purchasedFor: form.type === "purchase" ? singlePurchasedFor : undefined,
+      forClientName: form.type === "purchase" ? singleForClientName : undefined,
+      saleAmount: form.type === "purchase" ? singleSaleAmount : undefined,
+      agentId: form.type === "purchase" ? singleAgentId : (refs.agentId || undefined),
+      allocations: form.type === "purchase" ? finalAllocations : undefined,
+      allocationMode: form.type === "purchase" ? finalAllocMode : undefined,
+      paymentAllocations: form.type === "supplier_payment" && payAllocMode === "split" ? paymentAllocationsState : undefined,
       paidBy: refs.paidBy || undefined,
       clientId: extra.clientId || undefined,
       drawerId: form.type === "drawing" ? (form.referenceId || undefined) : undefined,
@@ -458,6 +667,10 @@ function EntriesPage() {
       toAccountId: form.type === "jv" && jv.jvType === "account_transfer" ? (jv.toAccountId || undefined) : undefined,
       targetBalance: form.type === "jv" && jv.targetBalance ? Number(jv.targetBalance) : undefined,
     });
+    setPurchaseAllocationsState([]);
+    setPurchaseAllocMode("equal");
+    setPayAllocMode("simple");
+    setPaymentAllocationsState([]);
     setEditOpen(false);
   }
 
@@ -474,9 +687,48 @@ function EntriesPage() {
       targetBalance: e.targetBalance != null ? String(e.targetBalance) : "",
       direction: e.direction || (e.type === "jv" ? "out" : entryDirection(e.type)),
     });
-    setPf({ for: e.purchasedFor || "", agentId: e.purchasedFor === "agent" ? e.agentId || "" : "", clientName: e.forClientName || "", saleAmount: e.saleAmount ? String(e.saleAmount) : "" });
+
+    if (e.type === "purchase") {
+      const allocs = purchaseAllocations(e);
+      setPurchaseAllocationsState(allocs);
+      setPurchaseAllocMode(e.allocationMode || "equal");
+      if (allocs.length > 1) {
+        setPf({ for: "split", agentId: "", clientName: "", saleAmount: "" });
+      } else if (allocs.length === 1) {
+        const a = allocs[0];
+        if (a.target === "office") {
+          setPf({ for: "", agentId: "", clientName: "", saleAmount: "" });
+        } else if (a.target === "head") {
+          setPf({ for: "client", agentId: "", clientName: "", saleAmount: "" });
+          setExtra((x) => ({ ...x, clientId: a.clientId || "" }));
+        } else if (a.target === "agent") {
+          setPf({ for: "agent", agentId: a.agentId || "", clientName: a.forClientName || "", saleAmount: a.saleAmount != null ? String(a.saleAmount) : "" });
+        }
+      } else {
+        setPf({ for: "", agentId: "", clientName: "", saleAmount: "" });
+      }
+    } else {
+      setPf({ for: "", agentId: "", clientName: "", saleAmount: "" });
+      setPurchaseAllocationsState([]);
+      setPurchaseAllocMode("equal");
+    }
+
+    if (e.type === "supplier_payment") {
+      const pAllocs = paymentAllocations(e);
+      setPaymentAllocationsState(pAllocs);
+      if (e.paymentAllocations && e.paymentAllocations.length > 1) {
+        setPayAllocMode("split");
+      } else {
+        setPayAllocMode("simple");
+      }
+    } else {
+      setPayAllocMode("simple");
+      setPaymentAllocationsState([]);
+    }
+
     if (e.groupId) { setGroupMode("existing"); setGroupId(e.groupId); } else { setGroupMode("none"); setGroupId(""); }
     setNewGroup({ name: "", pnr: "", flightNumber: "", date: "", description: "", totalPax: "" });
+
     const d = e.purchaseDetails || {};
     setDetails({
       ticketNumber: d.ticketNumber || "",
@@ -816,7 +1068,7 @@ function EntriesPage() {
             options={store.bookings.map((b) => ({
               value: b.headId,
               label: `${b.headId} — ${b.packageType}`,
-              hint: `${b.travelDate} · ${formatCurrency(b.totalAmount)}`,
+              hint: `${b.travelDate} · Net Due: ${formatCurrency(b.totalAmount)} (Bal: ${formatCurrency(Math.max(0, b.totalAmount - b.amountReceived))})`,
             }))}
             className="mt-1"
           />
@@ -916,7 +1168,7 @@ function EntriesPage() {
               options={store.clients.filter((c) => c.headId === form.headId).map((c) => ({
                 value: c.id,
                 label: `${c.id} — ${getClientName(c)}`,
-                hint: `${c.ageCategory || "Adult"} · Due ${formatCurrency(c.amountDue)}`,
+                hint: `${c.ageCategory || "Adult"} · Due ${formatCurrency(c.amountDue)} (Bal: ${formatCurrency(Math.max(0, c.amountDue - c.amountPaid))})`,
               }))}
               className="mt-1"
             />
@@ -1012,72 +1264,145 @@ function EntriesPage() {
           </div>
           {form.type === "supplier_payment" && (
             <div className="space-y-3 rounded-lg border border-primary/40 bg-primary/5 p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">Payment Reference (who / where it belongs)</p>
-              <div><Label className="text-[10px]">Group / PNR (optional)</Label>
-                <SearchableSelect
-                  value={groupMode === "existing" ? groupId : ""}
-                  onChange={(v) => { setGroupMode(v ? "existing" : "none"); setGroupId(v); }}
-                  placeholder={supplierGroups.length ? "Pay against a group..." : "No groups yet"}
-                  options={supplierGroups.map((g) => ({
-                    value: g.id,
-                    label: `${g.id} — ${g.name}`,
-                    hint: [g.category, g.pnr && `PNR ${g.pnr}`, g.date].filter(Boolean).join(" · "),
-                  }))}
-                  className="mt-1"
-                />
-                {(() => {
-                  const sel = groupMode === "existing" ? store.groups.find((g) => g.id === groupId) : null;
-                  if (!sel) return null;
-                  const bill = store.entries.filter((e) => e.type === "purchase" && e.groupId === sel.id).reduce((s, e) => s + e.amount, 0)
-                    - store.entries.filter((e) => e.type === "supplier_refund" && e.groupId === sel.id).reduce((s, e) => s + e.amount, 0);
-                  const paid = store.entries.filter((e) => e.type === "supplier_payment" && e.groupId === sel.id && e.id !== selected?.id).reduce((s, e) => s + e.amount, 0);
-                  const thisPay = Number(form.amount) || 0;
-                  const remaining = bill - paid - thisPay;
-                  return (
-                    <div className="mt-2 flex flex-wrap items-center gap-3 rounded-md bg-accent/20 px-3 py-2 text-[11px]">
-                      <span className="text-muted-foreground">Group Bill: <b className="text-foreground">{formatCurrency(bill)}</b></span>
-                      <span className="text-muted-foreground">Paid: <b className="text-success">{formatCurrency(paid)}</b></span>
-                      <span className="text-muted-foreground">This payment: <b className="text-foreground">{formatCurrency(thisPay)}</b></span>
-                      <span className="ml-auto text-muted-foreground">Remaining: <b className={remaining > 0 ? "text-destructive" : "text-success"}>{formatCurrency(remaining)}</b></span>
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">Payment Allocation (who / where it belongs)</p>
+                <div className="flex gap-1 rounded-md border border-border bg-accent/10 p-0.5">
+                  {([["simple", "Simple Tagging"], ["split", "Split Payment"]] as const).map(([m, l]) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => {
+                        setPayAllocMode(m);
+                        if (m === "split" && paymentAllocationsState.length === 0) {
+                          const amt = Number(form.amount) || 0;
+                          if (groupId) {
+                            setPaymentAllocationsState([{ id: "P1", target: "group", groupId, amount: amt }]);
+                          } else if (form.headId) {
+                            setPaymentAllocationsState([{ id: "P1", target: "head", headId: form.headId, amount: amt }]);
+                          } else if (refs.agentId) {
+                            setPaymentAllocationsState([{ id: "P1", target: "agent", agentId: refs.agentId, amount: amt }]);
+                          } else {
+                            setPaymentAllocationsState([{ id: "P1", target: "unallocated", amount: amt }]);
+                          }
+                        }
+                      }}
+                      className={`rounded px-2 py-1 text-[10px] font-semibold transition ${
+                        payAllocMode === m ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {payAllocMode === "simple" ? (
+                <>
+                  <div><Label className="text-[10px]">Group / PNR (optional)</Label>
+                    <SearchableSelect
+                      value={groupMode === "existing" ? groupId : ""}
+                      onChange={(v) => { setGroupMode(v ? "existing" : "none"); setGroupId(v); }}
+                      placeholder={supplierGroups.length ? "Pay against a group..." : "No groups yet"}
+                      options={supplierGroups.map((g) => ({
+                        value: g.id,
+                        label: `${g.id} — ${g.name}`,
+                        hint: [g.category, g.pnr && `PNR ${g.pnr}`, g.date].filter(Boolean).join(" · "),
+                      }))}
+                      className="mt-1"
+                    />
+                    {(() => {
+                      const sel = groupMode === "existing" ? store.groups.find((g) => g.id === groupId) : null;
+                      if (!sel) return null;
+                      const bill = store.entries.filter((e) => e.type === "purchase" && e.groupId === sel.id).reduce((s, e) => s + e.amount, 0)
+                        - store.entries.filter((e) => e.type === "supplier_refund" && e.groupId === sel.id).reduce((s, e) => s + e.amount, 0);
+                      const paid = store.entries.filter((e) => e.type === "supplier_payment" && e.groupId === sel.id && e.id !== selected?.id).reduce((s, e) => s + e.amount, 0);
+                      const thisPay = Number(form.amount) || 0;
+                      const remaining = bill - paid - thisPay;
+                      return (
+                        <div className="mt-2 flex flex-wrap items-center gap-3 rounded-md bg-accent/20 px-3 py-2 text-[11px]">
+                          <span className="text-muted-foreground">Group Bill: <b className="text-foreground">{formatCurrency(bill)}</b></span>
+                          <span className="text-muted-foreground">Paid: <b className="text-success">{formatCurrency(paid)}</b></span>
+                          <span className="text-muted-foreground">This payment: <b className="text-foreground">{formatCurrency(thisPay)}</b></span>
+                          <span className="ml-auto text-muted-foreground">Remaining: <b className={remaining > 0 ? "text-destructive" : "text-success"}>{formatCurrency(remaining)}</b></span>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><Label className="text-[10px]">Agent Reference (optional)</Label>
+                      <SearchableSelect
+                        value={refs.agentId}
+                        onChange={(v) => setRefs({ ...refs, agentId: v })}
+                        placeholder="Which agent's business..."
+                        options={store.agents.map((a) => ({ value: a.id, label: `${a.id} — ${a.name}`, hint: a.phone }))}
+                        className="mt-1"
+                      />
                     </div>
-                  );
-                })()}
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div><Label className="text-[10px]">Agent Reference (optional)</Label>
-                  <SearchableSelect
-                    value={refs.agentId}
-                    onChange={(v) => setRefs({ ...refs, agentId: v })}
-                    placeholder="Which agent's business..."
-                    options={store.agents.map((a) => ({ value: a.id, label: `${a.id} — ${a.name}`, hint: a.phone }))}
-                    className="mt-1"
+                    <div><Label className="text-[10px]">Head ID (optional)</Label>
+                      <SearchableSelect
+                        value={form.headId}
+                        onChange={(v) => setForm({ ...form, headId: v })}
+                        placeholder="Tag to a booking..."
+                        options={store.bookings.map((b) => ({ value: b.headId, label: `${b.headId} — ${b.packageType}`, hint: b.travelDate }))}
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                  <div><Label className="text-[10px]">Paid By / Handed Over By</Label>
+                    <Input value={refs.paidBy} onChange={(e) => setRefs({ ...refs, paidBy: e.target.value })} placeholder="Office cash / Bank transfer / Agent Ahmed" className="bg-accent/20 border-border mt-1 h-8 text-xs" />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Group-tagged payments show up in that group's settlement progress, and the agent reference appears in the agent's ledger.</p>
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <AllocationEditor
+                    mode="payment"
+                    total={Number(form.amount) || 0}
+                    value={paymentAllocationsState}
+                    onChange={setPaymentAllocationsState}
+                    heads={Array.from(new Map(store.clients.map((c) => [c.headId, c])).values()).map((c) => ({ id: c.headId, name: `${c.headId} — ${getClientName(c)}` }))}
+                    agents={store.agents.map((a) => ({ id: a.id, name: `${a.id} — ${a.name}` }))}
+                    groups={supplierGroups.map((g) => ({ id: g.id, name: `${g.id} — ${g.name}`, pnr: g.pnr, category: g.category }))}
                   />
+                  <div><Label className="text-[10px]">Paid By / Handed Over By</Label>
+                    <Input value={refs.paidBy} onChange={(e) => setRefs({ ...refs, paidBy: e.target.value })} placeholder="Office cash / Bank transfer / Agent Ahmed" className="bg-accent/20 border-border mt-1 h-8 text-xs" />
+                  </div>
                 </div>
-                <div><Label className="text-[10px]">Head ID (optional)</Label>
-                  <SearchableSelect
-                    value={form.headId}
-                    onChange={(v) => setForm({ ...form, headId: v })}
-                    placeholder="Tag to a booking..."
-                    options={store.bookings.map((b) => ({ value: b.headId, label: `${b.headId} — ${b.packageType}`, hint: b.travelDate }))}
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-              <div><Label className="text-[10px]">Paid By / Handed Over By</Label>
-                <Input value={refs.paidBy} onChange={(e) => setRefs({ ...refs, paidBy: e.target.value })} placeholder="Office cash / Bank transfer / Agent Ahmed" className="bg-accent/20 border-border mt-1 h-8 text-xs" />
-              </div>
-              <p className="text-[10px] text-muted-foreground">Group-tagged payments show up in that group's settlement progress, and the agent reference appears in the agent's ledger.</p>
+              )}
             </div>
           )}
           {form.type === "purchase" && (
             <div className="space-y-3 rounded-lg border border-primary/40 bg-primary/5 p-3">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">Purchase For (whose account)</p>
-              <div className="grid grid-cols-3 gap-1 rounded-md border border-border bg-accent/10 p-1">
-                {([["", "Office / Stock"], ["client", "Client"], ["agent", "Agent"]] as const).map(([v, l]) => (
-                  <button key={v} type="button" onClick={() => { setPf({ ...pf, for: v }); if (v !== "client") setForm((f) => ({ ...f, headId: v === "agent" ? "" : f.headId })); }}
-                    className={`rounded px-2 py-1.5 text-[11px] font-semibold ${pf.for === v ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>{l}</button>
+              <div className="grid grid-cols-4 gap-1 rounded-md border border-border bg-accent/10 p-1">
+                {([["", "Office / Stock"], ["client", "Client"], ["agent", "Agent"], ["split", "Split Allocation"]] as const).map(([v, l]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => {
+                      setPf({ ...pf, for: v });
+                      if (v !== "client") setForm((f) => ({ ...f, headId: v === "agent" ? "" : f.headId }));
+                      if (v === "split" && purchaseAllocationsState.length === 0) {
+                        const amt = Number(form.amount) || 0;
+                        if (form.headId) {
+                          setPurchaseAllocationsState([{ id: "A1", target: "head", headId: form.headId, amount: amt }]);
+                        } else {
+                          const firstHead = store.clients[0]?.headId || "";
+                          setPurchaseAllocationsState([{ id: "A1", target: "head", headId: firstHead, amount: amt }]);
+                        }
+                      }
+                    }}
+                    className={`rounded px-2 py-1.5 text-[11px] font-semibold transition ${
+                      pf.for === v ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {l}
+                  </button>
                 ))}
               </div>
+              {pf.for === "" && (
+                <p className="text-[10px] text-muted-foreground">General agency inventory / office cost. Not attributed to any specific client booking or agent.</p>
+              )}
               {pf.for === "client" && (
                 <>
                   <div><Label className="text-[10px]">Client (Head ID / Name) *</Label>
@@ -1113,6 +1438,21 @@ function EntriesPage() {
                     </div>); })()}
                   <p className="text-[10px] text-muted-foreground">Added to the agent's <b>Other Sale</b> and his Business Ledger receivable.</p>
                 </>
+              )}
+              {pf.for === "split" && (
+                <div className="mt-3">
+                  <AllocationEditor
+                    mode="purchase"
+                    total={Number(form.amount) || 0}
+                    value={purchaseAllocationsState}
+                    onChange={setPurchaseAllocationsState}
+                    allocationMode={purchaseAllocMode}
+                    onAllocationModeChange={setPurchaseAllocMode}
+                    heads={Array.from(new Map(store.clients.map((c) => [c.headId, c])).values()).map((c) => ({ id: c.headId, name: `${c.headId} — ${getClientName(c)}` }))}
+                    agents={store.agents.map((a) => ({ id: a.id, name: `${a.id} — ${a.name}` }))}
+                    clients={store.clients.map((c) => ({ id: c.id, headId: c.headId, name: getClientName(c) }))}
+                  />
+                </div>
               )}
             </div>
           )}
@@ -2145,7 +2485,35 @@ function EntriesPage() {
                         {typeLabels[e.type]}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs">{e.headId || "—"}</td>
+                    <td className="px-4 py-3">
+                      {e.type === "purchase" && e.allocations && e.allocations.length > 1 ? (
+                        <div className="flex flex-col gap-1 items-start">
+                          <button
+                            type="button"
+                            onClick={() => setSplitViewEntry(e)}
+                            className="inline-flex items-center gap-1 rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[10px] font-bold text-amber-400 hover:bg-amber-500/25 transition cursor-pointer"
+                            title="Click to view full allocation breakdown"
+                          >
+                            Split ×{e.allocations.length}
+                          </button>
+                          {e.headId && <span className="text-[10px] text-muted-foreground">{e.headId}</span>}
+                        </div>
+                      ) : e.type === "supplier_payment" && e.paymentAllocations && e.paymentAllocations.length > 1 ? (
+                        <div className="flex flex-col gap-1 items-start">
+                          <button
+                            type="button"
+                            onClick={() => setSplitViewEntry(e)}
+                            className="inline-flex items-center gap-1 rounded bg-sky-500/15 border border-sky-500/30 px-1.5 py-0.5 text-[10px] font-bold text-sky-400 hover:bg-sky-500/25 transition cursor-pointer"
+                            title="Click to view full payment split breakdown"
+                          >
+                            Split ×{e.paymentAllocations.length}
+                          </button>
+                          {e.headId && <span className="text-[10px] text-muted-foreground">{e.headId}</span>}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">{e.headId || "—"}</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <p className="text-sm font-medium">{e.referenceName || (isJv ? "Journal Voucher" : "—")}</p>
                       <p className="text-xs text-muted-foreground">{e.referenceId}</p>
@@ -2154,6 +2522,14 @@ function EntriesPage() {
                       {isIn ? "+" : isCharge ? "" : "-"}{formatCurrency(e.amount)}
                     </td>
                     <td className="px-4 py-3 text-xs max-w-[280px]">
+                      {/* System-managed linked client charge indicator */}
+                      {e.allocationOf && (
+                        <div className="mb-1 rounded bg-primary/10 border border-primary/30 px-2 py-0.5 text-[10px] text-primary flex items-center gap-1 w-fit">
+                          <ShieldCheck className="h-3 w-3 shrink-0" />
+                          <span>System-linked charge to <b>{e.allocationOf}</b></span>
+                        </div>
+                      )}
+
                       {/* Deep Service Chips for Purchases */}
                       {e.type === "purchase" && pd && (
                         <div className="mb-1 space-y-0.5">
@@ -2246,11 +2622,18 @@ function EntriesPage() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex gap-1">
-                        <button onClick={() => generatePaymentReceipt(e)} className="rounded p-1 hover:bg-accent" title="Download Receipt"><Download className="h-3.5 w-3.5 text-success" /></button>
-                        <button onClick={() => openEdit(e)} className="rounded p-1 hover:bg-accent"><Pencil className="h-3.5 w-3.5 text-warning" /></button>
-                        <button onClick={() => store.deleteEntry(e.id)} className="rounded p-1 hover:bg-accent"><Trash2 className="h-3.5 w-3.5 text-destructive" /></button>
-                      </div>
+                      {e.allocationOf ? (
+                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground italic" title={`System-managed charge linked to ${e.allocationOf}. Edit or delete parent purchase.`}>
+                          <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                          <span>Auto</span>
+                        </div>
+                      ) : (
+                        <div className="flex gap-1">
+                          <button onClick={() => generatePaymentReceipt(e)} className="rounded p-1 hover:bg-accent" title="Download Receipt"><Download className="h-3.5 w-3.5 text-success" /></button>
+                          <button onClick={() => openEdit(e)} className="rounded p-1 hover:bg-accent"><Pencil className="h-3.5 w-3.5 text-warning" /></button>
+                          <button onClick={() => store.deleteEntry(e.id)} className="rounded p-1 hover:bg-accent"><Trash2 className="h-3.5 w-3.5 text-destructive" /></button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
@@ -2265,6 +2648,163 @@ function EntriesPage() {
           <DialogHeader><DialogTitle>Edit Entry — {selected?.id}</DialogTitle></DialogHeader>
           {formFields}
           <Button onClick={handleEdit} className="w-full">Save Changes</Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* Split Breakdown View Modal */}
+      <Dialog open={splitViewEntry !== null} onOpenChange={(open) => { if (!open) setSplitViewEntry(null); }}>
+        <DialogContent className="bg-card border-border max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span>Allocation Breakdown — {splitViewEntry?.id}</span>
+              <span className={`text-xs px-2 py-0.5 rounded font-semibold uppercase ${splitViewEntry ? typeColors[splitViewEntry.type] : ""}`}>
+                {splitViewEntry ? typeLabels[splitViewEntry.type] : ""}
+              </span>
+            </DialogTitle>
+          </DialogHeader>
+
+          {splitViewEntry && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between rounded-lg bg-accent/20 p-3 text-xs">
+                <div>
+                  <span className="text-muted-foreground">Reference: </span>
+                  <b>{splitViewEntry.referenceName || splitViewEntry.referenceId || "—"}</b>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Date: </span>
+                  <b>{splitViewEntry.date}</b>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Total: </span>
+                  <b className="font-mono text-primary text-sm">{formatCurrency(splitViewEntry.amount)}</b>
+                </div>
+              </div>
+
+              {splitViewEntry.type === "purchase" && (
+                <div className="overflow-x-auto rounded-lg border border-border">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border bg-accent/30 text-left uppercase text-muted-foreground">
+                        <th className="p-2.5">Line</th>
+                        <th className="p-2.5">Target</th>
+                        <th className="p-2.5">Beneficiary / Passenger</th>
+                        <th className="p-2.5 text-right">Cost Share</th>
+                        <th className="p-2.5 text-right">Agent Sale</th>
+                        <th className="p-2.5 text-center">Billed?</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/40">
+                      {purchaseAllocations(splitViewEntry).map((line, idx) => {
+                        const isAgent = line.target === "agent";
+                        const isHead = line.target === "head";
+                        const headName = isHead ? (store.clients.find((c) => c.headId === line.headId) ? getClientName(store.clients.find((c) => c.headId === line.headId)!) : line.headId) : "";
+                        const memberName = line.clientId ? store.clients.find((c) => c.id === line.clientId)?.name : "";
+                        const agentName = isAgent ? (store.agents.find((a) => a.id === line.agentId)?.name || line.agentId) : "";
+
+                        return (
+                          <tr key={line.id || idx} className="hover:bg-accent/10">
+                            <td className="p-2.5 font-mono text-muted-foreground">{line.id || `A${idx + 1}`}</td>
+                            <td className="p-2.5">
+                              <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
+                                line.target === "head" ? "bg-amber-500/20 text-amber-400" : line.target === "agent" ? "bg-sky-500/20 text-sky-400" : "bg-muted text-muted-foreground"
+                              }`}>
+                                {line.target === "head" ? "Head" : line.target === "agent" ? "Agent" : "Office"}
+                              </span>
+                            </td>
+                            <td className="p-2.5">
+                              {isHead && (
+                                <div>
+                                  <div className="font-medium text-foreground">{line.headId} — {headName}</div>
+                                  {memberName && <div className="text-[10px] text-muted-foreground">Member: {memberName}</div>}
+                                </div>
+                              )}
+                              {isAgent && (
+                                <div>
+                                  <div className="font-medium text-foreground">{agentName}</div>
+                                  {line.forClientName && <div className="text-[10px] text-muted-foreground">Pax: {line.forClientName}</div>}
+                                </div>
+                              )}
+                              {line.target === "office" && (
+                                <span className="text-muted-foreground italic">General Agency / Stock</span>
+                              )}
+                            </td>
+                            <td className="p-2.5 text-right font-mono font-medium text-destructive">
+                              {formatCurrency(line.amount)}
+                            </td>
+                            <td className="p-2.5 text-right font-mono">
+                              {isAgent ? (
+                                <div>
+                                  <div className="text-primary font-medium">{formatCurrency(line.saleAmount ?? line.amount)}</div>
+                                  <div className={`text-[10px] ${(line.saleAmount ?? line.amount) - line.amount >= 0 ? "text-success" : "text-destructive"}`}>
+                                    {formatCurrency((line.saleAmount ?? line.amount) - line.amount)} profit
+                                  </div>
+                                </div>
+                              ) : "—"}
+                            </td>
+                            <td className="p-2.5 text-center">
+                              {line.billClient ? (
+                                <span className="rounded bg-primary/20 text-primary px-1.5 py-0.5 text-[10px] font-semibold">Yes</span>
+                              ) : (
+                                <span className="text-muted-foreground text-[10px]">No</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {splitViewEntry.type === "supplier_payment" && (
+                <div className="overflow-x-auto rounded-lg border border-border">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border bg-accent/30 text-left uppercase text-muted-foreground">
+                        <th className="p-2.5">Line</th>
+                        <th className="p-2.5">Target</th>
+                        <th className="p-2.5">Details</th>
+                        <th className="p-2.5 text-right">Payment Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/40">
+                      {paymentAllocations(splitViewEntry).map((line, idx) => {
+                        const grp = line.groupId ? store.groups.find((g) => g.id === line.groupId) : null;
+                        const head = line.headId ? store.clients.find((c) => c.headId === line.headId) : null;
+                        const agent = line.agentId ? store.agents.find((a) => a.id === line.agentId) : null;
+
+                        return (
+                          <tr key={line.id || idx} className="hover:bg-accent/10">
+                            <td className="p-2.5 font-mono text-muted-foreground">{line.id || `P${idx + 1}`}</td>
+                            <td className="p-2.5">
+                              <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
+                                line.target === "group" ? "bg-purple-500/20 text-purple-400" : line.target === "head" ? "bg-amber-500/20 text-amber-400" : line.target === "agent" ? "bg-sky-500/20 text-sky-400" : "bg-muted text-muted-foreground"
+                              }`}>
+                                {line.target}
+                              </span>
+                            </td>
+                            <td className="p-2.5">
+                              {line.target === "group" && (grp ? `${grp.name} (${grp.id})` : line.groupId)}
+                              {line.target === "head" && (head ? `${line.headId} — ${getClientName(head)}` : line.headId)}
+                              {line.target === "agent" && (agent ? `${agent.name} (${agent.id})` : line.agentId)}
+                              {line.target === "unallocated" && <span className="text-muted-foreground italic">General / Unallocated Balance</span>}
+                            </td>
+                            <td className="p-2.5 text-right font-mono font-medium text-success">
+                              {formatCurrency(line.amount)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <Button size="sm" variant="outline" onClick={() => setSplitViewEntry(null)}>Close</Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

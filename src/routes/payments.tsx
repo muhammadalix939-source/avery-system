@@ -42,9 +42,19 @@ function PaymentsPage() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-xl p-5">
         <h3 className="mb-4 text-sm font-semibold">Payment Simulator — {selectedHead}</h3>
         <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-4">
-          <div><p className="text-[10px] uppercase text-muted-foreground">Total Package</p><p className="text-lg font-bold">{formatCurrency(booking.totalAmount)}</p></div>
+          <div>
+            <p className="text-[10px] uppercase text-muted-foreground">
+              {booking.discount ? "Net Customer Due" : "Total Package"}
+            </p>
+            <p className="text-lg font-bold">{formatCurrency(booking.totalAmount)}</p>
+            {booking.discount ? (
+              <p className="text-[10px] text-amber-400">
+                Gross: {formatCurrency(booking.baseAmount ?? (booking.totalAmount + booking.discount))} (Disc: -{formatCurrency(booking.discount)})
+              </p>
+            ) : null}
+          </div>
           <div><p className="text-[10px] uppercase text-muted-foreground">Received</p><p className="text-lg font-bold text-success">{formatCurrency(totalPaid)}</p></div>
-          <div><p className="text-[10px] uppercase text-muted-foreground">Pending</p><p className="text-lg font-bold text-destructive">{formatCurrency(totalDue - totalPaid)}</p></div>
+          <div><p className="text-[10px] uppercase text-muted-foreground">Pending</p><p className="text-lg font-bold text-destructive">{formatCurrency(Math.max(0, totalDue - totalPaid))}</p></div>
           <div className="flex items-end gap-2">
             <div className="flex-1"><p className="mb-1 text-[10px] uppercase text-muted-foreground">Simulate Payment</p><Input type="number" placeholder="Enter amount..." value={paymentInput} onChange={(e) => setPaymentInput(e.target.value)} className="bg-accent/20 border-border" /></div>
             <Button size="sm" onClick={() => setPaymentInput(String(booking.totalAmount))}>Full</Button>
