@@ -202,6 +202,7 @@ function EntriesPage() {
   const [payAllocMode, setPayAllocMode] = useState<"simple" | "split">("simple");
   const [paymentAllocationsState, setPaymentAllocationsState] = useState<PaymentAllocation[]>([]);
   const [splitViewEntry, setSplitViewEntry] = useState<LedgerEntry | null>(null);
+  const [entryToDelete, setEntryToDelete] = useState<LedgerEntry | null>(null);
   // Group management (PNR / batch) — for purchase entries
   const [groupMode, setGroupMode] = useState<"none" | "existing" | "new">("none");
   const [groupId, setGroupId] = useState<string>("");
@@ -359,27 +360,53 @@ function EntriesPage() {
     });
   }, [store.entries, store.accounts, typeFilter, methodFilter, accountFilter, searchQuery, sortKey]);
 
-  function validatePay(): boolean {
-    if (!MONEY_TYPES.includes(form.type)) return true;
-    if (!(Number(form.amount) > 0)) { toast.error("Enter an amount"); return false; }
-    if (form.type === "jv") {
-      if (!pay.accountId) { toast.error("Select the primary/source account"); return false; }
-      if (jv.jvType === "account_transfer" && !jv.toAccountId) {
-        toast.error("Select the destination account"); return false;
-      }
-      if (jv.jvType === "account_transfer" && pay.accountId === jv.toAccountId) {
-        toast.error("Source and destination accounts must be different"); return false;
-      }
-      return true;
+  function validateEntryForm(): boolean {
+    const amt = Number(form.amount);
+    if (!amt || amt <= 0) {
+      toast.error("Please enter a valid amount greater than 0");
+      return false;
     }
-    if ((form.type === "agent_receive") && !form.referenceId) { toast.error("Select the agent"); return false; }
-    if (pay.method === "Cheque" && !pay.chequeNo) { toast.error("Enter the cheque number"); return false; }
-    if ((pay.method === "Bank Transfer" || pay.method === "Online / Wallet") && !pay.txnRef) { toast.error("Enter the transaction / reference number"); return false; }
+    const supplierTypes: LedgerEntry["type"][] = ["purchase", "supplier_payment", "supplier_refund", "supplier_discount"];
+    if (supplierTypes.includes(form.type) && !form.referenceId) {
+      toast.error("Please select a Supplier");
+      return false;
+    }
+    const clientHeadTypes: LedgerEntry["type"][] = ["client_receive", "client_charge", "client_refund", "client_discount"];
+    if (clientHeadTypes.includes(form.type) && !form.headId) {
+      toast.error("Please select a Client Head");
+      return false;
+    }
+    if (form.type === "agent_receive" && !form.referenceId) {
+      toast.error("Please select an Agent");
+      return false;
+    }
+    if (form.type === "drawing" && !form.referenceName?.trim()) {
+      toast.error("Please enter the Drawer / Partner name");
+      return false;
+    }
+
+    if (MONEY_TYPES.includes(form.type)) {
+      if (form.type === "jv") {
+        if (!pay.accountId) { toast.error("Select the primary/source account"); return false; }
+        if (jv.jvType === "account_transfer" && !jv.toAccountId) {
+          toast.error("Select the destination account"); return false;
+        }
+        if (jv.jvType === "account_transfer" && pay.accountId === jv.toAccountId) {
+          toast.error("Source and destination accounts must be different"); return false;
+        }
+        return true;
+      }
+      if (pay.method === "Cheque" && !pay.chequeNo) { toast.error("Enter the cheque number"); return false; }
+      if ((pay.method === "Bank Transfer" || pay.method === "Online / Wallet") && !pay.txnRef) {
+        toast.error("Enter the transaction / reference number");
+        return false;
+      }
+    }
     return true;
   }
 
   function handleAdd() {
-    if (!validatePay()) return;
+    if (!validateEntryForm()) return;
     let finalGroupId = groupMode === "existing" ? groupId : undefined;
     if (groupMode === "new" && newGroup.name.trim()) {
       finalGroupId = store.addGroup({
@@ -480,10 +507,20 @@ function EntriesPage() {
       }
     }
 
+    const supplierTypes: LedgerEntry["type"][] = ["purchase", "supplier_payment", "supplier_refund", "supplier_discount"];
+    let finalRefName = form.referenceName;
+    if (supplierTypes.includes(form.type) && form.referenceId) {
+      const sp = store.suppliers.find((s) => s.id === form.referenceId);
+      if (sp) finalRefName = sp.companyName;
+    } else if (form.type === "agent_receive" || form.type === "agent_commission") {
+      const ag = store.agents.find((a) => a.id === form.referenceId);
+      if (ag) finalRefName = ag.name;
+    }
+
     store.addEntry({
       date: form.date || getPKTDate(), type: form.type,
       headId: form.type === "purchase" ? (singleHeadId || "") : form.headId,
-      referenceId: form.referenceId, referenceName: form.referenceName,
+      referenceId: form.referenceId, referenceName: finalRefName,
       amount: Number(form.amount) || 0, note: form.note,
       serviceCategory: serviceCategory || undefined,
       purchaseDetails: form.type === "purchase" ? buildDetailsPayload(serviceCategory, details) : undefined,
@@ -532,7 +569,7 @@ function EntriesPage() {
 
   function handleEdit() {
     if (!selected) return;
-    if (!validatePay()) return;
+    if (!validateEntryForm()) return;
     let finalGroupId: string | undefined = groupMode === "existing" ? groupId : groupMode === "none" ? undefined : selected.groupId;
     if (groupMode === "new" && newGroup.name.trim()) {
       finalGroupId = store.addGroup({
@@ -633,10 +670,20 @@ function EntriesPage() {
       }
     }
 
+    const supplierTypes: LedgerEntry["type"][] = ["purchase", "supplier_payment", "supplier_refund", "supplier_discount"];
+    let finalRefName = form.referenceName;
+    if (supplierTypes.includes(form.type) && form.referenceId) {
+      const sp = store.suppliers.find((s) => s.id === form.referenceId);
+      if (sp) finalRefName = sp.companyName;
+    } else if (form.type === "agent_receive" || form.type === "agent_commission") {
+      const ag = store.agents.find((a) => a.id === form.referenceId);
+      if (ag) finalRefName = ag.name;
+    }
+
     store.updateEntry(selected.id, {
       date: form.date, type: form.type,
       headId: form.type === "purchase" ? (singleHeadId || "") : form.headId,
-      referenceId: form.referenceId, referenceName: form.referenceName,
+      referenceId: form.referenceId, referenceName: finalRefName,
       amount: Number(form.amount) || 0, note: form.note,
       serviceCategory: serviceCategory || undefined,
       purchaseDetails: form.type === "purchase" ? buildDetailsPayload(serviceCategory, details) : undefined,
@@ -2631,7 +2678,7 @@ function EntriesPage() {
                         <div className="flex gap-1">
                           <button onClick={() => generatePaymentReceipt(e)} className="rounded p-1 hover:bg-accent" title="Download Receipt"><Download className="h-3.5 w-3.5 text-success" /></button>
                           <button onClick={() => openEdit(e)} className="rounded p-1 hover:bg-accent"><Pencil className="h-3.5 w-3.5 text-warning" /></button>
-                          <button onClick={() => store.deleteEntry(e.id)} className="rounded p-1 hover:bg-accent"><Trash2 className="h-3.5 w-3.5 text-destructive" /></button>
+                          <button onClick={() => setEntryToDelete(e)} className="rounded p-1 hover:bg-accent" title="Delete Entry"><Trash2 className="h-3.5 w-3.5 text-destructive" /></button>
                         </div>
                       )}
                     </td>
@@ -2802,6 +2849,63 @@ function EntriesPage() {
 
               <div className="flex justify-end">
                 <Button size="sm" variant="outline" onClick={() => setSplitViewEntry(null)}>Close</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={entryToDelete !== null} onOpenChange={(open) => { if (!open) setEntryToDelete(null); }}>
+        <DialogContent className="bg-card border-border max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" />
+              Confirm Delete Entry
+            </DialogTitle>
+          </DialogHeader>
+          {entryToDelete && (
+            <div className="space-y-3 py-2 text-xs">
+              <p className="text-muted-foreground leading-relaxed">
+                Are you sure you want to delete this ledger entry? All linked supplier balances, client statements, and account balances will be safely recalculated without corrupting other records.
+              </p>
+              <div className="rounded-lg border border-border/60 bg-accent/20 p-3 space-y-1.5 font-mono">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground font-sans">Entry ID:</span>
+                  <span className="font-semibold text-foreground">{entryToDelete.id}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground font-sans">Date:</span>
+                  <span className="text-foreground">{entryToDelete.date}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground font-sans">Type:</span>
+                  <span className={`font-sans font-semibold ${typeColors[entryToDelete.type]}`}>{typeLabels[entryToDelete.type]}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground font-sans">Amount:</span>
+                  <span className="font-bold text-foreground">{formatCurrency(entryToDelete.amount)}</span>
+                </div>
+                {entryToDelete.referenceName && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground font-sans">Party / Ref:</span>
+                    <span className="text-foreground">{entryToDelete.referenceName}</span>
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button variant="outline" className="flex-1" onClick={() => setEntryToDelete(null)}>Cancel</Button>
+                <Button
+                  variant="destructive"
+                  className="flex-1 gap-1.5"
+                  onClick={() => {
+                    store.deleteEntry(entryToDelete.id);
+                    setEntryToDelete(null);
+                    toast.success(`Entry ${entryToDelete.id} deleted successfully`);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" /> Delete Entry
+                </Button>
               </div>
             </div>
           )}

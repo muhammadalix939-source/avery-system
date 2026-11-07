@@ -89,6 +89,15 @@ export default function PackageServiceDialog({ bookingId, onClose }: { bookingId
   const [newCombo, setNewCombo] = useState("");
   const [saveCombo, setSaveCombo] = useState(true);
 
+  // -------- Add-form state (one per service type) --------
+  const [addOpen, setAddOpen] = useState<string | null>(null);
+  const [hotelForm, setHotelForm] = useState({ city: "Makkah", hotelName: "", roomType: "Quad (4 Sharing)", checkIn: "", checkOut: "", nights: "" });
+  const [flightForm, setFlightForm] = useState({ date: "", flightNo: "", from: "", to: "", departure: "", arrival: "" });
+  const [transportForm, setTransportForm] = useState({ service: "Airport Transfer", route: "", vehicle: "Private Car", date: "" });
+  const [visaForm, setVisaForm] = useState({ visaType: "Umrah", country: "Saudi Arabia", reference: "", issueDate: "" });
+  const [ziyarahForm, setZiyarahForm] = useState({ city: "Makkah", sector: "", date: "", vehicle: "Bus (Private)", notes: "" });
+  const [otherForm, setOtherForm] = useState({ category: "", description: "", date: "" });
+
   const rows = useMemo(() => (booking ? collectBookingServices(booking) : []), [booking]);
   const summary = useMemo(() => serviceSummary(rows), [rows]);
   const info = booking ? getPackageInfo(booking) : { inclusions: [] };
@@ -114,15 +123,6 @@ export default function PackageServiceDialog({ bookingId, onClose }: { bookingId
     ...DEFAULT_COMBOS[(info.scope || "International") === "Domestic" ? "domestic" : "international"],
     ...store.customCombos,
   ];
-
-  // -------- Add-form state (one per service type) --------
-  const [addOpen, setAddOpen] = useState<string | null>(null);
-  const [hotelForm, setHotelForm] = useState({ city: "Makkah", hotelName: "", roomType: "Quad (4 Sharing)", checkIn: "", checkOut: "", nights: "" });
-  const [flightForm, setFlightForm] = useState({ date: "", flightNo: "", from: "", to: "", departure: "", arrival: "" });
-  const [transportForm, setTransportForm] = useState({ service: "Airport Transfer", route: "", vehicle: "Private Car", date: "" });
-  const [visaForm, setVisaForm] = useState({ visaType: "Umrah", country: "Saudi Arabia", reference: "", issueDate: "" });
-  const [ziyarahForm, setZiyarahForm] = useState({ city: "Makkah", sector: "", date: "", vehicle: "Bus (Private)", notes: "" });
-  const [otherForm, setOtherForm] = useState({ category: "", description: "", date: "" });
 
   const saveAdd = () => {
     if (!addOpen) return;

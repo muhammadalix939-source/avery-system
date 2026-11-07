@@ -229,9 +229,9 @@ export async function pushFullStateToFirestore(state: {
   groups: unknown[];
   accounts: unknown[];
   drawers?: unknown[];
-  opening: unknown;
-  alertSettings: unknown;
-}) {
+  opening?: unknown;
+  alertSettings?: unknown;
+}, opts?: { pruneOrphans?: boolean }) {
   if (!auth.currentUser) {
     throw new Error("Must be signed in to sync to Cloud Database");
   }
@@ -248,6 +248,27 @@ export async function pushFullStateToFirestore(state: {
   ];
 
   for (const { name, items } of collectionsToSync) {
+    // If orphan pruning is requested, remove any doc in Firestore not present in items
+    if (opts?.pruneOrphans) {
+      try {
+        const remoteDocs = await getDocs(collection(db, name));
+        const keepIds = new Set((items || []).map((it) => String(it.id)));
+        const deleteBatch = writeBatch(db);
+        let count = 0;
+        remoteDocs.docs.forEach((d) => {
+          if (!keepIds.has(d.id)) {
+            deleteBatch.delete(d.ref);
+            count++;
+          }
+        });
+        if (count > 0) {
+          await deleteBatch.commit();
+        }
+      } catch (err) {
+        console.warn(`Could not prune orphans in ${name}:`, err);
+      }
+    }
+
     if (!items || items.length === 0) continue;
     // Chunk writes in batches of 400
     const chunkSize = 400;

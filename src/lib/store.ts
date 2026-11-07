@@ -1,4 +1,4 @@
-import { normalizeBooking, normalizeClient, normalizeEntry, restoreMissingAccounts } from "./legacy";
+import { normalizeBooking, normalizeClient, normalizeEntry, normalizeSupplier, restoreMissingAccounts } from "./legacy";
 // Centralized state management for the CRM
 import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
@@ -7,7 +7,31 @@ import { mockClients, mockBookings, mockAgents, mockSuppliers, mockMonthlyData a
 import { DEFAULT_INCLUSIONS } from "./packages";
 import { defaultChecklist } from "./checklist";
 import { getPKTDate } from "./date-utils";
-import { pushFullStateToFirestore, fetchCollectionFromFirestore, auth } from "./firebase";
+import { pushFullStateToFirestore, fetchCollectionFromFirestore, fetchDocFromFirestore, deleteDocFromFirestore, syncDocToFirestore, auth } from "./firebase";
+
+export type AllocationTarget = "head" | "agent" | "office";
+
+export interface CostAllocation {
+  id: string;
+  target: AllocationTarget;
+  headId?: string;
+  clientId?: string;
+  agentId?: string;
+  amount: number;
+  saleAmount?: number;
+  forClientName?: string;
+  locked?: boolean;
+  billClient?: boolean;
+}
+
+export interface PaymentAllocation {
+  id: string;
+  target: "head" | "group" | "agent" | "unallocated";
+  headId?: string;
+  groupId?: string;
+  agentId?: string;
+  amount: number;
+}
 
 export interface LedgerEntry {
   id: string;
@@ -34,6 +58,14 @@ export interface LedgerEntry {
   amount: number;
   note: string;
   createdAt: string;
+  /** Purchase only. Who bears this purchase. Sum(amount) === entry.amount. */
+  allocations?: CostAllocation[];
+  /** How the lines were produced; informational, lines are authoritative. */
+  allocationMode?: "equal" | "manual";
+  /** supplier_payment only. Sum(amount) === entry.amount (use target "unallocated" for the rest). */
+  paymentAllocations?: PaymentAllocation[];
+  /** System-managed linked row created by "Also bill the client" (pointing to purchase entry id) */
+  allocationOf?: string;
   /** Partner / Owner drawer ID for drawing entries */
   drawerId?: string;
   /** Partner / Owner drawer name for drawing entries */
@@ -299,12 +331,41 @@ let nextHeadNum = initial.counters.head;
 let nextEntryNum = initial.counters.entry;
 let nextGroupNum = initial.counters.group || 1;
 
+export function recalculateCounters() {
+  entries.forEach((en) => {
+    const num = parseInt(en.id.replace(/\D/g, ""), 10);
+    if (!isNaN(num) && num >= nextEntryNum) nextEntryNum = num + 1;
+  });
+  clients.forEach((c) => {
+    const num = parseInt(c.id.replace(/\D/g, ""), 10);
+    if (!isNaN(num) && num >= nextClientNum) nextClientNum = num + 1;
+  });
+  bookings.forEach((bk) => {
+    const num = parseInt(bk.id.replace(/\D/g, ""), 10);
+    if (!isNaN(num) && num >= nextBookingNum) nextBookingNum = num + 1;
+    const headNum = parseInt((bk.headId || "").replace(/\D/g, ""), 10);
+    if (!isNaN(headNum) && headNum >= nextHeadNum) nextHeadNum = headNum + 1;
+  });
+  agents.forEach((ag) => {
+    const num = parseInt(ag.id.replace(/\D/g, ""), 10);
+    if (!isNaN(num) && num >= nextAgentNum) nextAgentNum = num + 1;
+  });
+  suppliers.forEach((sp) => {
+    const num = parseInt(sp.id.replace(/\D/g, ""), 10);
+    if (!isNaN(num) && num >= nextSupplierNum) nextSupplierNum = num + 1;
+  });
+  groups.forEach((gp) => {
+    const num = parseInt(gp.id.replace(/\D/g, ""), 10);
+    if (!isNaN(num) && num >= nextGroupNum) nextGroupNum = num + 1;
+  });
+}
+
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let cloudDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let cloudSyncStatus: "idle" | "syncing" | "synced" | "error" = "idle";
 let lastSyncedAt: string | null = null;
 
-async function syncToCloud() {
+async function syncToCloud(opts?: { pruneOrphans?: boolean }) {
   if (typeof window === "undefined" || !auth.currentUser) return { success: false, reason: "not_authenticated" };
   cloudSyncStatus = "syncing";
   listeners.forEach((l) => l());
@@ -317,9 +378,10 @@ async function syncToCloud() {
       entries,
       groups,
       accounts,
+      drawers,
       opening,
       alertSettings,
-    });
+    }, opts);
     cloudSyncStatus = "synced";
     lastSyncedAt = new Date().toLocaleTimeString();
     listeners.forEach((l) => l());
@@ -336,7 +398,7 @@ async function loadFromCloud() {
   cloudSyncStatus = "syncing";
   listeners.forEach((l) => l());
   try {
-    const [c, b, a, s, e, g, acc] = await Promise.all([
+    const [c, b, a, s, e, g, acc, dr, openDoc, alertDoc] = await Promise.all([
       fetchCollectionFromFirestore<Client>("clients"),
       fetchCollectionFromFirestore<Booking>("bookings"),
       fetchCollectionFromFirestore<Agent>("agents"),
@@ -344,20 +406,62 @@ async function loadFromCloud() {
       fetchCollectionFromFirestore<LedgerEntry>("entries"),
       fetchCollectionFromFirestore<PurchaseGroup>("groups"),
       fetchCollectionFromFirestore<Account>("accounts"),
+      fetchCollectionFromFirestore<Drawer>("drawers"),
+      fetchDocFromFirestore<{ id: string; data: OpeningBalances }>("settings", "opening"),
+      fetchDocFromFirestore<{ id: string; data: AlertSettings }>("settings", "alertSettings"),
     ]);
-    if (c?.length) clients = c.map((x) => normalizeClient(x as never));
-    if (b?.length) bookings = b.map((x) => normalizeBooking(x as never));
-    if (a?.length) agents = a;
-    if (s?.length) suppliers = s;
-    if (e?.length) entries = e.map((x, i) => normalizeEntry(x as never, i));
-    if (g?.length) groups = g;
-    if (acc?.length) accounts = acc;
+
+    // Deduplicate by ID to eliminate duplicate records
+    if (c?.length) {
+      const map = new Map<string, Client>();
+      c.forEach((item) => { if (item.id) map.set(item.id, normalizeClient(item as never)); });
+      clients = Array.from(map.values());
+    }
+    if (b?.length) {
+      const map = new Map<string, Booking>();
+      b.forEach((item) => { if (item.id) map.set(item.id, normalizeBooking(item as never)); });
+      bookings = Array.from(map.values());
+    }
+    if (a?.length) {
+      const map = new Map<string, Agent>();
+      a.forEach((item) => { if (item.id) map.set(item.id, item); });
+      agents = Array.from(map.values());
+    }
+    if (s?.length) {
+      const map = new Map<string, Supplier>();
+      s.forEach((item) => { if (item.id) map.set(item.id, normalizeSupplier(item as never)); });
+      suppliers = Array.from(map.values());
+    }
+    if (e?.length) {
+      const map = new Map<string, LedgerEntry>();
+      e.forEach((item, i) => { if (item.id) map.set(item.id, normalizeEntry(item as never, i)); });
+      entries = Array.from(map.values());
+    }
+    if (g?.length) {
+      const map = new Map<string, PurchaseGroup>();
+      g.forEach((item) => { if (item.id) map.set(item.id, item); });
+      groups = Array.from(map.values());
+    }
+    if (acc?.length) {
+      const map = new Map<string, Account>();
+      acc.forEach((item) => { if (item.id) map.set(item.id, item); });
+      accounts = Array.from(map.values());
+    }
+    if (dr?.length) {
+      const map = new Map<string, Drawer>();
+      dr.forEach((item) => { if (item.id) map.set(item.id, item); });
+      drawers = Array.from(map.values());
+    }
+    if (openDoc?.data) opening = { ...defaultOpening, ...openDoc.data };
+    if (alertDoc?.data) alertSettings = { ...defaultAlertSettings, ...alertDoc.data };
+
     accounts = restoreMissingAccounts(accounts, entries);
+    recalculateCounters();
     resyncDerived();
     cloudSyncStatus = "synced";
     lastSyncedAt = new Date().toLocaleTimeString();
     notify();
-    return { success: true, count: (c?.length || 0) + (b?.length || 0) };
+    return { success: true, count: clients.length + bookings.length + entries.length };
   } catch (err) {
     cloudSyncStatus = "error";
     listeners.forEach((l) => l());
@@ -503,6 +607,7 @@ function hydrateFromStorage() {
       nextHeadNum = s.counters.head; nextEntryNum = s.counters.entry;
       nextGroupNum = s.counters.group || nextGroupNum;
     }
+    recalculateCounters();
   } catch {}
   // Persisted files may carry stale derived numbers — recompute from source of truth.
   resyncDerived();
@@ -873,6 +978,7 @@ export function useStore() {
 
     // Client CRUD
     addClient: (data: Omit<Client, "id">) => {
+      recalculateCounters();
       const snap = takeStateSnapshot();
       const id = generateId("AV-C", nextClientNum++);
       clients = [...clients, { ...data, id, baseDue: data.amountDue, extraCharges: 0 }];
@@ -905,6 +1011,7 @@ export function useStore() {
       bookings = bookings.map((b) => ({ ...b, clientIds: b.clientIds.filter((cid) => cid !== id) }));
       resyncAgents();
       notify();
+      deleteDocFromFirestore("clients", id).catch(() => {});
       const clientName = target ? `${target.firstName} ${target.lastName}`.trim() : id;
       registerUndoableAction(`Client ${clientName} deleted`, () => restoreStateSnapshot(snap));
     },
@@ -939,6 +1046,7 @@ export function useStore() {
 
     // Agent CRUD
     addAgent: (data: Omit<Agent, "id">) => {
+      recalculateCounters();
       const snap = takeStateSnapshot();
       const id = generateId("AV-A", nextAgentNum++);
       agents = [...agents, { ...data, id }];
@@ -958,11 +1066,13 @@ export function useStore() {
       const target = agents.find((a) => a.id === id);
       agents = agents.filter((a) => a.id !== id);
       notify();
+      deleteDocFromFirestore("agents", id).catch(() => {});
       registerUndoableAction(`Agent ${target?.name || id} deleted`, () => restoreStateSnapshot(snap));
     },
 
     // Supplier CRUD
     addSupplier: (data: Omit<Supplier, "id">) => {
+      recalculateCounters();
       const snap = takeStateSnapshot();
       const id = generateId("AV-S", nextSupplierNum++);
       suppliers = [...suppliers, { ...data, id }];
@@ -982,11 +1092,13 @@ export function useStore() {
       const target = suppliers.find((s) => s.id === id);
       suppliers = suppliers.filter((s) => s.id !== id);
       notify();
+      deleteDocFromFirestore("suppliers", id).catch(() => {});
       registerUndoableAction(`Supplier ${target?.companyName || id} deleted`, () => restoreStateSnapshot(snap));
     },
 
     // Booking CRUD
     addBooking: (data: Omit<Booking, "id">) => {
+      recalculateCounters();
       const snap = takeStateSnapshot();
       const id = `B${String(nextBookingNum++).padStart(3, "0")}`;
       bookings = [...bookings, { ...data, id, baseAmount: data.totalAmount, extraCharges: 0 }];
@@ -1030,6 +1142,7 @@ export function useStore() {
             const existingReceived = entries.filter((e) => e.type === "client_receive" && e.headId === after.headId).reduce((s, e) => s + e.amount, 0);
             const delta = (after.amountReceived || 0) - existingReceived;
             if (delta !== 0) {
+              recalculateCounters();
               const eid = `E${String(nextEntryNum++).padStart(3, "0")}`;
               entries = [...entries, {
                 id: eid, date: getPKTDate(), type: "client_receive", headId: after.headId,
@@ -1050,18 +1163,23 @@ export function useStore() {
       const snap = takeStateSnapshot();
       const b = bookings.find((x) => x.id === id);
       if (!b) { notify(); return; }
-      // Cascade: delete clients under this head + related ledger entries
       const headId = b.headId;
+      const clientsToDelete = clients.filter((c) => c.headId === headId);
+      const entriesToDelete = entries.filter((e) => e.headId === headId);
       clients = clients.filter((c) => c.headId !== headId);
       entries = entries.filter((e) => e.headId !== headId);
       bookings = bookings.filter((x) => x.id !== id);
       resyncDerived();
       notify();
+      deleteDocFromFirestore("bookings", id).catch(() => {});
+      clientsToDelete.forEach((c) => deleteDocFromFirestore("clients", c.id).catch(() => {}));
+      entriesToDelete.forEach((e) => deleteDocFromFirestore("entries", e.id).catch(() => {}));
       registerUndoableAction(`Booking ${id} deleted`, () => restoreStateSnapshot(snap));
     },
 
     // Entries CRUD
     addEntry: (data: Omit<LedgerEntry, "id" | "createdAt">) => {
+      recalculateCounters();
       const snap = takeStateSnapshot();
       const id = `E${String(nextEntryNum++).padStart(3, "0")}`;
       const entry = { ...data, id, createdAt: new Date().toLocaleString("en-PK", { timeZone: "Asia/Karachi" }) };
@@ -1097,7 +1215,7 @@ export function useStore() {
     deleteEntry: (id: string) => {
       const snap = takeStateSnapshot();
       const e = entries.find((x) => x.id === id);
-      entries = entries.filter((x) => x.id !== id);
+      entries = entries.filter((x) => x.id !== id && (!x.allocationOf || x.allocationOf !== id));
       if (e) {
         resyncFromEntries({
           supplierIds: (e.type === "purchase" || e.type === "supplier_payment" || e.type === "supplier_refund" || e.type === "supplier_discount") && e.referenceId ? [e.referenceId] : [],
@@ -1106,10 +1224,12 @@ export function useStore() {
         });
       }
       notify();
+      deleteDocFromFirestore("entries", id).catch(() => {});
       registerUndoableAction(`Entry ${id} deleted`, () => restoreStateSnapshot(snap));
     },
 
     generateHeadId: () => {
+      recalculateCounters();
       const id = `AV-HD-${String(nextHeadNum++).padStart(3, "0")}`;
       return id;
     },
@@ -1247,6 +1367,64 @@ export function useStore() {
       nextClientNum = 1; nextAgentNum = 1; nextSupplierNum = 1;
       nextBookingNum = 1; nextHeadNum = 1; nextEntryNum = 1; nextGroupNum = 1;
       notify();
+    },
+
+    // Restore verified pre-error baseline data (clean real state with verified bookings, clients, suppliers, entries)
+    restoreCleanBaseline: async (andPushToCloud = false) => {
+      const snap = takeStateSnapshot();
+      clients = mockClients.map((c) => ({ ...c }));
+      bookings = mockBookings.map((b) => ({ ...b }));
+      agents = mockAgents.map((a) => ({ ...a }));
+      suppliers = mockSuppliers.map((s) => ({ ...s }));
+      entries = defaultEntries.map((e) => ({ ...e }));
+      monthlyData = [...defaultMonthlyData];
+      groups = [];
+      accounts = [
+        { id: "AC-001", name: "Main Cash", type: "Cash", openingBalance: 0, openingDate: "2026-01-01" },
+      ];
+      drawers = [...defaultDrawers];
+      opening = { ...defaultOpening };
+      readAlerts = [];
+      nextClientNum = 11;
+      nextAgentNum = 4;
+      nextSupplierNum = 5;
+      nextBookingNum = 4;
+      nextHeadNum = 4;
+      nextEntryNum = 7;
+      nextGroupNum = 1;
+      recalculateCounters();
+      resyncDerived();
+      notify();
+      if (andPushToCloud) {
+        if (!auth.currentUser) {
+          throw new Error("Please connect your Google Account first in the Cloud Database section to authenticate cloud database overwrite.");
+        }
+        cloudSyncStatus = "syncing";
+        notify();
+        try {
+          await pushFullStateToFirestore({
+            clients,
+            bookings,
+            agents,
+            suppliers,
+            entries,
+            groups,
+            accounts,
+            drawers,
+            opening,
+            alertSettings,
+          }, { pruneOrphans: true });
+          lastSyncedAt = new Date().toLocaleTimeString("en-PK", { timeZone: "Asia/Karachi" });
+          cloudSyncStatus = "synced";
+        } catch (err) {
+          cloudSyncStatus = "error";
+          notify();
+          throw err;
+        }
+        notify();
+      }
+      registerUndoableAction("Restored clean pre-error data baseline", () => restoreStateSnapshot(snap));
+      return { success: true };
     },
 
     // Cloud Database (Firestore) synchronization

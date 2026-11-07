@@ -3,7 +3,7 @@
  * Old records keep their original meaning; missing fields get safe defaults
  * so new features never produce NaN or crash. Pure functions — easy to test.
  */
-import type { Booking, Client } from "./data";
+import type { Booking, Client, Supplier } from "./data";
 import type { LedgerEntry, Account } from "./store";
 
 const num = (v: unknown): number => {
@@ -50,6 +50,22 @@ export function normalizeBooking(b: Partial<Booking> & Record<string, unknown>):
 
 export function normalizeClient(c: Partial<Client> & Record<string, unknown>): Client {
   return { ...c, amountDue: num(c.amountDue), amountPaid: num(c.amountPaid) } as Client;
+}
+
+export function normalizeSupplier(s: Partial<Supplier> & Record<string, unknown>): Supplier {
+  return {
+    ...s,
+    id: String(s.id || ""),
+    companyName: String(s.companyName || ""),
+    contactPerson: String(s.contactPerson || ""),
+    phone: String(s.phone || ""),
+    email: String(s.email || ""),
+    serviceType: String(s.serviceType || "Other"),
+    totalPayable: num(s.totalPayable),
+    totalPaid: num(s.totalPaid),
+    openingPayable: num(s.openingPayable),
+    openingPaid: num(s.openingPaid),
+  } as Supplier;
 }
 
 /** True when an entry was recorded before account / payment-method tracking existed. */

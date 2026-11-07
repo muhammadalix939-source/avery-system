@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
-import { Save, Settings as SettingsIcon, Trash2, AlertTriangle, Database, Cloud, RefreshCw, CheckCircle2, LogIn, LogOut, Download, Upload, Copy, ExternalLink, ShieldCheck } from "lucide-react";
+import { Save, Settings as SettingsIcon, Trash2, AlertTriangle, Database, Cloud, RefreshCw, CheckCircle2, LogIn, LogOut, Download, Upload, Copy, ExternalLink, ShieldCheck, RotateCcw, Sparkles, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,7 @@ import { useStore } from "@/lib/store";
 import { formatCurrency } from "@/lib/data";
 import { toast } from "sonner";
 import { auth, onAuthStateChanged, signInWithGoogle, logOut, testConnection, type User } from "@/lib/firebase";
+import CloudDocumentInspector from "@/components/CloudDocumentInspector";
 
 export const Route = createFileRoute("/settings")({
   component: SettingsPage,
@@ -23,6 +24,8 @@ function SettingsPage() {
   const [mounted, setMounted] = useState(false);
   const [testingConn, setTestingConn] = useState(false);
   const [connStatus, setConnStatus] = useState<string | null>(null);
+  const [restoringBaseline, setRestoringBaseline] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -355,6 +358,22 @@ function SettingsPage() {
             size="sm"
             variant="outline"
             onClick={() => {
+              if (!user) {
+                toast.info("Please connect your Google Account first to inspect Cloud DB");
+                return;
+              }
+              setInspectorOpen(true);
+            }}
+            className="gap-2 text-xs border-primary/50 text-primary hover:bg-primary/10"
+          >
+            <Search className="h-3.5 w-3.5" />
+            Inspect Cloud DB Records
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
               const data = {
                 clients: store.clients,
                 bookings: store.bookings,
@@ -419,6 +438,90 @@ function SettingsPage() {
         </div>
       </motion.div>
 
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }}
+        className="glass-card rounded-xl p-6 space-y-4 border-emerald-500/30">
+        <div className="flex items-center gap-3 border-b border-border/50 pb-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10">
+            <Sparkles className="h-5 w-5 text-emerald-400" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-semibold">Pre-Error Baseline Restore & Cloud Cleanup</h3>
+              <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+                Verified Clean State
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Recover the clean real operational dataset (authentic bookings, client heads, suppliers with carry-forwards, and default ledger). Purges corrupted entries and zombie records from Firestore Cloud DB.
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3.5 space-y-2 text-xs">
+          <p className="font-semibold text-emerald-300">
+            Why use this if you experienced data corruption or accidental deletions:
+          </p>
+          <ul className="list-disc pl-4 space-y-1 text-muted-foreground text-[11px]">
+            <li><strong>Suppliers Carry-Forwards:</strong> Restores opening payables and paid balances for Sky Wings, Noor, Fast Visa, etc., so statements are 100% accurate.</li>
+            <li><strong>ID Collision Immunity:</strong> Automatic monotonic counter recalculation ensures new entries never reuse existing IDs.</li>
+            <li><strong>Cloud DB Purge:</strong> When choosing &ldquo;Restore & Overwrite Cloud DB&rdquo;, Firestore is purged of orphaned documents that caused pull errors.</li>
+          </ul>
+        </div>
+
+        <div className="flex flex-wrap gap-2.5 pt-1">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={restoringBaseline}
+            onClick={async () => {
+              if (!confirm("This will restore the verified clean data baseline locally. An Undo button will be available in case you wish to revert. Continue?")) return;
+              try {
+                setRestoringBaseline(true);
+                await store.restoreCleanBaseline(false);
+                toast.success("Clean baseline restored locally! All supplier statements and balances re-indexed.");
+              } catch (err: unknown) {
+                toast.error(err instanceof Error ? err.message : "Restore failed");
+              } finally {
+                setRestoringBaseline(false);
+              }
+            }}
+            className="gap-2 text-xs"
+          >
+            <RotateCcw className={`h-3.5 w-3.5 ${restoringBaseline ? "animate-spin" : ""}`} />
+            Restore Clean Data Locally
+          </Button>
+
+          <Button
+            size="sm"
+            disabled={restoringBaseline || store.cloudSyncStatus === "syncing"}
+            onClick={async () => {
+              if (!user) {
+                toast.error("Please connect your Google Account first in the Cloud Database section above.");
+                return;
+              }
+              const confirmed = confirm(
+                "WARNING: This will restore the verified clean baseline locally AND permanently overwrite Firestore Cloud DB (purging all corrupted entries, orphan records, and mismatched supplier figures). Both phone and desktop will now sync to the clean data.\n\nAre you sure you want to proceed?"
+              );
+              if (!confirmed) return;
+              try {
+                setRestoringBaseline(true);
+                toast.loading("Restoring baseline and cleaning Firestore Cloud DB...", { id: "clean-cloud-toast" });
+                await store.restoreCleanBaseline(true);
+                toast.success("Success! Clean data restored and Cloud DB completely purged of errors.", { id: "clean-cloud-toast" });
+              } catch (err: unknown) {
+                toast.error(err instanceof Error ? err.message : "Cloud restore failed", { id: "clean-cloud-toast" });
+              } finally {
+                setRestoringBaseline(false);
+              }
+            }}
+            className="gap-2 text-xs bg-emerald-600 hover:bg-emerald-500 text-white"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Restore & Overwrite Cloud DB (Purge Errors)
+          </Button>
+        </div>
+      </motion.div>
+
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
         className="glass-card rounded-xl p-6 border-destructive/40">
         <div className="flex items-center gap-3 border-b border-border/50 pb-4 mb-4">
@@ -439,6 +542,8 @@ function SettingsPage() {
           </Button>
         </div>
       </motion.div>
+
+      <CloudDocumentInspector open={inspectorOpen} onOpenChange={setInspectorOpen} />
     </div>
   );
 }
